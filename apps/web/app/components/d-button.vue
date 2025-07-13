@@ -19,13 +19,13 @@ const props = defineProps<Props>()
 const { variant = "primary", size = "SM", type = "button", loading = false } = props
 
 const variantClasses: { [key: string]: string } = {
-  primary: "bg-zinc-900 text-zinc-50 hover:bg-zinc-700 active:bg-zinc-800 border border-transparent",
-  secondary: "bg-zinc-100 text-zinc-700 hover:bg-zinc-200 active:bg-zinc-300 border border-transparent",
+  primary: "bg-neutral-900 text-neutral-50 hover:bg-neutral-700 active:bg-neutral-800 border border-transparent",
+  secondary: "bg-neutral-100 text-neutral-700 hover:bg-neutral-200 active:bg-neutral-300 border border-transparent",
   tertiary: "bg-purple-100 text-purple-700 hover:bg-purple-200 border border-transparent",
   danger: "bg-red-700 text-white hover:bg-red-600 border border-transparent",
   "danger-light": "text-red-700 bg-red-100 hover:bg-red-200 active:bg-red-300 border border-transparent",
-  transparent: "text-zinc-700 hover:bg-zinc-950/5 active:bg-zinc-200 border border-transparent",
-  outline: "text-zinc-600 border border-zinc-100 hover:bg-zinc-50 active:bg-zinc-100",
+  transparent: "text-neutral-700 hover:bg-neutral-950/5 active:bg-neutral-200 border border-transparent",
+  outline: "text-neutral-600 border border-neutral-100 hover:bg-neutral-50 active:bg-neutral-100",
 }
 
 const paddingClasses: { [key: string]: string } = {
