@@ -28,7 +28,15 @@ export default defineNuxtConfig({
   compatibilityDate: "2025-07-01",
   future: { compatibilityVersion: 4 },
   fonts: { experimental: { processCSSVariables: true, disableLocalFallbacks: true } },
-  ssr: false,
+
+  routeRules: {
+    "/": {
+      ssr: true,
+    },
+    "/**": {
+      ssr: false,
+    },
+  },
 
   vite: { plugins: [tailwindcss()] },
 

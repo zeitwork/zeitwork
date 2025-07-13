@@ -1,5 +1,8 @@
 ![assets/og.png](assets/og.png)
 
+> [!NOTE]
+> This project is in early stage development.
+
 # Zeitwork
 
 > The open source alternative to Vercel - deploy any app with a simple `git push`

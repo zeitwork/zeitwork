@@ -1,0 +1,26 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: ingress-tls
+spec:
+  secretName: ingress-tls
+  issuerRef:
+    name: letsencrypt
+    kind: ClusterIssuer
+  commonName: "api.zeitwork.com"
+  dnsNames:
+    - "api.zeitwork.com"
+---
+apiVersion: projectcontour.io/v1
+kind: HTTPProxy
+metadata:
+  name: ingress
+spec:
+  virtualhost:
+    fqdn: "api.zeitwork.com"
+    tls:
+      secretName: ingress-tls
+  routes:
+    - services:
+      - name: backend-controller-manager
+        port: 8080
