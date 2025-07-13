@@ -3,14 +3,13 @@
 @theme {
   --font-sans: "Inter", sans-serif;
   --font-mono: "JetBrains Mono", monospace;
+  --font-display: "Satoshi", sans-serif;
 }
 
 html,
 body,
 #__nuxt {
-  overscroll-behavior: none;
-  overflow: hidden;
-  height: 100%;
+  min-height: 100%;
 }
 
 /* width */
