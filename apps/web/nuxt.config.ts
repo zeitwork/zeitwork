@@ -28,7 +28,7 @@ export default defineNuxtConfig({
         {
           name: "description",
           content:
-            "Zeitwork is a Platform-as-a-Service that automatically builds and deploys your applications from GitHub. Connect your repository, and every commit triggers a new deployment. If your app has a Dockerfile, Zeitwork can run it. Fully hosted, zero configuration, open source.",
+            "Connect your repository, and every commit triggers a new deployment. If your app has a Dockerfile, Zeitwork can run it.",
         },
 
         // OpenGraph
@@ -36,7 +36,7 @@ export default defineNuxtConfig({
         {
           property: "og:description",
           content:
-            "Zeitwork is a Platform-as-a-Service that automatically builds and deploys your applications from GitHub. Connect your repository, and every commit triggers a new deployment. If your app has a Dockerfile, Zeitwork can run it. Fully hosted, zero configuration, open source.",
+            "Connect your repository, and every commit triggers a new deployment. If your app has a Dockerfile, Zeitwork can run it.",
         },
         { property: "og:type", content: "website" },
         { property: "og:url", content: "https://zeitwork.com" },
@@ -48,7 +48,7 @@ export default defineNuxtConfig({
         {
           name: "twitter:description",
           content:
-            "Zeitwork is a Platform-as-a-Service that automatically builds and deploys your applications from GitHub. Connect your repository, and every commit triggers a new deployment. If your app has a Dockerfile, Zeitwork can run it. Fully hosted, zero configuration, open source.",
+            "Connect your repository, and every commit triggers a new deployment. If your app has a Dockerfile, Zeitwork can run it.",
         },
         { name: "twitter:image", content: "https://zeitwork.com/og-image.png" },
         { name: "twitter:site", content: "@zeitwork" },
