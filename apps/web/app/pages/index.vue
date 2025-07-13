@@ -10,14 +10,21 @@ definePageMeta({
     <DWrapper>
       <div class="flex flex-col gap-12 py-42">
         <div class="flex flex-col gap-3">
+          <div class="mb-2.5 text-sm font-bold text-green-600 uppercase">Coming Soon</div>
+
           <h1 class="font-display max-w-3xl text-6xl text-white">
             The fastest way to deploy and scale any application
           </h1>
-          <p class="text-neutral-200">The open-source alternative that turns intentions into actions.</p>
+          <p class="max-w-xl text-neutral-200">
+            Connect your repository, and every commit triggers a new deployment. If your app has a Dockerfile, Zeitwork
+            can run it.
+          </p>
         </div>
         <div class="flex gap-2">
-          <MarketingButton variant="primary"> Get Started </MarketingButton>
-          <MarketingButton>Watch demo</MarketingButton>
+          <MarketingButton variant="primary" to="https://github.com/zeitwork/zeitwork" target="_blank">
+            Star us on GitHub
+          </MarketingButton>
+          <!-- <MarketingButton variant="secondary">Watch demo</MarketingButton> -->
         </div>
       </div>
     </DWrapper>
