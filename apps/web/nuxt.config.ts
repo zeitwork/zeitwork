@@ -18,9 +18,40 @@ export default defineNuxtConfig({
         {
           rel: "icon",
           type: "image/x-icon",
-          href: "/favicon-light.png",
+          href: "/favicon-dark.png",
           media: "(prefers-color-scheme: light)",
         },
+      ],
+      meta: [
+        { charset: "utf-8" },
+        { name: "viewport", content: "width=device-width, initial-scale=1" },
+        {
+          name: "description",
+          content:
+            "Connect your repository, and every commit triggers a new deployment. If your app has a Dockerfile, Zeitwork can run it.",
+        },
+
+        // OpenGraph
+        { property: "og:title", content: "Zeitword" },
+        {
+          property: "og:description",
+          content:
+            "Connect your repository, and every commit triggers a new deployment. If your app has a Dockerfile, Zeitwork can run it.",
+        },
+        { property: "og:type", content: "website" },
+        { property: "og:url", content: "https://zeitwork.com" },
+        { property: "og:image", content: "https://zeitwork.com/og-image.png" },
+
+        // Twitter
+        { name: "twitter:card", content: "summary_large_image" },
+        { name: "twitter:title", content: "Zeitwork – The fastest way to deploy and scale any application" },
+        {
+          name: "twitter:description",
+          content:
+            "Connect your repository, and every commit triggers a new deployment. If your app has a Dockerfile, Zeitwork can run it.",
+        },
+        { name: "twitter:image", content: "https://zeitwork.com/og-image.png" },
+        { name: "twitter:site", content: "@zeitwork" },
       ],
     },
   },
@@ -42,12 +73,6 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     appUrl: "http://localhost:3000",
-  },
-
-  app: {
-    head: {
-      title: "Zeitwork",
-    },
   },
 
   modules: ["@nuxt/fonts"],

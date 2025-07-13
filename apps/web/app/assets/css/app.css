@@ -4,6 +4,191 @@
   --font-sans: "Inter", sans-serif;
   --font-mono: "JetBrains Mono", monospace;
   --font-display: "Satoshi", sans-serif;
+
+  /**
+	 * Neutral Colors
+	 */
+
+  /* Surface colors */
+  --background-color-neutral: light-dark(var(--color-white), var(--color-neutral-950));
+  --background-color-neutral-hover: light-dark(var(--color-neutral-100), var(--color-neutral-900));
+  --background-color-neutral-weak: light-dark(var(--color-neutral-50), var(--color-neutral-950));
+  --background-color-neutral-subtle: light-dark(var(--color-neutral-100), var(--color-neutral-900));
+  --background-color-neutral-strong: light-dark(var(--color-neutral-200), var(--color-neutral-800));
+  --background-color-neutral-inverse: light-dark(var(--color-neutral-900), var(--color-neutral-200));
+  --background-color-neutral-inverse-hover: light-dark(var(--color-neutral-700), var(--color-neutral-200));
+
+  /* Content colors */
+  --text-color-neutral: light-dark(var(--color-neutral-800), var(--color-neutral-300));
+  --text-color-neutral-subtle: light-dark(var(--color-neutral-500), var(--color-neutral-400));
+  --text-color-neutral-weak: light-dark(var(--color-neutral-400), var(--color-neutral-600));
+  --text-color-neutral-inverse: light-dark(var(--color-white), var(--color-black));
+  --text-color-neutral-inverse-subtle: light-dark(var(--color-neutral-300), var(--color-neutral-700));
+
+  /* Stroke colors */
+  --border-color-neutral: light-dark(var(--color-neutral-200), var(--color-neutral-800));
+  --border-color-neutral-subtle: light-dark(var(--color-neutral-100), var(--color-neutral-900));
+  --border-color-neutral-strong: light-dark(var(--color-neutral-950), var(--color-neutral-50));
+
+  /**
+	 * Accent Colors
+	 */
+
+  --background-color-accent: light-dark(var(--color-blue-500), var(--color-blue-400));
+  --background-color-accent-subtle: light-dark(var(--color-blue-50), var(--color-blue-900));
+  --background-color-accent-strong: light-dark(var(--color-blue-600), var(--color-blue-400));
+  --background-color-accent-inverse: light-dark(var(--color-white), var(--color-neutral-900));
+  --background-color-accent-hover: light-dark(var(--color-blue-700), var(--color-blue-400));
+
+  --text-color-accent: light-dark(var(--color-blue-500), var(--color-blue-400));
+  --text-color-accent-onsurface: light-dark(var(--color-white), var(--color-white));
+  --text-color-accent-subtle: light-dark(var(--color-blue-400), var(--color-blue-200));
+  --text-color-accent-muted: light-dark(var(--color-blue-300), var(--color-blue-200));
+  --text-color-accent-inverse: light-dark(var(--color-white), var(--color-white));
+
+  --border-color-accent: light-dark(var(--color-blue-200), var(--color-blue-700));
+  --border-color-accent-subtle: light-dark(var(--color-blue-100), var(--color-blue-800));
+  --border-color-accent-strong: light-dark(var(--color-blue-300), var(--color-blue-600));
+  --border-color-accent-hover: light-dark(var(--color-blue-300), var(--color-blue-600));
+
+  /**
+	 * Danger Colors
+	 */
+
+  --background-color-danger: light-dark(var(--color-red-600), var(--color-red-500));
+  --background-color-danger-subtle: light-dark(var(--color-red-50), var(--color-red-900));
+  --background-color-danger-strong: light-dark(var(--color-red-700), var(--color-red-400));
+  --background-color-danger-inverse: light-dark(var(--color-white), var(--color-neutral-900));
+  --background-color-danger-hover: light-dark(var(--color-red-700), var(--color-red-400));
+
+  --text-color-danger: light-dark(var(--color-red-600), var(--color-red-300));
+  --text-color-danger-onsurface: light-dark(var(--color-white), var(--color-white));
+  --text-color-danger-subtle: light-dark(var(--color-red-400), var(--color-red-200));
+  --text-color-danger-muted: light-dark(var(--color-red-300), var(--color-red-200));
+  --text-color-danger-inverse: light-dark(var(--color-white), var(--color-white));
+
+  --border-color-danger: light-dark(var(--color-red-200), var(--color-red-700));
+  --border-color-danger-subtle: light-dark(var(--color-red-100), var(--color-red-800));
+  --border-color-danger-strong: light-dark(var(--color-red-500), var(--color-red-600));
+  --border-color-danger-hover: light-dark(var(--color-red-300), var(--color-red-600));
+
+  /**
+	 * Warning Colors
+	 */
+
+  --background-color-warn: light-dark(var(--color-amber-500), var(--color-amber-500));
+  --background-color-warn-subtle: light-dark(var(--color-amber-50), var(--color-amber-900));
+  --background-color-warn-strong: light-dark(var(--color-amber-700), var(--color-amber-400));
+  --background-color-warn-inverse: light-dark(var(--color-white), var(--color-white));
+  --background-color-warn-hover: light-dark(var(--color-amber-600), var(--color-amber-400));
+
+  --text-color-warn: light-dark(var(--color-amber-950), var(--color-amber-300));
+  --text-color-warn-onsurface: light-dark(var(--color-black), var(--color-amber-950));
+  --text-color-warn-subtle: light-dark(var(--color-amber-400), var(--color-amber-200));
+  --text-color-warn-muted: light-dark(var(--color-amber-300), var(--color-amber-200));
+  --text-color-warn-inverse: light-dark(var(--color-white), var(--color-white));
+
+  --border-color-warn: light-dark(var(--color-amber-200), var(--color-amber-700));
+  --border-color-warn-subtle: light-dark(var(--color-amber-100), var(--color-amber-800));
+  --border-color-warn-strong: light-dark(var(--color-amber-300), var(--color-amber-600));
+  --border-color-warn-hover: light-dark(var(--color-amber-300), var(--color-amber-600));
+
+  /**
+	* Success Colors
+	*/
+
+  --background-color-success: light-dark(var(--color-blue-600), var(--color-blue-500));
+  --background-color-success-subtle: light-dark(var(--color-blue-50), var(--color-blue-900));
+  --background-color-success-strong: light-dark(var(--color-blue-700), var(--color-blue-400));
+  --background-color-success-inverse: light-dark(var(--color-white), var(--color-neutral-900));
+  --background-color-success-hover: light-dark(var(--color-blue-700), var(--color-blue-400));
+
+  --text-color-success: light-dark(var(--color-blue-600), var(--color-blue-300));
+  --text-color-success-onsurface: light-dark(var(--color-white), var(--color-white));
+  --text-color-success-subtle: light-dark(var(--color-blue-400), var(--color-blue-200));
+  --text-color-success-muted: light-dark(var(--color-blue-300), var(--color-blue-200));
+  --text-color-success-inverse: light-dark(var(--color-white), var(--color-white));
+
+  --border-color-success: light-dark(var(--color-blue-200), var(--color-blue-700));
+  --border-color-success-subtle: light-dark(var(--color-blue-100), var(--color-blue-800));
+  --border-color-success-strong: light-dark(var(--color-blue-600), var(--color-blue-400));
+  --border-color-success-hover: light-dark(var(--color-blue-300), var(--color-blue-600));
+
+  /**
+   * Typography
+   */
+  /* Titles */
+  --text-title-lg: var(--text-5xl);
+  --text-title-lg--font-weight: 400;
+
+  --text-title: var(--text-4xl);
+  --text-title--font-weight: 400;
+
+  --text-title-md: var(--text-2xl);
+  --text-title-md--font-weight: 400;
+
+  --text-title-sm: var(--text-xl);
+  --text-title-sm--font-weight: 400;
+
+  --text-copy-xl: var(--text-lg);
+  --text-copy-xl--font-weight: 400;
+
+  --text-copy-lg: var(--text-base);
+  --text-copy-lg--font-weight: 400;
+
+  --text-copy: var(--text-sm);
+  --text-copy--font-weight: 400;
+
+  --text-copy-sm: var(--text-xs);
+  --text-copy-sm--font-weight: 400;
+  --text-copy-sm--line-height: 1.1rem;
+
+  --text-copy-xs: 0.625rem;
+  --text-copy-xs--font-weight: 400;
+
+  /* Labels */
+  --text-label: var(--text-sm);
+  --text-label--font-weight: 500;
+
+  --animate-overlayShow: overlayShow 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-contentShow: contentShow 150ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  /**
+   * Shadows
+   */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+
+  --shadow: 0 2px 2px 0 rgba(0, 0, 0, 0.04), 0 8px 8px -8px rgba(0, 0, 0, 0.04);
+
+  --shadow-md: 0 2px 2px 0 rgba(0, 0, 0, 0.04), 0 8px 16px -4px rgba(0, 0, 0, 0.04);
+
+  --shadow-lg: 0 1px 1px 0 rgba(0, 0, 0, 0.02), 0 4px 8px 0 rgba(0, 0, 0, 0.04);
+
+  --shadow-xl:
+    0 1px 1px 0 rgba(0, 0, 0, 0.02), 0 4px 8px -4px rgba(0, 0, 0, 0.04), 0 16px 24px -8px rgba(0, 0, 0, 0.06);
+
+  --shadow-2xl:
+    0 1px 1px 0 rgba(0, 0, 0, 0.02), 0 8px 16px -4px rgba(0, 0, 0, 0.04), 0 24px 32px -8px rgba(0, 0, 0, 0.06);
+
+  @keyframes overlayShow {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes contentShow {
+    from {
+      opacity: 0;
+      scale: 0.96;
+    }
+    to {
+      opacity: 1;
+      scale: 1;
+    }
+  }
 }
 
 html,
@@ -13,23 +198,23 @@ body,
 }
 
 /* width */
-::-webkit-scrollbar {
+/* ::-webkit-scrollbar {
   width: 12px;
   height: 12px;
-}
+} */
 
 /* Track */
-::-webkit-scrollbar-track {
-  background: var(--color-zinc-100);
-}
+/* ::-webkit-scrollbar-track {
+  background: var(--color-neutral-100);
+} */
 
 /* Handle */
-::-webkit-scrollbar-thumb {
-  background: var(--color-zinc-200);
+/* ::-webkit-scrollbar-thumb {
+  background: var(--color-neutral-200);
   border-radius: 3px;
-}
+} */
 
 /* Handle on hover */
-::-webkit-scrollbar-thumb:hover {
-  background: var(--color-zinc-300);
-}
+/* ::-webkit-scrollbar-thumb:hover {
+  background: var(--color-neutral-300);
+} */
