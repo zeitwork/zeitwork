@@ -1,0 +1,9 @@
+apiVersion: zeitwork.com/v1alpha1
+kind: AppRevision
+metadata:
+  labels:
+    app.kubernetes.io/name: backend
+    app.kubernetes.io/managed-by: kustomize
+  name: apprevision-sample
+spec:
+  # TODO(user): Add fields here

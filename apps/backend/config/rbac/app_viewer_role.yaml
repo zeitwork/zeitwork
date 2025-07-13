@@ -1,0 +1,23 @@
+# permissions for end users to view apps.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: backend
+    app.kubernetes.io/managed-by: kustomize
+  name: app-viewer-role
+rules:
+- apiGroups:
+  - zeitwork.com
+  resources:
+  - apps
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - zeitwork.com
+  resources:
+  - apps/status
+  verbs:
+  - get
