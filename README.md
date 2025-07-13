@@ -39,4 +39,4 @@ Unlike proprietary platforms, Zeitwork gives you:
 - **Teams** who need a simple, reliable deployment platform
 - **Companies** who might need to self-host in the future
 
-Start deploying in seconds at [zeitwork.dev](https://zeitwork.dev)
+Start deploying in seconds at [zeitwork.com](https://zeitwork.com)
