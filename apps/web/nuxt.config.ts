@@ -22,6 +22,37 @@ export default defineNuxtConfig({
           media: "(prefers-color-scheme: light)",
         },
       ],
+      meta: [
+        { charset: "utf-8" },
+        { name: "viewport", content: "width=device-width, initial-scale=1" },
+        {
+          name: "description",
+          content:
+            "Zeitwork is a Platform-as-a-Service that automatically builds and deploys your applications from GitHub. Connect your repository, and every commit triggers a new deployment. If your app has a Dockerfile, Zeitwork can run it. Fully hosted, zero configuration, open source.",
+        },
+
+        // OpenGraph
+        { property: "og:title", content: "Zeitword" },
+        {
+          property: "og:description",
+          content:
+            "Zeitwork is a Platform-as-a-Service that automatically builds and deploys your applications from GitHub. Connect your repository, and every commit triggers a new deployment. If your app has a Dockerfile, Zeitwork can run it. Fully hosted, zero configuration, open source.",
+        },
+        { property: "og:type", content: "website" },
+        { property: "og:url", content: "https://zeitwork.com" },
+        { property: "og:image", content: "https://zeitwork.com/og-image.png" },
+
+        // Twitter
+        { name: "twitter:card", content: "summary_large_image" },
+        { name: "twitter:title", content: "Zeitwork – The fastest way to deploy and scale any application" },
+        {
+          name: "twitter:description",
+          content:
+            "Zeitwork is a Platform-as-a-Service that automatically builds and deploys your applications from GitHub. Connect your repository, and every commit triggers a new deployment. If your app has a Dockerfile, Zeitwork can run it. Fully hosted, zero configuration, open source.",
+        },
+        { name: "twitter:image", content: "https://zeitwork.com/og-image.png" },
+        { name: "twitter:site", content: "@zeitwork" },
+      ],
     },
   },
 
