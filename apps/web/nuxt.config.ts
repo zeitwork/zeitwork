@@ -18,7 +18,7 @@ export default defineNuxtConfig({
         {
           rel: "icon",
           type: "image/x-icon",
-          href: "/favicon-light.png",
+          href: "/favicon-dark.png",
           media: "(prefers-color-scheme: light)",
         },
       ],
@@ -34,12 +34,6 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     appUrl: "http://localhost:3000",
-  },
-
-  app: {
-    head: {
-      title: "Zeitwork",
-    },
   },
 
   modules: ["@nuxt/fonts"],

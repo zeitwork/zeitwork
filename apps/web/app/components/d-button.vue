@@ -16,7 +16,7 @@ interface Props {
 }
 
 const props = defineProps<Props>()
-const { variant = "primary", size = "SM", type = "button", loading = false } = props
+const { variant = "primary", size = "LG", type = "button", loading = false } = props
 
 const variantClasses: { [key: string]: string } = {
   primary: "bg-neutral-900 text-neutral-50 hover:bg-neutral-700 active:bg-neutral-800 border border-transparent",
