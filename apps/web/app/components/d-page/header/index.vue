@@ -27,7 +27,7 @@ const initials = computed(() => {
           <DLogo class="h-5 text-black" />
         </NuxtLink>
         <DPageHeaderSeparator />
-        <DPageHeaderBreadcrumbLink :name="me?.organisationName as string" to="/sites" />
+        <DPageHeaderBreadcrumbLink :name="me?.organisationName as string" :to="`/${orgName}`" />
         <template>
           <DPageHeaderSeparator />
           <DPageHeaderBreadcrumbLink name="Acme" :to="`/acme`" />
