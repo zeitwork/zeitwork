@@ -1,0 +1,36 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+html,
+body,
+#__nuxt {
+  overscroll-behavior: none;
+  overflow: hidden;
+  height: 100%;
+}
+
+/* width */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+/* Track */
+::-webkit-scrollbar-track {
+  background: var(--color-zinc-100);
+}
+
+/* Handle */
+::-webkit-scrollbar-thumb {
+  background: var(--color-zinc-200);
+  border-radius: 3px;
+}
+
+/* Handle on hover */
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-zinc-300);
+}
