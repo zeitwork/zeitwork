@@ -64,7 +64,7 @@ export default defineNuxtConfig({
     "/": {
       ssr: true,
     },
-    "/**": {
+    "/auth/github/callback": {
       ssr: false,
     },
   },
@@ -73,6 +73,11 @@ export default defineNuxtConfig({
 
   runtimeConfig: {
     appUrl: "http://localhost:3000",
+
+    public: {
+      graphEndpoint: process.env.NUXT_PUBLIC_GRAPH_ENDPOINT || "http://localhost:8080/graph",
+      githubClientId: process.env.NUXT_PUBLIC_GITHUB_CLIENT_ID || "",
+    },
   },
 
   modules: ["@nuxt/fonts"],

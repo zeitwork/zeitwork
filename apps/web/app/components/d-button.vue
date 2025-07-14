@@ -19,7 +19,8 @@ const props = defineProps<Props>()
 const { variant = "primary", size = "LG", type = "button", loading = false } = props
 
 const variantClasses: { [key: string]: string } = {
-  primary: "bg-neutral-900 text-neutral-50 hover:bg-neutral-700 active:bg-neutral-800 border border-transparent",
+  primary:
+    "bg-neutral-inverse text-neutral-inverse-subtle hover:bg-neutral-inverse-hover active:bg-neutral-inverse-hover border border-transparent",
   secondary: "bg-neutral-100 text-neutral-700 hover:bg-neutral-200 active:bg-neutral-300 border border-transparent",
   tertiary: "bg-purple-100 text-purple-700 hover:bg-purple-200 border border-transparent",
   danger: "bg-red-700 text-white hover:bg-red-600 border border-transparent",

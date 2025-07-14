@@ -3,6 +3,7 @@ definePageMeta({
   layout: "project",
 })
 </script>
+
 <template>
   <DPageTitle title="Project">
     <DButton>Add</DButton>

@@ -24,22 +24,19 @@ const initials = computed(() => {
     <div class="flex items-center justify-between px-6 py-3">
       <div class="flex items-center gap-2">
         <NuxtLink :to="`/${orgName}`" class="flex flex-shrink-0 items-center gap-2">
-          <DLogo class="h-5 text-black" />
+          <!-- <DLogo class="h-5 text-black" /> -->
         </NuxtLink>
         <DPageHeaderSeparator />
         <DPageHeaderBreadcrumbLink :name="me?.organisationName as string" :to="`/${orgName}`" />
-        <template>
-          <DPageHeaderSeparator />
-          <DPageHeaderBreadcrumbLink name="Acme" :to="`/acme`" />
-        </template>
 
-        <template>
-          <DPageHeaderSeparator />
-          <DPageHeaderBreadcrumbLink name="Dokedu" :to="`/acme/dokedu`" />
-        </template>
+        <DPageHeaderSeparator />
+        <DPageHeaderBreadcrumbLink name="Acme" :to="`/acme`" />
+
+        <DPageHeaderSeparator />
+        <DPageHeaderBreadcrumbLink name="Dokedu" :to="`/acme/dokedu`" />
       </div>
       <div class="flex items-center gap-2">
-        <DThemeSwitcher />
+        <!-- <DThemeSwitcher /> -->
         <DButton :icon-left="LogOutIcon" variant="secondary" size="MD" to="/logout" />
         <div
           class="bg-neutral-inverse text-neutral-inverse text-copy-sm grid size-8 place-items-center rounded-full font-semibold uppercase"

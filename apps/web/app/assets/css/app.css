@@ -19,7 +19,7 @@
   --background-color-neutral-inverse-hover: light-dark(var(--color-neutral-700), var(--color-neutral-200));
 
   /* Content colors */
-  --text-color-neutral: light-dark(var(--color-neutral-800), var(--color-neutral-300));
+  --text-color-neutral: light-dark(var(--color-neutral-800), var(--color-neutral-200));
   --text-color-neutral-subtle: light-dark(var(--color-neutral-500), var(--color-neutral-400));
   --text-color-neutral-weak: light-dark(var(--color-neutral-400), var(--color-neutral-600));
   --text-color-neutral-inverse: light-dark(var(--color-white), var(--color-black));
@@ -190,6 +190,15 @@
     }
   }
 }
+
+/* dark mode */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+  }
+}
+
+/* base */
 
 html,
 body,
