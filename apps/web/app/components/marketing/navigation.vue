@@ -1,7 +1,7 @@
 <template>
   <DWrapper>
     <div class="flex items-center justify-between py-6">
-      <DLogo class="h-6 text-white" full />
+      <DLogo class="h-5 text-white md:h-6" full />
       <div class="flex gap-2">
         <!-- <MarketingButton> Sign In </MarketingButton> -->
         <!-- <MarketingButton variant="primary"> Sign Up </MarketingButton> -->

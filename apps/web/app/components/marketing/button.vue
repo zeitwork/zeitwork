@@ -15,7 +15,7 @@ const variantClasses: { [key: string]: string } = {
 <template>
   <NuxtLink
     :to="to"
-    class="inline-flex h-9 cursor-pointer items-center rounded-xl px-3 text-sm select-none"
+    class="inline-flex h-9 cursor-pointer items-center rounded-xl px-3 text-sm transition-all duration-100 select-none"
     :class="variantClasses[variant]"
   >
     <div>
