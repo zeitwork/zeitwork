@@ -1,6 +1,6 @@
 <template>
   <DWrapper>
-    <div class="flex items-center md:justify-between justify-end py-8 px-4 md:px-8">
+    <div class="flex items-center justify-between py-8 px-4 md:px-8">
       <DLogo class="h-5 text-white md:h-6" full />
       <div class="flex ml-4 md:ml-8 gap-1">
         <MarketingButton variant="secondary" to="https://github.com/zeitwork/zeitwork" target="_blank">

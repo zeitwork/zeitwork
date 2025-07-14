@@ -19,7 +19,7 @@ const variantClasses: { [key: string]: string } = {
   <component
     :is="to ? NuxtLink : 'button'"
     :to="to"
-    class="inline-flex h-9 cursor-pointer items-center justify-center gap-2 uppercase rounded-md px-3 text-sm transition-all duration-100 outline-none select-none focus:ring-2 focus:ring-neutral-500 focus:outline-none"
+    class="inline-flex h-9 cursor-pointer items-center justify-center gap-2 rounded-md px-3 text-sm transition-all duration-100 outline-none select-none focus:ring-2 focus:ring-neutral-500 focus:outline-none"
     :class="variantClasses[variant]"
     :type="type"
   >
