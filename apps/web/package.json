@@ -1,5 +1,5 @@
 {
-  "name": "nuxt-app",
+  "name": "zeitwork-web",
   "private": true,
   "type": "module",
   "scripts": {
@@ -40,5 +40,9 @@
     "esbuild",
     "sharp",
     "vue-demi"
+  ],
+  "workspaces": [
+    "apps/web",
+    "packages/database"
   ]
 }
