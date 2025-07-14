@@ -5,7 +5,7 @@
 
 # Zeitwork
 
-> The open source alternative to Vercel - deploy any app with a simple `git push`
+> deploy any app with a simple `git push`
 
 Zeitwork is a Platform-as-a-Service that automatically builds and deploys your applications from GitHub. Connect your repository, and every commit triggers a new deployment. If your app has a Dockerfile, Zeitwork can run it. **Fully hosted, zero configuration, open source.**
 
@@ -37,7 +37,7 @@ Unlike proprietary platforms, Zeitwork gives you:
 
 ## 🎯 Who's it for?
 
-- **Startups** who want Vercel-like DX without vendor lock-in
+- **Startups** who want superb DX without vendor lock-in
 - **Developers** who value transparency and open source
 - **Teams** who need a simple, reliable deployment platform
 - **Companies** who might need to self-host in the future
