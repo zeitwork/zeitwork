@@ -1,13 +1,15 @@
 {
-    "name": "zeitwork",
-    "main": "index.ts",
-    "devDependencies": {
-        "@types/node": "^18",
-        "typescript": "^5.0.0"
-    },
-    "dependencies": {
-        "@pulumi/kubernetes": "^4.0.0",
-        "@pulumi/pulumi": "^3.113.0",
-        "@pulumi/random": "^4.18.2"
-    }
+  "name": "zeitwork-deployment",
+  "private": true,
+  "type": "module",
+  "main": "index.ts",
+  "devDependencies": {
+    "@types/node": "^18",
+    "typescript": "^5.0.0"
+  },
+  "dependencies": {
+    "@pulumi/kubernetes": "^4.0.0",
+    "@pulumi/pulumi": "^3.113.0",
+    "@pulumi/random": "^4.18.2"
+  }
 }

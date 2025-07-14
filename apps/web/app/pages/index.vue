@@ -16,6 +16,33 @@ onMounted(() => {
     UnicornStudio.init()
   }
 })
+
+const email = ref("")
+const isSuccess = ref<boolean | null>(null)
+const responseMessage = ref("")
+
+async function handleSubmit() {
+  console.log("handleSubmit", email.value)
+  if (!email.value) return
+
+  try {
+    const res = await $fetch("/api/waitlist", {
+      method: "POST",
+      body: {
+        email: email.value,
+      },
+    })
+    if (res.success) {
+      email.value = ""
+      responseMessage.value = "You're on the waitlist!"
+      isSuccess.value = true
+    }
+  } catch (error) {
+    console.error(error)
+    responseMessage.value = "Something went wrong. Please try again."
+    isSuccess.value = false
+  }
+}
 </script>
 
 <template>
@@ -38,8 +65,27 @@ onMounted(() => {
             can run it.
           </p>
         </div>
+        <div>
+          <form @submit.prevent="handleSubmit" class="flex flex-col gap-2">
+            <div class="flex gap-2">
+              <input
+                id="email"
+                v-model="email"
+                autocomplete="email"
+                type="email"
+                placeholder="Email"
+                class="bg-white px-2.5 py-1.5 text-black"
+              />
+              <!-- <MarketingButton type="submit" variant="primary">Join waitlist</MarketingButton> -->
+              <button type="submit" class="bg-white px-2.5 py-1.5 text-black">Join waitlist</button>
+            </div>
+            <div v-if="responseMessage" class="text-copy-sm" :class="[isSuccess ? 'text-green-400' : 'text-red-400']">
+              {{ responseMessage }}
+            </div>
+          </form>
+        </div>
         <div class="flex gap-2">
-          <MarketingButton variant="primary" to="https://github.com/zeitwork/zeitwork" target="_blank">
+          <MarketingButton variant="secondary" to="https://github.com/zeitwork/zeitwork" target="_blank">
             Star us on GitHub
           </MarketingButton>
           <!-- <MarketingButton variant="secondary">Watch demo</MarketingButton> -->
