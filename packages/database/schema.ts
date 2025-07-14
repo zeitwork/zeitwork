@@ -7,4 +7,4 @@ export const waitlist = pgTable("waitlist", {
   xForwardedFor: text(),
   country: text(),
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-});
+}).enableRLS();
