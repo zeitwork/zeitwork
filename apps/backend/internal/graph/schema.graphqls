@@ -1,0 +1,83 @@
+# GraphQL schema github.com/zeitwork/zeitwork/backend
+#
+# https://gqlgen.com/getting-started/
+
+scalar Time
+
+type User {
+  id: ID!
+  email: String!
+  username: String!
+  githubId: String!
+}
+
+type Organisation {
+  id: ID!
+  name: String!
+  slug: String!
+}
+
+type DeploymentConnection {
+  nodes: [Deployment!]!
+}
+
+type Project {
+  id: ID!
+  name: String!
+  slug: String!
+
+  organisation: Organisation!
+
+  deployments: DeploymentConnection!
+}
+
+type Domain {
+  id: ID!
+  name: String!
+  organisation: Organisation!
+}
+
+type Deployment {
+  id: ID!
+  previewUrl: String!
+
+  project: Project!
+  organisation: Organisation!
+}
+
+###   QUERY   ####
+
+input ProjectsInput {
+  organisationId: ID!
+}
+
+type ProjectConnection {
+  nodes: [Project!]!
+}
+
+type Query {
+  organisations: [Organisation!]!
+  projects(input: ProjectsInput!): ProjectConnection!
+}
+
+###   MUTATION   ####
+
+input CreateProjectInput {
+  name: String!
+  githubOwner: String!
+  githubRepo: String!
+}
+
+type CreateProjectPayload {
+  project: Project!
+}
+
+type LoginWithGitHubPayload {
+  token: String!
+  user: User!
+}
+
+type Mutation {
+  loginWithGitHub(code: String!): LoginWithGitHubPayload!
+  createProject(input: CreateProjectInput!): CreateProjectPayload!
+}
