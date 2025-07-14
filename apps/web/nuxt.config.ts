@@ -75,5 +75,8 @@ export default defineNuxtConfig({
     appUrl: "http://localhost:3000",
   },
 
-  modules: ["@nuxt/fonts"],
+  modules: [
+    '@nuxt/icon',
+    "@nuxt/fonts",
+  ],
 })
