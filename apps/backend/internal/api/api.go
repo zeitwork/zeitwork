@@ -3,11 +3,18 @@ package api
 import (
 	"errors"
 	"fmt"
+	"github.com/99designs/gqlgen/graphql/handler"
+	"github.com/99designs/gqlgen/graphql/handler/extension"
+	"github.com/99designs/gqlgen/graphql/handler/lru"
+	"github.com/99designs/gqlgen/graphql/handler/transport"
+	"github.com/99designs/gqlgen/graphql/playground"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"github.com/vektah/gqlparser/v2/ast"
 	"github.com/zeitwork/zeitwork/api/v1alpha1"
+	"github.com/zeitwork/zeitwork/internal/auth"
+	"github.com/zeitwork/zeitwork/internal/graph"
 	"github.com/zeitwork/zeitwork/internal/services"
-	"github.com/zeitwork/zeitwork/internal/services/db"
 	"io"
 	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -22,6 +29,18 @@ func StartAPI(svc *services.Services) {
 
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
+	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{}))
+
+	// initialize graphql api
+	srv := handler.New(graph.NewExecutableSchema(graph.Config{Resolvers: &graph.Resolver{
+		Services: svc,
+	}}))
+	srv.AddTransport(transport.Options{})
+	srv.AddTransport(transport.GET{})
+	srv.AddTransport(transport.POST{})
+	srv.SetQueryCache(lru.New[*ast.QueryDocument](1000))
+	srv.Use(extension.Introspection{})
+	srv.Use(extension.AutomaticPersistedQuery{Cache: lru.New[string](100)})
 
 	e.GET("/", func(c echo.Context) error {
 		return c.HTML(200, fmt.Sprintf(`
@@ -29,6 +48,9 @@ Welcome to CAAS API!
 Login to github now to get started: <a href='%s'>Login with GitHub</a>'
 `, svc.Github.GetInstallationURL()))
 	})
+
+	e.Any("/playground", echo.WrapHandler(playground.AltairHandler("Playground", "/graph", nil)))
+	e.Any("/graph", echo.WrapHandler(srv), auth.JWTMiddleware())
 
 	e.GET("/auth/github/callback", func(c echo.Context) error {
 		return c.String(200, "GitHub authentication callback received")
@@ -45,17 +67,6 @@ Login to github now to get started: <a href='%s'>Login with GitHub</a>'
 			}
 			fmt.Printf("Installation event: %s for installation ID %d by user %s\n",
 				event.Action, event.Installation.ID, event.Installation.Account.Login)
-
-			// if this is a new installation, insert into the db
-			if event.Action == "created" {
-				_, err := svc.DB.OrganisationInsert(c.Request().Context(), db.OrganisationInsertParams{
-					InstallationID: event.Installation.ID,
-					GithubUsername: event.Installation.Account.Login,
-				})
-				if err != nil {
-					return err
-				}
-			}
 		case "push":
 			var event GithubEventPush
 			if err := c.Bind(&event); err != nil {
@@ -69,7 +80,7 @@ Login to github now to get started: <a href='%s'>Login with GitHub</a>'
 			}
 
 			// step 2: get the GitHub client for the organisation and fetch the repository to make sure this is a valid push event
-			gclient, err := svc.Github.GetClientForInstallation(organisation.InstallationID)
+			gclient, err := svc.Github.GetClientForInstallation(organisation.InstallationID.Int64)
 			if err != nil {
 				return c.String(500, "Failed to get GitHub client for installation")
 			}
@@ -90,7 +101,7 @@ Login to github now to get started: <a href='%s'>Login with GitHub</a>'
 
 			// all checks out so far, update the App given it exists
 			var app v1alpha1.App
-			err = svc.K8s.Get(c.Request().Context(), client.ObjectKey{Namespace: fmt.Sprintf("caas-%s", organisation.GithubUsername), Name: fmt.Sprintf("repo-%d", *repo.ID)}, &app)
+			err = svc.K8s.Get(c.Request().Context(), client.ObjectKey{Namespace: fmt.Sprintf("caas-%s", organisation.Slug), Name: fmt.Sprintf("repo-%d", *repo.ID)}, &app)
 			if err != nil {
 				// doesn't exist, don't care.
 				return c.String(200, "App not found for repository, ignoring push event")

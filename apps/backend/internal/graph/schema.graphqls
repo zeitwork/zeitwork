@@ -6,9 +6,9 @@ scalar Time
 
 type User {
   id: ID!
-  email: String!
   username: String!
-  githubId: String!
+  githubId: Int!
+  organisations: OrganisationConnection!
 }
 
 type Organisation {
@@ -19,6 +19,10 @@ type Organisation {
 
 type DeploymentConnection {
   nodes: [Deployment!]!
+}
+
+type OrganisationConnection {
+  nodes: [Organisation!]!
 }
 
 type Project {
@@ -55,8 +59,12 @@ type ProjectConnection {
   nodes: [Project!]!
 }
 
+type MePayload {
+  user: User!
+}
+
 type Query {
-  organisations: [Organisation!]!
+  me: MePayload!
   projects(input: ProjectsInput!): ProjectConnection!
 }
 
@@ -76,8 +84,12 @@ type LoginWithGitHubPayload {
   token: String!
   user: User!
 }
+type SetInstallationIDPayload {
+  organisation: Organisation!
+}
 
 type Mutation {
   loginWithGitHub(code: String!): LoginWithGitHubPayload!
+  setInstallationID(installationId: String!, organisationId: ID!): SetInstallationIDPayload!
   createProject(input: CreateProjectInput!): CreateProjectPayload!
 }

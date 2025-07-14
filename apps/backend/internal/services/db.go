@@ -10,7 +10,7 @@ import (
 	"github.com/zeitwork/zeitwork/internal/services/db"
 )
 
-//go:generate sqlc generate
+//go:generate sqlc generate -f ../../sqlc.yaml
 
 type DB struct {
 	*db.Queries

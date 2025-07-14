@@ -4,8 +4,23 @@
 
 package db
 
+import (
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
 type Organisation struct {
 	ID             int32
-	InstallationID int64
-	GithubUsername string
+	InstallationID pgtype.Int8
+	Slug           string
+}
+
+type User struct {
+	ID       int32
+	Username string
+	GithubID int64
+}
+
+type UserInOrganisation struct {
+	UserID         int32
+	OrganisationID int32
 }

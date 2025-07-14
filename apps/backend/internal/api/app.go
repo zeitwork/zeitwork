@@ -30,8 +30,13 @@ func (a *API) CreateApp(c echo.Context) error {
 		return errors.New("organisation not found")
 	}
 
+	// if the org does not have an installation yet, skip
+	if !organisation.InstallationID.Valid {
+		return errors.New("installation doesn't already exists")
+	}
+
 	// use the organisation to get a github instance
-	gclient, err := a.Services.Github.GetClientForInstallation(organisation.InstallationID)
+	gclient, err := a.Services.Github.GetClientForInstallation(organisation.InstallationID.Int64)
 	if err != nil {
 		return err
 	}
@@ -52,7 +57,7 @@ func (a *API) CreateApp(c echo.Context) error {
 	}
 
 	// ensure a namespace in k8s exists for the organisation
-	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("caas-%s", organisation.GithubUsername)}}
+	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("caas-%s", organisation.Slug)}}
 	_, err = controllerutil.CreateOrUpdate(c.Request().Context(), a.Services.K8s, ns, func() error {
 		ns.Labels = map[string]string{
 			"zeitwork.com/organisation-id": fmt.Sprintf("%d", organisation.ID),
@@ -75,7 +80,7 @@ func (a *API) CreateApp(c echo.Context) error {
 			FQDN:               nil,
 			GithubOwner:        req.GithubOwner,
 			GithubRepo:         req.GithubRepo,
-			GithubInstallation: organisation.InstallationID,
+			GithubInstallation: organisation.InstallationID.Int64,
 		}
 		return nil
 	})

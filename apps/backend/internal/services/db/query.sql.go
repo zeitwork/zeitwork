@@ -7,42 +7,124 @@ package db
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const organisationFindByID = `-- name: OrganisationFindByID :one
-select id, installation_id, github_username from organisations where id = $1
+select id, installation_id, slug from organisations where id = $1
 `
 
 func (q *Queries) OrganisationFindByID(ctx context.Context, id int32) (Organisation, error) {
 	row := q.db.QueryRow(ctx, organisationFindByID, id)
 	var i Organisation
-	err := row.Scan(&i.ID, &i.InstallationID, &i.GithubUsername)
+	err := row.Scan(&i.ID, &i.InstallationID, &i.Slug)
 	return i, err
 }
 
 const organisationFindByInstallationID = `-- name: OrganisationFindByInstallationID :one
-select id, installation_id, github_username from organisations where installation_id = $1
+select id, installation_id, slug from organisations where installation_id = $1::bigint
 `
 
-func (q *Queries) OrganisationFindByInstallationID(ctx context.Context, installationID int64) (Organisation, error) {
-	row := q.db.QueryRow(ctx, organisationFindByInstallationID, installationID)
+func (q *Queries) OrganisationFindByInstallationID(ctx context.Context, dollar_1 int64) (Organisation, error) {
+	row := q.db.QueryRow(ctx, organisationFindByInstallationID, dollar_1)
 	var i Organisation
-	err := row.Scan(&i.ID, &i.InstallationID, &i.GithubUsername)
+	err := row.Scan(&i.ID, &i.InstallationID, &i.Slug)
 	return i, err
 }
 
+const organisationFindByUserID = `-- name: OrganisationFindByUserID :many
+select o.id, o.installation_id, o.slug from user_in_organisation uio
+         inner join public.organisations o on o.id = uio.organisation_id
+where uio.user_id = $1
+`
+
+func (q *Queries) OrganisationFindByUserID(ctx context.Context, userID int32) ([]Organisation, error) {
+	rows, err := q.db.Query(ctx, organisationFindByUserID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Organisation
+	for rows.Next() {
+		var i Organisation
+		if err := rows.Scan(&i.ID, &i.InstallationID, &i.Slug); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const organisationInsert = `-- name: OrganisationInsert :one
-insert into organisations ( installation_id, github_username) values ($1, $2) returning id, installation_id, github_username
+insert into organisations (installation_id, slug) values ($1, $2) returning id, installation_id, slug
 `
 
 type OrganisationInsertParams struct {
-	InstallationID int64
-	GithubUsername string
+	InstallationID pgtype.Int8
+	Slug           string
 }
 
 func (q *Queries) OrganisationInsert(ctx context.Context, arg OrganisationInsertParams) (Organisation, error) {
-	row := q.db.QueryRow(ctx, organisationInsert, arg.InstallationID, arg.GithubUsername)
+	row := q.db.QueryRow(ctx, organisationInsert, arg.InstallationID, arg.Slug)
 	var i Organisation
-	err := row.Scan(&i.ID, &i.InstallationID, &i.GithubUsername)
+	err := row.Scan(&i.ID, &i.InstallationID, &i.Slug)
+	return i, err
+}
+
+const userFindByGithubID = `-- name: UserFindByGithubID :one
+select id, username, github_id from users where github_id = $1
+`
+
+func (q *Queries) UserFindByGithubID(ctx context.Context, githubID int64) (User, error) {
+	row := q.db.QueryRow(ctx, userFindByGithubID, githubID)
+	var i User
+	err := row.Scan(&i.ID, &i.Username, &i.GithubID)
+	return i, err
+}
+
+const userFindByID = `-- name: UserFindByID :one
+select id, username, github_id from users where id = $1
+`
+
+func (q *Queries) UserFindByID(ctx context.Context, id int32) (User, error) {
+	row := q.db.QueryRow(ctx, userFindByID, id)
+	var i User
+	err := row.Scan(&i.ID, &i.Username, &i.GithubID)
+	return i, err
+}
+
+const userInOrganisationInsert = `-- name: UserInOrganisationInsert :one
+insert into user_in_organisation (user_id, organisation_id) VALUES ($1, $2) returning user_id, organisation_id
+`
+
+type UserInOrganisationInsertParams struct {
+	UserID         int32
+	OrganisationID int32
+}
+
+func (q *Queries) UserInOrganisationInsert(ctx context.Context, arg UserInOrganisationInsertParams) (UserInOrganisation, error) {
+	row := q.db.QueryRow(ctx, userInOrganisationInsert, arg.UserID, arg.OrganisationID)
+	var i UserInOrganisation
+	err := row.Scan(&i.UserID, &i.OrganisationID)
+	return i, err
+}
+
+const userInsert = `-- name: UserInsert :one
+insert into users (username, github_id) values ($1, $2) returning id, username, github_id
+`
+
+type UserInsertParams struct {
+	Username string
+	GithubID int64
+}
+
+func (q *Queries) UserInsert(ctx context.Context, arg UserInsertParams) (User, error) {
+	row := q.db.QueryRow(ctx, userInsert, arg.Username, arg.GithubID)
+	var i User
+	err := row.Scan(&i.ID, &i.Username, &i.GithubID)
 	return i, err
 }
