@@ -22,7 +22,6 @@ import (
 	"github.com/zeitwork/zeitwork/internal/services"
 	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	"time"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
@@ -367,8 +366,8 @@ func (r *AppRevisionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 				}
 			}
 
-			// Requeue to check job status later
-			return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
+			// Return here, we watch the job so reconciliation will continue once the job is complete
+			return ctrl.Result{}, nil
 		}
 	}
 
@@ -400,5 +399,6 @@ func (r *AppRevisionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 func (r *AppRevisionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.AppRevision{}).
+		Owns(&batchv1.Job{}).
 		Complete(r)
 }
