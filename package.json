@@ -20,6 +20,7 @@
     "packages/database"
   ],
   "dependencies": {
+    "@nuxt/icon": "^1.15.0",
     "date-fns": "^4.1.0",
     "drizzle-orm": "^0.44.2",
     "postgres": "^3.4.7",

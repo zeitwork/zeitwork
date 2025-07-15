@@ -9,8 +9,8 @@ const route = useRoute()
 </script>
 
 <template>
-  <div class="bg-neutral" :class="[padding ? 'px-4' : '']">
-    <div class="flex">
+  <div class="bg-neutral" :class="[padding ? 'px-2 md:px-4' : '']">
+    <div class="flex overflow-x-auto whitespace-nowrap no-scrollbar md:overflow-visible md:whitespace-normal">
       <NuxtLink
         v-for="item in navigation"
         :key="item?.name"
