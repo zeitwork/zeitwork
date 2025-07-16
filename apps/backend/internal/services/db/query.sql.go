@@ -33,30 +33,22 @@ func (q *Queries) OrganisationFindByInstallationID(ctx context.Context, dollar_1
 	return i, err
 }
 
-const organisationFindByUserID = `-- name: OrganisationFindByUserID :many
+const organisationFindWithUser = `-- name: OrganisationFindWithUser :one
 select o.id, o.installation_id, o.slug from user_in_organisation uio
-         inner join public.organisations o on o.id = uio.organisation_id
-where uio.user_id = $1
+                    inner join public.organisations o on o.id = uio.organisation_id
+where uio.user_id = $1 and o.id=$2
 `
 
-func (q *Queries) OrganisationFindByUserID(ctx context.Context, userID int32) ([]Organisation, error) {
-	rows, err := q.db.Query(ctx, organisationFindByUserID, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Organisation
-	for rows.Next() {
-		var i Organisation
-		if err := rows.Scan(&i.ID, &i.InstallationID, &i.Slug); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+type OrganisationFindWithUserParams struct {
+	UserID int32
+	ID     int32
+}
+
+func (q *Queries) OrganisationFindWithUser(ctx context.Context, arg OrganisationFindWithUserParams) (Organisation, error) {
+	row := q.db.QueryRow(ctx, organisationFindWithUser, arg.UserID, arg.ID)
+	var i Organisation
+	err := row.Scan(&i.ID, &i.InstallationID, &i.Slug)
+	return i, err
 }
 
 const organisationInsert = `-- name: OrganisationInsert :one
@@ -73,6 +65,32 @@ func (q *Queries) OrganisationInsert(ctx context.Context, arg OrganisationInsert
 	var i Organisation
 	err := row.Scan(&i.ID, &i.InstallationID, &i.Slug)
 	return i, err
+}
+
+const organisationsFindByUserID = `-- name: OrganisationsFindByUserID :many
+select o.id, o.installation_id, o.slug from user_in_organisation uio
+         inner join public.organisations o on o.id = uio.organisation_id
+where uio.user_id = $1
+`
+
+func (q *Queries) OrganisationsFindByUserID(ctx context.Context, userID int32) ([]Organisation, error) {
+	rows, err := q.db.Query(ctx, organisationsFindByUserID, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Organisation
+	for rows.Next() {
+		var i Organisation
+		if err := rows.Scan(&i.ID, &i.InstallationID, &i.Slug); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const userFindByGithubID = `-- name: UserFindByGithubID :one

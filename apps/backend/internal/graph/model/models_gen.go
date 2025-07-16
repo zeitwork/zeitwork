@@ -7,20 +7,15 @@ import (
 )
 
 type CreateProjectInput struct {
-	Name        string `json:"name"`
-	GithubOwner string `json:"githubOwner"`
-	GithubRepo  string `json:"githubRepo"`
+	Name           string `json:"name"`
+	GithubOwner    string `json:"githubOwner"`
+	GithubRepo     string `json:"githubRepo"`
+	OrganisationID int    `json:"organisationId"`
+	Port           int    `json:"port"`
 }
 
 type CreateProjectPayload struct {
 	Project Project `json:"project"`
-}
-
-type Deployment struct {
-	ID           string          `json:"id"`
-	PreviewURL   string          `json:"previewUrl"`
-	Project      Project         `json:"project"`
-	Organisation db.Organisation `json:"organisation"`
 }
 
 type DeploymentConnection struct {
@@ -31,11 +26,6 @@ type Domain struct {
 	ID           string          `json:"id"`
 	Name         string          `json:"name"`
 	Organisation db.Organisation `json:"organisation"`
-}
-
-type LoginWithGitHubPayload struct {
-	Token string  `json:"token"`
-	User  db.User `json:"user"`
 }
 
 type MePayload struct {
@@ -49,20 +39,12 @@ type OrganisationConnection struct {
 	Nodes []db.Organisation `json:"nodes"`
 }
 
-type Project struct {
-	ID           string               `json:"id"`
-	Name         string               `json:"name"`
-	Slug         string               `json:"slug"`
-	Organisation db.Organisation      `json:"organisation"`
-	Deployments  DeploymentConnection `json:"deployments"`
-}
-
 type ProjectConnection struct {
 	Nodes []Project `json:"nodes"`
 }
 
 type ProjectsInput struct {
-	OrganisationID string `json:"organisationId"`
+	OrganisationID int `json:"organisationId"`
 }
 
 type Query struct {

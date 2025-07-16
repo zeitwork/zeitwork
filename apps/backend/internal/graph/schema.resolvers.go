@@ -6,47 +6,29 @@ package graph
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 
-	"github.com/zeitwork/zeitwork/internal/auth"
+	"github.com/zeitwork/zeitwork/api/v1alpha1"
 	"github.com/zeitwork/zeitwork/internal/graph/model"
 	"github.com/zeitwork/zeitwork/internal/services/db"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/utils/pointer"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-// LoginWithGitHub is the resolver for the loginWithGitHub field.
-func (r *mutationResolver) LoginWithGitHub(ctx context.Context, code string) (model.LoginWithGitHubPayload, error) {
-	// exchange the code for GitHub user
-	ghUser, err := r.Services.Github.ExchangeCodeForUser(ctx, code)
-	if err != nil {
-		return model.LoginWithGitHubPayload{}, err
-	}
+// Project is the resolver for the project field.
+func (r *deploymentResolver) Project(ctx context.Context, obj *model.Deployment) (model.Project, error) {
+	panic(fmt.Errorf("not implemented: Project - project"))
+}
 
-	// ensure this user already exists in the database
-	user, err := r.Services.DB.UserFindByGithubID(ctx, *ghUser.ID)
-	if err != nil {
-		// if the user was not found, generate default user+org
-		if !errors.Is(err, sql.ErrNoRows) {
-			return model.LoginWithGitHubPayload{}, err
-		}
-
-		user, err = r.CreateUserAndDefaultOrg(ctx, ghUser)
-		if err != nil {
-			return model.LoginWithGitHubPayload{}, err
-		}
-	}
-
-	// sign jwt
-	token, err := auth.Sign(user.ID)
-	if err != nil {
-		return model.LoginWithGitHubPayload{}, err
-	}
-
-	return model.LoginWithGitHubPayload{
-		Token: token,
-		User:  user,
-	}, nil
+// Organisation is the resolver for the organisation field.
+func (r *deploymentResolver) Organisation(ctx context.Context, obj *model.Deployment) (db.Organisation, error) {
+	panic(fmt.Errorf("not implemented: Organisation - organisation"))
 }
 
 // SetInstallationID is the resolver for the setInstallationID field.
@@ -56,7 +38,68 @@ func (r *mutationResolver) SetInstallationID(ctx context.Context, installationID
 
 // CreateProject is the resolver for the createProject field.
 func (r *mutationResolver) CreateProject(ctx context.Context, input model.CreateProjectInput) (model.CreateProjectPayload, error) {
-	panic(fmt.Errorf("not implemented: CreateProject - createProject"))
+	_, org, err := r.GetUserAndOrg(ctx, int32(input.OrganisationID))
+	if err != nil {
+		return model.CreateProjectPayload{}, err
+	}
+
+	if !org.InstallationID.Valid {
+		return model.CreateProjectPayload{}, errors.New("installation doesn't exists")
+	}
+
+	// use the organisation to get a github instance
+	gclient, err := r.Services.Github.GetClientForInstallation(org.InstallationID.Int64)
+	if err != nil {
+		return model.CreateProjectPayload{}, err
+	}
+
+	// we can fetch the Repo
+	repo, _, err := gclient.Repositories.Get(ctx, input.GithubOwner, input.GithubRepo)
+	if err != nil {
+		return model.CreateProjectPayload{}, errors.New("failed to fetch GitHub repository")
+	}
+
+	// download the latest commit SHA
+	branch, _, err := gclient.Repositories.GetBranch(ctx, input.GithubOwner, input.GithubRepo, repo.GetDefaultBranch(), 5)
+	if err != nil {
+		return model.CreateProjectPayload{}, errors.New("failed to fetch latest commit SHA")
+	}
+	if branch == nil || branch.Commit == nil || branch.Commit.GetSHA() == "" {
+		return model.CreateProjectPayload{}, errors.New("failed to fetch latest commit SHA: branch or commit is nil")
+	}
+
+	// ensure a namespace in k8s exists for the organisation
+	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("tenant-%d", org.ID)}}
+	_, err = controllerutil.CreateOrUpdate(ctx, r.Services.K8s, ns, func() error {
+		return nil
+	})
+	if err != nil {
+		return model.CreateProjectPayload{}, fmt.Errorf("failed to create or update namespace: %w", err)
+	}
+
+	// now that a namespace exists, ensure the app is created in the namespace
+	app := v1alpha1.App{ObjectMeta: metav1.ObjectMeta{Name: fmt.Sprintf("repo-%d", *repo.ID), Namespace: ns.Name}}
+	_, err = controllerutil.CreateOrUpdate(ctx, r.Services.K8s, &app, func() error {
+		app.Labels = map[string]string{
+			"zeitwork.com/organisationId": strconv.Itoa(int(org.ID)),
+		}
+		app.Spec = v1alpha1.AppSpec{
+			Description:        input.Name,
+			DesiredRevisionSHA: pointer.String(branch.Commit.GetSHA()),
+			FQDN:               nil,
+			GithubOwner:        input.GithubOwner,
+			GithubRepo:         input.GithubRepo,
+			GithubInstallation: org.InstallationID.Int64,
+			Port:               int32(input.Port),
+		}
+		return nil
+	})
+	if err != nil {
+		return model.CreateProjectPayload{}, fmt.Errorf("failed to create or update app: %w", err)
+	}
+
+	// yay, app created!
+	return model.CreateProjectPayload{Project: r.AppToProject(app)}, nil
 }
 
 // Name is the resolver for the name field.
@@ -64,29 +107,88 @@ func (r *organisationResolver) Name(ctx context.Context, obj *db.Organisation) (
 	return obj.Slug, nil
 }
 
+// Organisation is the resolver for the organisation field.
+func (r *projectResolver) Organisation(ctx context.Context, obj *model.Project) (db.Organisation, error) {
+	_, org, err := r.GetUserAndOrg(ctx, obj.OrganisationID)
+	return org, err
+}
+
+// Deployments is the resolver for the deployments field.
+func (r *projectResolver) Deployments(ctx context.Context, obj *model.Project) (model.DeploymentConnection, error) {
+	_, org, err := r.GetUserAndOrg(ctx, obj.OrganisationID)
+	if err != nil {
+		return model.DeploymentConnection{}, err
+	}
+
+	// fetch all app revisions for project
+	revisions := &v1alpha1.AppRevisionList{}
+	err = r.Services.K8s.List(ctx, revisions, client.InNamespace(fmt.Sprintf("tenant-%d", org.ID)), client.MatchingLabels{
+		"zeitwork.com/app": obj.K8sName,
+	})
+	if err != nil {
+		return model.DeploymentConnection{}, err
+	}
+
+	var deployments []model.Deployment
+	for _, item := range revisions.Items {
+		deployments = append(deployments, model.Deployment{
+			ID:             item.Name,
+			PreviewURL:     fmt.Sprintf("%s-%s.zeitwork.app", item.Spec.CommitSHA[:7], obj.K8sName),
+			ProjectID:      obj.ID,
+			OrganisationID: obj.OrganisationID,
+		})
+	}
+
+	return model.DeploymentConnection{Nodes: deployments}, nil
+}
+
 // Me is the resolver for the me field.
 func (r *queryResolver) Me(ctx context.Context) (model.MePayload, error) {
-	userId, ok := auth.GetUserIDFromContext(ctx)
-	if !ok {
-		return model.MePayload{}, errors.New("no user found")
-	}
-
-	user, err := r.Services.DB.UserFindByID(ctx, userId)
-	if err != nil {
-		return model.MePayload{}, err
-	}
-
-	return model.MePayload{User: user}, nil
+	user, err := r.GetUser(ctx)
+	return model.MePayload{User: user}, err
 }
 
 // Projects is the resolver for the projects field.
 func (r *queryResolver) Projects(ctx context.Context, input model.ProjectsInput) (model.ProjectConnection, error) {
-	panic(fmt.Errorf("not implemented: Projects - projects"))
+	_, org, err := r.GetUserAndOrg(ctx, int32(input.OrganisationID))
+	if err != nil {
+		return model.ProjectConnection{}, err
+	}
+
+	// if the organisation does not have an installation yet, it does not have projects.
+	if !org.InstallationID.Valid {
+		return model.ProjectConnection{}, nil
+	}
+
+	// check if the organisation has a k8s namespace
+	ns := &corev1.Namespace{}
+	err = r.Services.K8s.Get(ctx, client.ObjectKey{Name: fmt.Sprintf("tenant-%d", input.OrganisationID)}, ns)
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return model.ProjectConnection{}, nil
+		}
+		return model.ProjectConnection{}, err
+	}
+
+	// namespace exists, which means they might have apps!
+	apps := &v1alpha1.AppList{}
+	err = r.Services.K8s.List(ctx, apps, client.InNamespace(ns.Name))
+	if err != nil {
+		return model.ProjectConnection{}, nil
+	}
+
+	// map apps to projects
+	var projects []model.Project
+	for _, app := range apps.Items {
+		projects = append(projects, r.AppToProject(app))
+	}
+
+	return model.ProjectConnection{Nodes: projects}, nil
 }
 
 // Organisations is the resolver for the organisations field.
 func (r *userResolver) Organisations(ctx context.Context, obj *db.User) (model.OrganisationConnection, error) {
-	organisations, err := r.Services.DB.OrganisationFindByUserID(ctx, obj.ID)
+	organisations, err := r.Services.DB.OrganisationsFindByUserID(ctx, obj.ID)
 	if err != nil {
 		return model.OrganisationConnection{}, err
 	}
@@ -94,11 +196,17 @@ func (r *userResolver) Organisations(ctx context.Context, obj *db.User) (model.O
 	return model.OrganisationConnection{Nodes: organisations}, nil
 }
 
+// Deployment returns DeploymentResolver implementation.
+func (r *Resolver) Deployment() DeploymentResolver { return &deploymentResolver{r} }
+
 // Mutation returns MutationResolver implementation.
 func (r *Resolver) Mutation() MutationResolver { return &mutationResolver{r} }
 
 // Organisation returns OrganisationResolver implementation.
 func (r *Resolver) Organisation() OrganisationResolver { return &organisationResolver{r} }
+
+// Project returns ProjectResolver implementation.
+func (r *Resolver) Project() ProjectResolver { return &projectResolver{r} }
 
 // Query returns QueryResolver implementation.
 func (r *Resolver) Query() QueryResolver { return &queryResolver{r} }
@@ -106,7 +214,9 @@ func (r *Resolver) Query() QueryResolver { return &queryResolver{r} }
 // User returns UserResolver implementation.
 func (r *Resolver) User() UserResolver { return &userResolver{r} }
 
+type deploymentResolver struct{ *Resolver }
 type mutationResolver struct{ *Resolver }
 type organisationResolver struct{ *Resolver }
+type projectResolver struct{ *Resolver }
 type queryResolver struct{ *Resolver }
 type userResolver struct{ *Resolver }

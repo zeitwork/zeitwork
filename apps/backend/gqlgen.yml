@@ -122,7 +122,7 @@ call_argument_directives_with_null: true
 # if they match it will use them, otherwise it will generate them.
 autobind:
   - "github.com/zeitwork/zeitwork/internal/services/db"
-#  - "github.com/zeitwork/zeitwork/graph/model"
+  - "github.com/zeitwork/zeitwork/internal/graph/model"
 
 # This section declares type mapping between the GraphQL and go type systems
 #

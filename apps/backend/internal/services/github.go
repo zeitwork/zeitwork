@@ -11,7 +11,7 @@ import (
 	"os"
 )
 
-const appID = 1593721
+const appID = 1616586
 
 var PrivateKeyName = os.Getenv("GITHUB_PRIVATE_KEY_NAME")
 var ClientID = os.Getenv("GITHUB_CLIENT_ID")

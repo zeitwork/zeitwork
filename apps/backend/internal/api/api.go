@@ -134,10 +134,6 @@ Login to github now to get started: <a href='%s'>Login with GitHub</a>'
 		return c.String(200, "GitHub webhook event received")
 	})
 
-	api := API{Services: svc}
-
-	e.POST("/app/setup", api.CreateApp)
-
 	e.POST("/admin/auth/jwt", func(c echo.Context) error {
 		// headers  { x-api-key: super-secret }
 		apiKey := c.Request().Header.Get("X-API-Key")

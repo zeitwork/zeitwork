@@ -28,6 +28,7 @@ type AppSpec struct {
 	GithubOwner        string  `json:"githubOwner"`
 	GithubRepo         string  `json:"githubRepo"`
 	GithubInstallation int64   `json:"githubInstallation"`
+	Port               int32   `json:"port"`
 }
 
 // AppStatus defines the observed state of App

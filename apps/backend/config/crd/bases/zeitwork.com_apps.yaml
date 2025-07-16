@@ -52,11 +52,15 @@ spec:
                 type: string
               githubRepo:
                 type: string
+              port:
+                format: int32
+                type: integer
             required:
             - description
             - githubInstallation
             - githubOwner
             - githubRepo
+            - port
             type: object
           status:
             description: AppStatus defines the observed state of App

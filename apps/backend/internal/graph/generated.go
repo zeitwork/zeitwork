@@ -40,8 +40,10 @@ type Config struct {
 }
 
 type ResolverRoot interface {
+	Deployment() DeploymentResolver
 	Mutation() MutationResolver
 	Organisation() OrganisationResolver
+	Project() ProjectResolver
 	Query() QueryResolver
 	User() UserResolver
 }
@@ -71,18 +73,12 @@ type ComplexityRoot struct {
 		Organisation func(childComplexity int) int
 	}
 
-	LoginWithGitHubPayload struct {
-		Token func(childComplexity int) int
-		User  func(childComplexity int) int
-	}
-
 	MePayload struct {
 		User func(childComplexity int) int
 	}
 
 	Mutation struct {
 		CreateProject     func(childComplexity int, input model.CreateProjectInput) int
-		LoginWithGitHub   func(childComplexity int, code string) int
 		SetInstallationID func(childComplexity int, installationID string, organisationID string) int
 	}
 
@@ -125,13 +121,20 @@ type ComplexityRoot struct {
 	}
 }
 
+type DeploymentResolver interface {
+	Project(ctx context.Context, obj *model.Deployment) (model.Project, error)
+	Organisation(ctx context.Context, obj *model.Deployment) (db.Organisation, error)
+}
 type MutationResolver interface {
-	LoginWithGitHub(ctx context.Context, code string) (model.LoginWithGitHubPayload, error)
 	SetInstallationID(ctx context.Context, installationID string, organisationID string) (model.SetInstallationIDPayload, error)
 	CreateProject(ctx context.Context, input model.CreateProjectInput) (model.CreateProjectPayload, error)
 }
 type OrganisationResolver interface {
 	Name(ctx context.Context, obj *db.Organisation) (string, error)
+}
+type ProjectResolver interface {
+	Organisation(ctx context.Context, obj *model.Project) (db.Organisation, error)
+	Deployments(ctx context.Context, obj *model.Project) (model.DeploymentConnection, error)
 }
 type QueryResolver interface {
 	Me(ctx context.Context) (model.MePayload, error)
@@ -223,20 +226,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.complexity.Domain.Organisation(childComplexity), true
 
-	case "LoginWithGitHubPayload.token":
-		if e.complexity.LoginWithGitHubPayload.Token == nil {
-			break
-		}
-
-		return e.complexity.LoginWithGitHubPayload.Token(childComplexity), true
-
-	case "LoginWithGitHubPayload.user":
-		if e.complexity.LoginWithGitHubPayload.User == nil {
-			break
-		}
-
-		return e.complexity.LoginWithGitHubPayload.User(childComplexity), true
-
 	case "MePayload.user":
 		if e.complexity.MePayload.User == nil {
 			break
@@ -255,18 +244,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.complexity.Mutation.CreateProject(childComplexity, args["input"].(model.CreateProjectInput)), true
-
-	case "Mutation.loginWithGitHub":
-		if e.complexity.Mutation.LoginWithGitHub == nil {
-			break
-		}
-
-		args, err := ec.field_Mutation_loginWithGitHub_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.complexity.Mutation.LoginWithGitHub(childComplexity, args["code"].(string)), true
 
 	case "Mutation.setInstallationID":
 		if e.complexity.Mutation.SetInstallationID == nil {
@@ -550,29 +527,6 @@ func (ec *executionContext) field_Mutation_createProject_argsInput(
 	}
 
 	var zeroVal model.CreateProjectInput
-	return zeroVal, nil
-}
-
-func (ec *executionContext) field_Mutation_loginWithGitHub_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := ec.field_Mutation_loginWithGitHub_argsCode(ctx, rawArgs)
-	if err != nil {
-		return nil, err
-	}
-	args["code"] = arg0
-	return args, nil
-}
-func (ec *executionContext) field_Mutation_loginWithGitHub_argsCode(
-	ctx context.Context,
-	rawArgs map[string]any,
-) (string, error) {
-	ctx = graphql.WithPathContext(ctx, graphql.NewPathWithField("code"))
-	if tmp, ok := rawArgs["code"]; ok {
-		return ec.unmarshalNString2string(ctx, tmp)
-	}
-
-	var zeroVal string
 	return zeroVal, nil
 }
 
@@ -921,7 +875,7 @@ func (ec *executionContext) _Deployment_project(ctx context.Context, field graph
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
 		ctx = rctx // use context from middleware stack in children
-		return obj.Project, nil
+		return ec.resolvers.Deployment().Project(rctx, obj)
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -942,8 +896,8 @@ func (ec *executionContext) fieldContext_Deployment_project(_ context.Context, f
 	fc = &graphql.FieldContext{
 		Object:     "Deployment",
 		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
@@ -977,7 +931,7 @@ func (ec *executionContext) _Deployment_organisation(ctx context.Context, field 
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
 		ctx = rctx // use context from middleware stack in children
-		return obj.Organisation, nil
+		return ec.resolvers.Deployment().Organisation(rctx, obj)
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -998,8 +952,8 @@ func (ec *executionContext) fieldContext_Deployment_organisation(_ context.Conte
 	fc = &graphql.FieldContext{
 		Object:     "Deployment",
 		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
@@ -1209,104 +1163,6 @@ func (ec *executionContext) fieldContext_Domain_organisation(_ context.Context, 
 	return fc, nil
 }
 
-func (ec *executionContext) _LoginWithGitHubPayload_token(ctx context.Context, field graphql.CollectedField, obj *model.LoginWithGitHubPayload) (ret graphql.Marshaler) {
-	fc, err := ec.fieldContext_LoginWithGitHubPayload_token(ctx, field)
-	if err != nil {
-		return graphql.Null
-	}
-	ctx = graphql.WithFieldContext(ctx, fc)
-	defer func() {
-		if r := recover(); r != nil {
-			ec.Error(ctx, ec.Recover(ctx, r))
-			ret = graphql.Null
-		}
-	}()
-	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
-		ctx = rctx // use context from middleware stack in children
-		return obj.Token, nil
-	})
-	if err != nil {
-		ec.Error(ctx, err)
-		return graphql.Null
-	}
-	if resTmp == nil {
-		if !graphql.HasFieldError(ctx, fc) {
-			ec.Errorf(ctx, "must not be null")
-		}
-		return graphql.Null
-	}
-	res := resTmp.(string)
-	fc.Result = res
-	return ec.marshalNString2string(ctx, field.Selections, res)
-}
-
-func (ec *executionContext) fieldContext_LoginWithGitHubPayload_token(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "LoginWithGitHubPayload",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _LoginWithGitHubPayload_user(ctx context.Context, field graphql.CollectedField, obj *model.LoginWithGitHubPayload) (ret graphql.Marshaler) {
-	fc, err := ec.fieldContext_LoginWithGitHubPayload_user(ctx, field)
-	if err != nil {
-		return graphql.Null
-	}
-	ctx = graphql.WithFieldContext(ctx, fc)
-	defer func() {
-		if r := recover(); r != nil {
-			ec.Error(ctx, ec.Recover(ctx, r))
-			ret = graphql.Null
-		}
-	}()
-	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
-		ctx = rctx // use context from middleware stack in children
-		return obj.User, nil
-	})
-	if err != nil {
-		ec.Error(ctx, err)
-		return graphql.Null
-	}
-	if resTmp == nil {
-		if !graphql.HasFieldError(ctx, fc) {
-			ec.Errorf(ctx, "must not be null")
-		}
-		return graphql.Null
-	}
-	res := resTmp.(db.User)
-	fc.Result = res
-	return ec.marshalNUser2githubᚗcomᚋzeitworkᚋzeitworkᚋinternalᚋservicesᚋdbᚐUser(ctx, field.Selections, res)
-}
-
-func (ec *executionContext) fieldContext_LoginWithGitHubPayload_user(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "LoginWithGitHubPayload",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "id":
-				return ec.fieldContext_User_id(ctx, field)
-			case "username":
-				return ec.fieldContext_User_username(ctx, field)
-			case "githubId":
-				return ec.fieldContext_User_githubId(ctx, field)
-			case "organisations":
-				return ec.fieldContext_User_organisations(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
-		},
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _MePayload_user(ctx context.Context, field graphql.CollectedField, obj *model.MePayload) (ret graphql.Marshaler) {
 	fc, err := ec.fieldContext_MePayload_user(ctx, field)
 	if err != nil {
@@ -1357,67 +1213,6 @@ func (ec *executionContext) fieldContext_MePayload_user(_ context.Context, field
 			}
 			return nil, fmt.Errorf("no field named %q was found under type User", field.Name)
 		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Mutation_loginWithGitHub(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
-	fc, err := ec.fieldContext_Mutation_loginWithGitHub(ctx, field)
-	if err != nil {
-		return graphql.Null
-	}
-	ctx = graphql.WithFieldContext(ctx, fc)
-	defer func() {
-		if r := recover(); r != nil {
-			ec.Error(ctx, ec.Recover(ctx, r))
-			ret = graphql.Null
-		}
-	}()
-	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
-		ctx = rctx // use context from middleware stack in children
-		return ec.resolvers.Mutation().LoginWithGitHub(rctx, fc.Args["code"].(string))
-	})
-	if err != nil {
-		ec.Error(ctx, err)
-		return graphql.Null
-	}
-	if resTmp == nil {
-		if !graphql.HasFieldError(ctx, fc) {
-			ec.Errorf(ctx, "must not be null")
-		}
-		return graphql.Null
-	}
-	res := resTmp.(model.LoginWithGitHubPayload)
-	fc.Result = res
-	return ec.marshalNLoginWithGitHubPayload2githubᚗcomᚋzeitworkᚋzeitworkᚋinternalᚋgraphᚋmodelᚐLoginWithGitHubPayload(ctx, field.Selections, res)
-}
-
-func (ec *executionContext) fieldContext_Mutation_loginWithGitHub(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Mutation",
-		Field:      field,
-		IsMethod:   true,
-		IsResolver: true,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			switch field.Name {
-			case "token":
-				return ec.fieldContext_LoginWithGitHubPayload_token(ctx, field)
-			case "user":
-				return ec.fieldContext_LoginWithGitHubPayload_user(ctx, field)
-			}
-			return nil, fmt.Errorf("no field named %q was found under type LoginWithGitHubPayload", field.Name)
-		},
-	}
-	defer func() {
-		if r := recover(); r != nil {
-			err = ec.Recover(ctx, r)
-			ec.Error(ctx, err)
-		}
-	}()
-	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Mutation_loginWithGitHub_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
-		ec.Error(ctx, err)
-		return fc, err
 	}
 	return fc, nil
 }
@@ -1870,7 +1665,7 @@ func (ec *executionContext) _Project_organisation(ctx context.Context, field gra
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
 		ctx = rctx // use context from middleware stack in children
-		return obj.Organisation, nil
+		return ec.resolvers.Project().Organisation(rctx, obj)
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -1891,8 +1686,8 @@ func (ec *executionContext) fieldContext_Project_organisation(_ context.Context,
 	fc = &graphql.FieldContext{
 		Object:     "Project",
 		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "id":
@@ -1922,7 +1717,7 @@ func (ec *executionContext) _Project_deployments(ctx context.Context, field grap
 	}()
 	resTmp, err := ec.ResolverMiddleware(ctx, func(rctx context.Context) (any, error) {
 		ctx = rctx // use context from middleware stack in children
-		return obj.Deployments, nil
+		return ec.resolvers.Project().Deployments(rctx, obj)
 	})
 	if err != nil {
 		ec.Error(ctx, err)
@@ -1943,8 +1738,8 @@ func (ec *executionContext) fieldContext_Project_deployments(_ context.Context, 
 	fc = &graphql.FieldContext{
 		Object:     "Project",
 		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
+		IsMethod:   true,
+		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
 			case "nodes":
@@ -4440,7 +4235,7 @@ func (ec *executionContext) unmarshalInputCreateProjectInput(ctx context.Context
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"name", "githubOwner", "githubRepo"}
+	fieldsInOrder := [...]string{"name", "githubOwner", "githubRepo", "organisationId", "port"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -4468,6 +4263,20 @@ func (ec *executionContext) unmarshalInputCreateProjectInput(ctx context.Context
 				return it, err
 			}
 			it.GithubRepo = data
+		case "organisationId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("organisationId"))
+			data, err := ec.unmarshalNInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.OrganisationID = data
+		case "port":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("port"))
+			data, err := ec.unmarshalNInt2int(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Port = data
 		}
 	}
 
@@ -4490,7 +4299,7 @@ func (ec *executionContext) unmarshalInputProjectsInput(ctx context.Context, obj
 		switch k {
 		case "organisationId":
 			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("organisationId"))
-			data, err := ec.unmarshalNID2string(ctx, v)
+			data, err := ec.unmarshalNInt2int(ctx, v)
 			if err != nil {
 				return it, err
 			}
@@ -4562,23 +4371,85 @@ func (ec *executionContext) _Deployment(ctx context.Context, sel ast.SelectionSe
 		case "id":
 			out.Values[i] = ec._Deployment_id(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "previewUrl":
 			out.Values[i] = ec._Deployment_previewUrl(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "project":
-			out.Values[i] = ec._Deployment_project(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Deployment_project(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
 			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "organisation":
-			out.Values[i] = ec._Deployment_organisation(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Deployment_organisation(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
 			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -4690,50 +4561,6 @@ func (ec *executionContext) _Domain(ctx context.Context, sel ast.SelectionSet, o
 	return out
 }
 
-var loginWithGitHubPayloadImplementors = []string{"LoginWithGitHubPayload"}
-
-func (ec *executionContext) _LoginWithGitHubPayload(ctx context.Context, sel ast.SelectionSet, obj *model.LoginWithGitHubPayload) graphql.Marshaler {
-	fields := graphql.CollectFields(ec.OperationContext, sel, loginWithGitHubPayloadImplementors)
-
-	out := graphql.NewFieldSet(fields)
-	deferred := make(map[string]*graphql.FieldSet)
-	for i, field := range fields {
-		switch field.Name {
-		case "__typename":
-			out.Values[i] = graphql.MarshalString("LoginWithGitHubPayload")
-		case "token":
-			out.Values[i] = ec._LoginWithGitHubPayload_token(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "user":
-			out.Values[i] = ec._LoginWithGitHubPayload_user(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		default:
-			panic("unknown field " + strconv.Quote(field.Name))
-		}
-	}
-	out.Dispatch(ctx)
-	if out.Invalids > 0 {
-		return graphql.Null
-	}
-
-	atomic.AddInt32(&ec.deferred, int32(len(deferred)))
-
-	for label, dfs := range deferred {
-		ec.processDeferredGroup(graphql.DeferredGroup{
-			Label:    label,
-			Path:     graphql.GetPath(ctx),
-			FieldSet: dfs,
-			Context:  ctx,
-		})
-	}
-
-	return out
-}
-
 var mePayloadImplementors = []string{"MePayload"}
 
 func (ec *executionContext) _MePayload(ctx context.Context, sel ast.SelectionSet, obj *model.MePayload) graphql.Marshaler {
@@ -4792,13 +4619,6 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("Mutation")
-		case "loginWithGitHub":
-			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Mutation_loginWithGitHub(ctx, field)
-			})
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "setInstallationID":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_setInstallationID(ctx, field)
@@ -4969,28 +4789,90 @@ func (ec *executionContext) _Project(ctx context.Context, sel ast.SelectionSet, 
 		case "id":
 			out.Values[i] = ec._Project_id(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "name":
 			out.Values[i] = ec._Project_name(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "slug":
 			out.Values[i] = ec._Project_slug(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
-				out.Invalids++
+				atomic.AddUint32(&out.Invalids, 1)
 			}
 		case "organisation":
-			out.Values[i] = ec._Project_organisation(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Project_organisation(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
 			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		case "deployments":
-			out.Values[i] = ec._Project_deployments(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Project_deployments(ctx, field, obj)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
 			}
+
+			if field.Deferrable != nil {
+				dfs, ok := deferred[field.Deferrable.Label]
+				di := 0
+				if ok {
+					dfs.AddField(field)
+					di = len(dfs.Values) - 1
+				} else {
+					dfs = graphql.NewFieldSet([]graphql.CollectedField{field})
+					deferred[field.Deferrable.Label] = dfs
+				}
+				dfs.Concurrently(di, func(ctx context.Context) graphql.Marshaler {
+					return innerFunc(ctx, dfs)
+				})
+
+				// don't run the out.Concurrently() call below
+				out.Values[i] = graphql.Null
+				continue
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -5715,6 +5597,22 @@ func (ec *executionContext) marshalNID2string(ctx context.Context, sel ast.Selec
 	return res
 }
 
+func (ec *executionContext) unmarshalNInt2int(ctx context.Context, v any) (int, error) {
+	res, err := graphql.UnmarshalInt(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNInt2int(ctx context.Context, sel ast.SelectionSet, v int) graphql.Marshaler {
+	_ = sel
+	res := graphql.MarshalInt(v)
+	if res == graphql.Null {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			ec.Errorf(ctx, "the requested element is null which the schema does not allow")
+		}
+	}
+	return res
+}
+
 func (ec *executionContext) unmarshalNInt2int64(ctx context.Context, v any) (int64, error) {
 	res, err := graphql.UnmarshalInt64(v)
 	return res, graphql.ErrorOnPath(ctx, err)
@@ -5729,10 +5627,6 @@ func (ec *executionContext) marshalNInt2int64(ctx context.Context, sel ast.Selec
 		}
 	}
 	return res
-}
-
-func (ec *executionContext) marshalNLoginWithGitHubPayload2githubᚗcomᚋzeitworkᚋzeitworkᚋinternalᚋgraphᚋmodelᚐLoginWithGitHubPayload(ctx context.Context, sel ast.SelectionSet, v model.LoginWithGitHubPayload) graphql.Marshaler {
-	return ec._LoginWithGitHubPayload(ctx, sel, &v)
 }
 
 func (ec *executionContext) marshalNMePayload2githubᚗcomᚋzeitworkᚋzeitworkᚋinternalᚋgraphᚋmodelᚐMePayload(ctx context.Context, sel ast.SelectionSet, v model.MePayload) graphql.Marshaler {

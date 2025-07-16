@@ -22,6 +22,7 @@ import (
 	"github.com/zeitwork/zeitwork/internal/services"
 	"k8s.io/utils/pointer"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 
 	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
 	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
@@ -190,7 +191,7 @@ func (r *AppRevisionReconciler) ensureDeployment(ctx context.Context, revision *
 						{
 							Name:  "app-container",
 							Image: *revision.Status.ImageBuilt,
-							Ports: []corev1.ContainerPort{{Protocol: corev1.ProtocolTCP, ContainerPort: 8080}},
+							Ports: []corev1.ContainerPort{{Protocol: corev1.ProtocolTCP, ContainerPort: app.Spec.Port}},
 						},
 					},
 				},
@@ -226,9 +227,9 @@ func (r *AppRevisionReconciler) ensureService(ctx context.Context, app *v1alpha1
 			Ports: []corev1.ServicePort{
 				{
 					Protocol: corev1.ProtocolTCP,
-					Port:     8080,
+					Port:     app.Spec.Port,
 					TargetPort: intstr.IntOrString{
-						IntVal: 8080,
+						IntVal: app.Spec.Port,
 					},
 				},
 			},
@@ -252,9 +253,9 @@ func (r *AppRevisionReconciler) ensureHTTPProxy(ctx context.Context, revision *v
 		},
 	}
 
-	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, httpProxy, func() error {
+	_, err := controllerutil.CreateOrPatch(ctx, r.Client, httpProxy, func() error {
 		certName := fmt.Sprintf("%s-cert", revision.Name)
-		fqdn := fmt.Sprintf("%s-%s.zeitwork.app", revision.Spec.CommitSHA[:7], app.Spec.GithubOwner)
+		fqdn := fmt.Sprintf("%s-%s.zeitwork.app", revision.Spec.CommitSHA[:7], app.Name)
 
 		httpProxy.Spec.VirtualHost = &projectcontourv1.VirtualHost{
 			Fqdn: fqdn,
@@ -267,7 +268,7 @@ func (r *AppRevisionReconciler) ensureHTTPProxy(ctx context.Context, revision *v
 				Services: []projectcontourv1.Service{
 					{
 						Name: fmt.Sprintf("svc-%s", revision.Name),
-						Port: 8080,
+						Port: int(app.Spec.Port),
 					},
 				},
 			},
@@ -291,7 +292,7 @@ func (r *AppRevisionReconciler) ensureCertificate(ctx context.Context, revision 
 		},
 	}
 
-	fqdn := fmt.Sprintf("%s-%s.zeitwork.app", revision.Spec.CommitSHA[:7], app.Spec.GithubOwner)
+	fqdn := fmt.Sprintf("%s-%s.zeitwork.app", revision.Spec.CommitSHA[:7], app.Name)
 	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, cert, func() error {
 		cert.Spec = certmanagerv1.CertificateSpec{
 			SecretName: certName + "-tls",
@@ -335,6 +336,17 @@ func (r *AppRevisionReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	if app == nil {
 		logger.Info("no owner app found, skipping reconciliation")
 		return ctrl.Result{}, nil
+	}
+
+	// ensure app is labeled
+	patch := client.MergeFrom(revision.DeepCopy())
+	if revision.Labels == nil {
+		revision.Labels = map[string]string{}
+	}
+	revision.Labels["zeitwork.com/app"] = app.Name
+	err = r.Patch(ctx, revision, patch)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
 
 	// Ensure TLS certificate for the HTTPProxy
@@ -400,5 +412,34 @@ func (r *AppRevisionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.AppRevision{}).
 		Owns(&batchv1.Job{}).
+		Watches(&v1alpha1.App{}, handler.EnqueueRequestsFromMapFunc(r.findAppParents)).
 		Complete(r)
+}
+
+// findAppParents returns a list of AppRevision reconcile requests for the given App
+func (r *AppRevisionReconciler) findAppParents(ctx context.Context, app client.Object) []ctrl.Request {
+	var requests []ctrl.Request
+
+	// List all AppRevisions in the same namespace as the App
+	appRevisions := &v1alpha1.AppRevisionList{}
+	if err := r.List(ctx, appRevisions, client.InNamespace(app.GetNamespace())); err != nil {
+		return requests
+	}
+
+	// Find AppRevisions that are owned by this App
+	for _, revision := range appRevisions.Items {
+		for _, ownerRef := range revision.OwnerReferences {
+			if ownerRef.Kind == "App" && ownerRef.APIVersion == "zeitwork.com/v1alpha1" && ownerRef.Name == app.GetName() {
+				requests = append(requests, ctrl.Request{
+					NamespacedName: types.NamespacedName{
+						Name:      revision.Name,
+						Namespace: revision.Namespace,
+					},
+				})
+				break
+			}
+		}
+	}
+
+	return requests
 }
