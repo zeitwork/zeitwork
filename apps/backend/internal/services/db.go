@@ -42,3 +42,31 @@ func NewDB() (*DB, error) {
 		pool:    pool,
 	}, nil
 }
+
+func (d *DB) CreateUserAndDefaultOrg(ctx context.Context, username string, userId int64) (db.User, error) {
+	user, err := d.UserInsert(ctx, db.UserInsertParams{
+		Username: username,
+		GithubID: userId,
+	})
+	if err != nil {
+		return db.User{}, err
+	}
+
+	// create default org
+	organisation, err := d.OrganisationInsert(ctx, db.OrganisationInsertParams{
+		Slug: username,
+	})
+	if err != nil {
+		return db.User{}, err
+	}
+
+	_, err = d.UserInOrganisationInsert(ctx, db.UserInOrganisationInsertParams{
+		UserID:         user.ID,
+		OrganisationID: organisation.ID,
+	})
+	if err != nil {
+		return db.User{}, err
+	}
+
+	return user, nil
+}

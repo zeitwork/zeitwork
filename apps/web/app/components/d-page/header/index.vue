@@ -7,16 +7,20 @@ const { navigation } = defineProps<Props>()
 const route = useRoute()
 const orgName = route.params.org
 
-const me = ref({
-  name: "Aaron Mahlke",
-  organisationName: "Acme",
-})
+const { user, clear } = useUserSession()
+
+const me = computed(() => user.value)
 
 const initials = computed(() => {
   if (!me.value) return ""
   const name = me.value.name?.split(" ")
   return (name[0]?.charAt(0) || "") + (name[1]?.charAt(0) || "")
 })
+
+async function logout() {
+  await clear()
+  await navigateTo("/login")
+}
 </script>
 
 <template>
@@ -24,20 +28,17 @@ const initials = computed(() => {
     <div class="flex items-center justify-between px-6 py-3">
       <div class="flex items-center gap-2">
         <NuxtLink :to="`/${orgName}`" class="flex flex-shrink-0 items-center gap-2">
-          <!-- <DLogo class="h-5 text-black" /> -->
+          <DLogo class="h-5 text-black" />
         </NuxtLink>
         <DPageHeaderSeparator />
-        <DPageHeaderBreadcrumbLink :name="me?.organisationName as string" :to="`/${orgName}`" />
+        <DPageHeaderBreadcrumbLink :name="orgName as string" :to="`/${orgName}`" />
 
         <DPageHeaderSeparator />
-        <DPageHeaderBreadcrumbLink name="Acme" :to="`/acme`" />
-
-        <DPageHeaderSeparator />
-        <DPageHeaderBreadcrumbLink name="Dokedu" :to="`/acme/dokedu`" />
+        <DPageHeaderBreadcrumbLink name="dokedu" :to="`/${orgName}/dokedu`" />
       </div>
       <div class="flex items-center gap-2">
         <!-- <DThemeSwitcher /> -->
-        <DButton :icon-left="LogOutIcon" variant="secondary" size="MD" to="/logout" />
+        <DButton :icon-left="LogOutIcon" variant="secondary" size="MD" @click="logout" />
         <div
           class="bg-neutral-inverse text-neutral-inverse text-copy-sm grid size-8 place-items-center rounded-full font-semibold uppercase"
         >

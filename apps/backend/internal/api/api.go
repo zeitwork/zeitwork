@@ -1,6 +1,7 @@
 package api
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"github.com/99designs/gqlgen/graphql/handler"
@@ -17,6 +18,7 @@ import (
 	"github.com/zeitwork/zeitwork/internal/services"
 	"io"
 	"k8s.io/utils/pointer"
+	"os"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -136,7 +138,53 @@ Login to github now to get started: <a href='%s'>Login with GitHub</a>'
 
 	e.POST("/app/setup", api.CreateApp)
 
+	e.POST("/admin/auth/jwt", func(c echo.Context) error {
+		// headers  { x-api-key: super-secret }
+		apiKey := c.Request().Header.Get("X-API-Key")
+
+		if apiKey != os.Getenv("API_KEY") {
+			return c.String(401, "Invalid API key")
+		}
+
+		// body: { githubId }
+		var request AdminAuthJwtRequest
+		if err := c.Bind(&request); err != nil {
+			return c.String(400, "Invalid request payload")
+		}
+
+		user, err := svc.DB.UserFindByGithubID(c.Request().Context(), request.GithubId)
+		if err != nil {
+			// if the user was not found, generate default user+org
+			if !errors.Is(err, sql.ErrNoRows) {
+				return err
+			}
+
+			user, err = svc.DB.CreateUserAndDefaultOrg(c.Request().Context(), request.Username, request.GithubId)
+			if err != nil {
+				return err
+			}
+		}
+
+		// response: { userId, token }
+		token, err := auth.Sign(user.ID)
+
+		return c.JSON(200, AdminAuthJwtResponse{
+			UserId:      user.ID,
+			AccessToken: token,
+		})
+	})
+
 	panic(e.Start(":8080"))
+}
+
+type AdminAuthJwtResponse struct {
+	UserId      int32  `json:"userId"`
+	AccessToken string `json:"accessToken"`
+}
+
+type AdminAuthJwtRequest struct {
+	GithubId int64  `json:"githubId"`
+	Username string `json:"username"`
 }
 
 type GithubEventInstallation struct {

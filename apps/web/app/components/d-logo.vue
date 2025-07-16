@@ -1,13 +1,15 @@
 <script setup lang="ts">
 type Props = {
-  full: boolean
+  full?: boolean
 }
-const { full } = defineProps<Props>()
+const { full = false } = defineProps<Props>()
+
 const viewBox = computed(() => {
   if (full) return "0 0 106 16"
   return "0 0 16 16"
 })
 </script>
+
 <template>
   <svg :viewBox="viewBox" fill="none" xmlns="http://www.w3.org/2000/svg">
     <path

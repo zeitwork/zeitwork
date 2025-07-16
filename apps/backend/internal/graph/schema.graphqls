@@ -81,7 +81,7 @@ type CreateProjectPayload {
 }
 
 type LoginWithGitHubPayload {
-  token: String!
+  # token: String!
   user: User!
 }
 type SetInstallationIDPayload {
@@ -89,7 +89,7 @@ type SetInstallationIDPayload {
 }
 
 type Mutation {
-  loginWithGitHub(code: String!): LoginWithGitHubPayload!
+  loginWithGitHub: LoginWithGitHubPayload!
   setInstallationID(installationId: String!, organisationId: ID!): SetInstallationIDPayload!
   createProject(input: CreateProjectInput!): CreateProjectPayload!
 }

@@ -14,10 +14,10 @@ import type { TypedDocumentNode as DocumentNode } from '@graphql-typed-document-
  * Learn more about it here: https://the-guild.dev/graphql/codegen/plugins/presets/preset-client#reducing-bundle-size
  */
 type Documents = {
-    "\n    mutation loginWithGitHub($code: String!) {\n      loginWithGitHub(code: $code) {\n        token\n        user {\n          id\n          username\n        }\n      }\n    }\n  ": typeof types.LoginWithGitHubDocument,
+    "\n    query Me {\n      me {\n        user {\n          id\n          username\n          githubId\n          organisations {\n            nodes {\n              id\n              name\n              slug\n            }\n          }\n        }\n      }\n    }\n  ": typeof types.MeDocument,
 };
 const documents: Documents = {
-    "\n    mutation loginWithGitHub($code: String!) {\n      loginWithGitHub(code: $code) {\n        token\n        user {\n          id\n          username\n        }\n      }\n    }\n  ": types.LoginWithGitHubDocument,
+    "\n    query Me {\n      me {\n        user {\n          id\n          username\n          githubId\n          organisations {\n            nodes {\n              id\n              name\n              slug\n            }\n          }\n        }\n      }\n    }\n  ": types.MeDocument,
 };
 
 /**
@@ -37,7 +37,7 @@ export function graphql(source: string): unknown;
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n    mutation loginWithGitHub($code: String!) {\n      loginWithGitHub(code: $code) {\n        token\n        user {\n          id\n          username\n        }\n      }\n    }\n  "): (typeof documents)["\n    mutation loginWithGitHub($code: String!) {\n      loginWithGitHub(code: $code) {\n        token\n        user {\n          id\n          username\n        }\n      }\n    }\n  "];
+export function graphql(source: "\n    query Me {\n      me {\n        user {\n          id\n          username\n          githubId\n          organisations {\n            nodes {\n              id\n              name\n              slug\n            }\n          }\n        }\n      }\n    }\n  "): (typeof documents)["\n    query Me {\n      me {\n        user {\n          id\n          username\n          githubId\n          organisations {\n            nodes {\n              id\n              name\n              slug\n            }\n          }\n        }\n      }\n    }\n  "];
 
 export function graphql(source: string) {
   return (documents as any)[source] ?? {};

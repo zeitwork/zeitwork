@@ -1,4 +1,4 @@
-<script setup lang="ts">
+<!-- <script setup lang="ts">
 import { cacheExchange, Client, fetchExchange } from "@urql/core"
 import { provideClient, useMutation } from "@urql/vue"
 import { graphql } from "~~/app/gql"
@@ -6,13 +6,6 @@ import { graphql } from "~~/app/gql"
 definePageMeta({
   layout: "auth",
 })
-
-const client = new Client({
-  url: useRuntimeConfig().public.graphEndpoint,
-  exchanges: [cacheExchange, fetchExchange],
-})
-
-provideClient(client)
 
 async function login(code: string) {
   try {
@@ -52,11 +45,10 @@ const { executeMutation: loginWithGitHub } = useMutation(
     }
   `),
 )
-</script>
+</script> -->
 
 <template>
   <div>
     <div>loading...</div>
-    <pre>{{ client.name }}</pre>
   </div>
 </template>

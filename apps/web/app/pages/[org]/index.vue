@@ -1,33 +1,48 @@
 <script setup lang="ts">
-type Project = {
-  name: string
-  domain: string
-  githubUrl: string
-  image: string
-  commitMessage: string
-  date: string
-  branch: string
-}
-const projects = ref<Project[]>([
-  {
-    name: "klarbook",
-    domain: "app.klarbook.com",
-    githubUrl: "klarbook/klarbook",
-    image: "https://example.com/project-image.jpg",
-    commitMessage: "Enhance document filtering logic: Improve null and suggestion",
-    date: "2025-07-13T17:09:26Z",
-    branch: "main",
-  },
-  {
-    name: "zeitwork",
-    domain: "app.zeitwork.com",
-    githubUrl: "zeitwork/zeitwork",
-    image: "https://example.com/project-image.jpg",
-    commitMessage: "Add new feature: User authentication",
-    date: "2025-07-13T17:09:26Z",
-    branch: "main",
-  },
-])
+import { useQuery } from "@urql/vue"
+import { graphql } from "~/gql"
+
+const route = useRoute()
+const orgId = route.params.org
+
+// const { data, fetching, error } = useQuery({
+//   query: graphql(/* GraphQL */ `
+//     query Projects($orgId: ID!) {
+//       projects(input: { organisationId: $orgId }) {
+//         nodes {
+//           ...Project_ProjectFragment
+//         }
+//       }
+//     }
+//   `),
+//   variables: {
+//     orgId,
+//   },
+// })
+
+const { data: me } = useQuery({
+  query: graphql(/* GraphQL */ `
+    query Me {
+      me {
+        user {
+          id
+          username
+          githubId
+          organisations {
+            nodes {
+              id
+              name
+              slug
+            }
+          }
+        }
+      }
+    }
+  `),
+})
+
+// const projects = computed(() => data.value?.projects?.nodes)
+const projects = computed(() => [])
 </script>
 
 <template>
@@ -37,8 +52,9 @@ const projects = ref<Project[]>([
         <DInput class="flex-1" placeholder="Search Projects..." />
         <DButton>Add Project</DButton>
       </div>
+      <pre>{{ me }}</pre>
       <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <DProjectCard v-for="project in projects" :key="project.name" :project="project" />
+        <DProjectCard v-for="project in projects" :key="project.id" :project="project" />
       </div>
     </div>
   </DPageWrapper>

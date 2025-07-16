@@ -17,7 +17,7 @@ import (
 
 // LoginWithGitHub is the resolver for the loginWithGitHub field.
 func (r *mutationResolver) LoginWithGitHub(ctx context.Context, code string) (model.LoginWithGitHubPayload, error) {
-	// exchange the code for github user
+	// exchange the code for GitHub user
 	ghUser, err := r.Services.Github.ExchangeCodeForUser(ctx, code)
 	if err != nil {
 		return model.LoginWithGitHubPayload{}, err

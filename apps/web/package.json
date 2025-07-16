@@ -7,7 +7,8 @@
     "dev": "nuxt dev --host",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
-    "postinstall": "nuxt prepare"
+    "postinstall": "nuxt prepare",
+    "codegen": "graphql-codegen --watch"
   },
   "dependencies": {
     "@nuxt/fonts": "^0.11.4",
@@ -20,10 +21,12 @@
     "date-fns": "^4.1.0",
     "gql": "^1.1.2",
     "graphql": "^16.11.0",
+    "jose": "^6.0.11",
     "lexorank": "^1.0.5",
     "lucide-vue-next": "^0.510.0",
     "nanoid": "^5.1.5",
     "nuxt": "^3.17.6",
+    "nuxt-auth-utils": "0.5.20",
     "prettier": "^3.6.2",
     "prettier-plugin-tailwindcss": "^0.6.14",
     "reka-ui": "^2.3.2",

@@ -1,17 +1,13 @@
 <script setup lang="ts">
 const route = useRoute()
+
 const orgName = route.params.org
 
 import { GitMergeIcon } from "lucide-vue-next"
-type Project = {
-  name: string
-  domain: string
-  githubUrl: string
-  image: string
-  commitMessage: string
-  date: string
-  branch: string
-}
+import type { FragmentType } from "~/gql"
+import type { Project_ProjectFragment } from "~/urql/fragments"
+
+export type Project = FragmentType<typeof Project_ProjectFragment>
 
 type Props = {
   project: Project
@@ -20,7 +16,8 @@ type Props = {
 const { project } = defineProps<Props>()
 
 const formattedDate = computed(() => {
-  const date = new Date(project.date)
+  // const date = new Date(project.date)
+  const date = new Date()
   return date.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
