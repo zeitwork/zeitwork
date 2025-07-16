@@ -17,5 +17,7 @@ create table user_in_organisation
 (
     user_id int,
     organisation_id int,
-    primary key (user_id, organisation_id)
+    primary key (user_id, organisation_id),
+    foreign key (user_id) references users(id),
+    foreign key (organisation_id) references organisations(id)
 );
