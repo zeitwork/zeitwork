@@ -1,12 +1,3 @@
-import { cacheExchange, Client, fetchExchange } from "@urql/core"
-import { graphql } from "graphql"
-import * as jose from "jose"
-
-const client = new Client({
-  url: useRuntimeConfig().public.graphEndpoint,
-  exchanges: [fetchExchange],
-})
-
 export default defineOAuthGitHubEventHandler({
   config: {
     emailRequired: true,
@@ -19,8 +10,6 @@ export default defineOAuthGitHubEventHandler({
     console.log("code", code)
 
     const config = useRuntimeConfig()
-
-    const token = await signJWT(user.id.toString(), config.jwt.secret)
 
     const { userId, accessToken } = await $fetch<{
       userId: string
@@ -58,15 +47,3 @@ export default defineOAuthGitHubEventHandler({
     return sendRedirect(event, "/login")
   },
 })
-
-async function signJWT(githubUserId: string, secret: string) {
-  const jwt = new jose.SignJWT({
-    githubId: githubUserId,
-  })
-    .setProtectedHeader({ alg: "HS256" })
-    .setExpirationTime("24h")
-    .setIssuedAt()
-    .setNotBefore(0)
-
-  return await jwt.sign(new TextEncoder().encode(secret))
-}

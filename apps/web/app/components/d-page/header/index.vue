@@ -7,6 +7,8 @@ const { navigation } = defineProps<Props>()
 const route = useRoute()
 const orgName = route.params.org
 
+const projectName = route.params.project
+
 const { user, clear } = useUserSession()
 
 const me = computed(() => user.value)
@@ -33,8 +35,10 @@ async function logout() {
         <DPageHeaderSeparator />
         <DPageHeaderBreadcrumbLink :name="orgName as string" :to="`/${orgName}`" />
 
-        <DPageHeaderSeparator />
-        <DPageHeaderBreadcrumbLink name="dokedu" :to="`/${orgName}/dokedu`" />
+        <template v-if="projectName">
+          <DPageHeaderSeparator />
+          <DPageHeaderBreadcrumbLink :name="projectName as string" :to="`/${orgName}/${projectName}`" />
+        </template>
       </div>
       <div class="flex items-center gap-2">
         <!-- <DThemeSwitcher /> -->
