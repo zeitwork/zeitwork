@@ -43,6 +43,9 @@ export default defineNuxtConfig({
     apiKey: process.env.NUXT_API_KEY || "",
     apiUrl: process.env.NUXT_API_URL || "http://localhost:8080",
 
+    githubAppId: process.env.NUXT_GITHUB_APP_ID || "",
+    githubAppPrivateKey: process.env.NUXT_GITHUB_APP_PRIVATE_KEY || "",
+
     jwt: {
       secret: process.env.NUXT_JWT_SECRET || "",
     },

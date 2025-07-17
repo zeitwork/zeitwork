@@ -3,6 +3,7 @@ import { useDrizzle, eq, and } from "./drizzle"
 import * as schema from "@zeitwork/database/schema"
 import { randomBytes } from "crypto"
 import { addDays } from "date-fns"
+import { getRepository, getLatestCommitSHA } from "./github"
 
 type ZeitworkResponse<T> =
   | {
@@ -330,6 +331,31 @@ export function useZeitworkClient() {
         return { data: null, error: new Error("GitHub installation not configured for this organisation") }
       }
 
+      // Fetch GitHub repository information
+      let repoInfo: { id: number; defaultBranch: string }
+      try {
+        repoInfo = await getRepository(organisation.installationId, options.githubOwner, options.githubRepo)
+      } catch (error: any) {
+        console.error(`Failed to fetch GitHub repository:`, error)
+        return { data: null, error: new Error(`Failed to fetch GitHub repository: ${error.message}`) }
+      }
+
+      // Get the latest commit SHA if not provided
+      let desiredRevisionSHA = options.desiredRevisionSHA
+      if (!desiredRevisionSHA) {
+        try {
+          desiredRevisionSHA = await getLatestCommitSHA(
+            organisation.installationId,
+            options.githubOwner,
+            options.githubRepo,
+            repoInfo.defaultBranch,
+          )
+        } catch (error: any) {
+          console.error(`Failed to fetch latest commit SHA:`, error)
+          return { data: null, error: new Error(`Failed to fetch latest commit SHA: ${error.message}`) }
+        }
+      }
+
       // Ensure namespace exists for the organisation
       try {
         await ensureNamespace(organisation.no)
@@ -339,15 +365,13 @@ export function useZeitworkClient() {
       }
 
       const namespace = `tenant-${organisation.no}`
-      // TODO: The Go implementation fetches the GitHub repo to get its numeric ID
-      // and uses `repo-${repoId}` format. For now, we use sanitized repo name.
-      // This needs to be updated to match Go implementation by adding GitHub API integration.
-      const appName = `repo-${options.githubRepo.replace(/[^a-z0-9-]/gi, "-").toLowerCase()}`
+      // Use the numeric repo ID just like the Go implementation
+      const appName = `repo-${repoInfo.id}`
 
       // Create or update the app
       await createOrUpdateApp(namespace, appName, organisation.no, {
         description: options.name,
-        desiredRevision: options.desiredRevisionSHA,
+        desiredRevision: desiredRevisionSHA,
         githubInstallation: organisation.installationId,
         githubOwner: options.githubOwner,
         githubRepo: options.githubRepo,
