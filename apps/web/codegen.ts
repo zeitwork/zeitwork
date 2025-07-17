@@ -1,7 +1,8 @@
 import type { CodegenConfig } from "@graphql-codegen/cli"
 
 const config: CodegenConfig = {
-  schema: "../backend/internal/graph/schema.graphqls",
+  // schema: "../backend/internal/graph/schema.graphqls",
+  schema: "https://api.zeitwork.com/graph",
   documents: ["app/**/*.vue"],
   ignoreNoDocuments: true, // for better experience with the watcher
   generates: {

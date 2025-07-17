@@ -2,13 +2,14 @@
 import { cacheExchange, Client, fetchExchange } from "@urql/core"
 import { provideClient } from "@urql/vue"
 
-const { user } = useUserSession()
+const url = computed(() => useRuntimeConfig().apiUrl + "/graph")
 
 const client = new Client({
-  url: useRuntimeConfig().public.graphEndpoint,
+  // url: url.value,
+  url: "https://api.zeitwork.com/graph",
   exchanges: [cacheExchange, fetchExchange],
   fetchOptions: () => {
-    const me = useMe()
+    const { user } = useUserSession()
 
     return {
       headers: {

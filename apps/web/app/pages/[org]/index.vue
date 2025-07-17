@@ -15,7 +15,7 @@ const Project_ProjectFragment = graphql(/* GraphQL */ `
 
 const { data, fetching, error } = useQuery({
   query: graphql(/* GraphQL */ `
-    query Projects($orgId: ID!) {
+    query Projects($orgId: Int!) {
       projects(input: { organisationId: $orgId }) {
         nodes {
           ...Project_ProjectFragment
@@ -24,7 +24,7 @@ const { data, fetching, error } = useQuery({
     }
   `),
   variables: {
-    orgId: orgId.value,
+    orgId: 1,
   },
 })
 
@@ -61,6 +61,7 @@ const projects = computed(() => data.value?.projects?.nodes)
         <DButton :to="`/${orgId}/new`">Add Project</DButton>
       </div>
       <div class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+        <!-- <pre>{{ data }}</pre> -->
         <DProjectCard v-for="project in projects" :key="project.id" :project="project" />
       </div>
     </div>

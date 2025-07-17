@@ -5,7 +5,7 @@ const orgName = route.params.org
 
 import { GitMergeIcon } from "lucide-vue-next"
 import type { FragmentType } from "~/gql"
-import type { Project_ProjectFragment } from "~/urql/fragments"
+import type { Project_ProjectFragment } from "~/gql"
 
 export type Project = FragmentType<typeof Project_ProjectFragment>
 

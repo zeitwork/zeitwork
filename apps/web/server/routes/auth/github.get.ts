@@ -5,6 +5,9 @@ export default defineOAuthGitHubEventHandler({
   async onSuccess(event, { user, tokens }) {
     console.log("GitHub OAuth success:", user, tokens)
 
+    const queryParams = getQuery(event)
+    console.log("queryParams", queryParams)
+
     // Read the code
     const code = getRouterParam(event, "code")
     console.log("code", code)
@@ -14,7 +17,7 @@ export default defineOAuthGitHubEventHandler({
     const { userId, accessToken } = await $fetch<{
       userId: string
       accessToken: string
-    }>("http://localhost:8080/admin/auth/jwt", {
+    }>(`${config.apiUrl}/admin/auth/jwt`, {
       method: "POST",
       headers: {
         "X-API-KEY": config.apiKey,

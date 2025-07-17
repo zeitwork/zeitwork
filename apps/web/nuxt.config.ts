@@ -13,14 +13,15 @@ export default defineNuxtConfig({
   future: { compatibilityVersion: 4 },
   fonts: { experimental: { processCSSVariables: true, disableLocalFallbacks: true } },
 
-  routeRules: {
-    "/": {
-      ssr: true,
-    },
-    "/auth/github/callback": {
-      ssr: false,
-    },
-  },
+  // routeRules: {
+  //   "/": {
+  //     ssr: true,
+  //   },
+  //   "/auth/github/callback": {
+  //     ssr: false,
+  //   },
+  // },
+  ssr: false,
 
   vite: { plugins: [tailwindcss()] },
 
@@ -28,7 +29,7 @@ export default defineNuxtConfig({
     appUrl: "http://localhost:3000",
 
     public: {
-      graphEndpoint: process.env.NUXT_PUBLIC_GRAPH_ENDPOINT || "http://localhost:8080/graph",
+      graphEndpoint: process.env.NUXT_PUBLIC_GRAPH_ENDPOINT,
       githubClientId: process.env.NUXT_PUBLIC_GITHUB_CLIENT_ID || "",
     },
 
@@ -40,6 +41,7 @@ export default defineNuxtConfig({
     },
 
     apiKey: process.env.NUXT_API_KEY || "",
+    apiUrl: process.env.NUXT_API_URL || "http://localhost:8080",
 
     jwt: {
       secret: process.env.NUXT_JWT_SECRET || "",

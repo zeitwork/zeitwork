@@ -15,13 +15,13 @@ import type { TypedDocumentNode as DocumentNode } from '@graphql-typed-document-
  */
 type Documents = {
     "\n  fragment Project_ProjectFragment on Project {\n    id\n    name\n    slug\n  }\n": typeof types.Project_ProjectFragmentFragmentDoc,
-    "\n    query Projects($orgId: ID!) {\n      projects(input: { organisationId: $orgId }) {\n        nodes {\n          ...Project_ProjectFragment\n        }\n      }\n    }\n  ": typeof types.ProjectsDocument,
+    "\n    query Projects($orgId: Int!) {\n      projects(input: { organisationId: $orgId }) {\n        nodes {\n          ...Project_ProjectFragment\n        }\n      }\n    }\n  ": typeof types.ProjectsDocument,
     "\n    query Me {\n      me {\n        user {\n          id\n          username\n          githubId\n          organisations {\n            nodes {\n              id\n              name\n              slug\n            }\n          }\n        }\n      }\n    }\n  ": typeof types.MeDocument,
     "\n    mutation CreateProject($input: CreateProjectInput!) {\n      createProject(input: $input) {\n        project {\n          id\n          name\n          slug\n          organisation {\n            id\n            name\n            slug\n          }\n        }\n      }\n    }\n  ": typeof types.CreateProjectDocument,
 };
 const documents: Documents = {
     "\n  fragment Project_ProjectFragment on Project {\n    id\n    name\n    slug\n  }\n": types.Project_ProjectFragmentFragmentDoc,
-    "\n    query Projects($orgId: ID!) {\n      projects(input: { organisationId: $orgId }) {\n        nodes {\n          ...Project_ProjectFragment\n        }\n      }\n    }\n  ": types.ProjectsDocument,
+    "\n    query Projects($orgId: Int!) {\n      projects(input: { organisationId: $orgId }) {\n        nodes {\n          ...Project_ProjectFragment\n        }\n      }\n    }\n  ": types.ProjectsDocument,
     "\n    query Me {\n      me {\n        user {\n          id\n          username\n          githubId\n          organisations {\n            nodes {\n              id\n              name\n              slug\n            }\n          }\n        }\n      }\n    }\n  ": types.MeDocument,
     "\n    mutation CreateProject($input: CreateProjectInput!) {\n      createProject(input: $input) {\n        project {\n          id\n          name\n          slug\n          organisation {\n            id\n            name\n            slug\n          }\n        }\n      }\n    }\n  ": types.CreateProjectDocument,
 };
@@ -47,7 +47,7 @@ export function graphql(source: "\n  fragment Project_ProjectFragment on Project
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
-export function graphql(source: "\n    query Projects($orgId: ID!) {\n      projects(input: { organisationId: $orgId }) {\n        nodes {\n          ...Project_ProjectFragment\n        }\n      }\n    }\n  "): (typeof documents)["\n    query Projects($orgId: ID!) {\n      projects(input: { organisationId: $orgId }) {\n        nodes {\n          ...Project_ProjectFragment\n        }\n      }\n    }\n  "];
+export function graphql(source: "\n    query Projects($orgId: Int!) {\n      projects(input: { organisationId: $orgId }) {\n        nodes {\n          ...Project_ProjectFragment\n        }\n      }\n    }\n  "): (typeof documents)["\n    query Projects($orgId: Int!) {\n      projects(input: { organisationId: $orgId }) {\n        nodes {\n          ...Project_ProjectFragment\n        }\n      }\n    }\n  "];
 /**
  * The graphql function is used to parse GraphQL queries into a document that can be used by GraphQL clients.
  */
