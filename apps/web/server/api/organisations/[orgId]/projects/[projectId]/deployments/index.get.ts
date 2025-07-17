@@ -1,8 +1,9 @@
 import { z } from "zod"
+import { useZeitworkClient } from "../../../../../../utils/api"
 
 const paramsSchema = z.object({
   orgId: z.string().uuid(),
-  projectId: z.string().uuid(),
+  projectId: z.string(),
 })
 
 export default defineEventHandler(async (event) => {

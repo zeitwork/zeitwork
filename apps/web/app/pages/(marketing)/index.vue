@@ -3,20 +3,6 @@ definePageMeta({
   layout: "marketing",
 })
 
-useHead({
-  script: [
-    {
-      src: "/unicornStudio.umd.js",
-    },
-  ],
-})
-
-onMounted(() => {
-  if (window.UnicornStudio) {
-    UnicornStudio.init()
-  }
-})
-
 const email = ref("")
 const isSuccess = ref<boolean | null>(null)
 const responseMessage = ref("")
@@ -77,19 +63,12 @@ async function handleSubmit() {
                 class="inline-flex h-9 cursor-text items-center rounded-xl border border-transparent bg-neutral-700 px-3 text-sm text-neutral-100 transition-all duration-100 select-none hover:bg-neutral-600 focus:ring-2 focus:ring-neutral-500 focus:outline-none active:bg-neutral-500"
               />
               <MarketingButton type="submit" variant="primary">Join waitlist</MarketingButton>
-              <!-- <button type="submit" class="bg-white px-2.5 py-1.5 text-black">Join waitlist</button> -->
             </div>
             <div v-if="responseMessage" class="text-copy-sm" :class="[isSuccess ? 'text-green-400' : 'text-red-400']">
               {{ responseMessage }}
             </div>
           </form>
         </div>
-        <!-- <div class="flex gap-2">
-          <MarketingButton variant="secondary" to="https://github.com/zeitwork/zeitwork" target="_blank">
-            Star us on GitHub
-          </MarketingButton>
-          <MarketingButton variant="secondary">Watch demo</MarketingButton>
-        </div> -->
       </div>
     </DWrapper>
 
@@ -99,21 +78,6 @@ async function handleSubmit() {
           <img class="w-full rounded-t-md" src="/deployments.png" alt="" />
         </div>
       </DWrapper>
-
-      <div class="absolute top-0 left-1/2 flex -translate-x-1/2 justify-center" style="width: 2000px; height: 900px">
-        <div
-          class="absolute top-0 size-full"
-          data-us-project="CBwTCSCVzTiguumvZiCU"
-          style="width: 2000px; height: 900px"
-        ></div>
-        <div class="pointer-events-none absolute inset-0 h-32 bg-gradient-to-b from-black to-transparent"></div>
-        <div
-          class="pointer-events-none absolute inset-y-0 left-0 w-32 bg-gradient-to-r from-black to-transparent"
-        ></div>
-        <div
-          class="pointer-events-none absolute inset-y-0 right-0 w-32 bg-gradient-to-l from-black to-transparent"
-        ></div>
-      </div>
     </div>
   </div>
 </template>

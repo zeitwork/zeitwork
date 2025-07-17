@@ -22,6 +22,7 @@ export const organisations = pgTable("organisations", {
   id: uuid().primaryKey().$defaultFn(uuidv7),
   name: text().notNull(),
   slug: text().notNull().unique(),
+  installationId: integer(),
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 }).enableRLS();
 

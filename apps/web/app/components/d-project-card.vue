@@ -1,16 +1,19 @@
 <script setup lang="ts">
+import { GitMergeIcon } from "lucide-vue-next"
+
 const route = useRoute()
 
 const orgName = route.params.org
 
-import { GitMergeIcon } from "lucide-vue-next"
-import type { FragmentType } from "~/gql"
-import type { Project_ProjectFragment } from "~/gql"
-
-export type Project = FragmentType<typeof Project_ProjectFragment>
-
 type Props = {
-  project: Project
+  project: {
+    name: string
+    domain: string
+    githubUrl: string
+    commitMessage: string
+    branch: string
+    date: string
+  }
 }
 
 const { project } = defineProps<Props>()

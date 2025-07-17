@@ -15,6 +15,20 @@
       "when": 1752499180545,
       "tag": "0001_ancient_owl",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1752747176700,
+      "tag": "0002_goofy_metal_master",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1752748024512,
+      "tag": "0003_shiny_supernaut",
+      "breakpoints": true
     }
   ]
 }

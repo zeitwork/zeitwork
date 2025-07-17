@@ -1,56 +1,8 @@
 <script setup lang="ts">
-import { useQuery } from "@urql/vue"
-import { graphql } from "~/gql"
-
 const route = useRoute()
 const orgId = computed<string>(() => route.params.org as string)
 
-const Project_ProjectFragment = graphql(/* GraphQL */ `
-  fragment Project_ProjectFragment on Project {
-    id
-    name
-    slug
-  }
-`)
-
-const { data, fetching, error } = useQuery({
-  query: graphql(/* GraphQL */ `
-    query Projects($orgId: Int!) {
-      projects(input: { organisationId: $orgId }) {
-        nodes {
-          ...Project_ProjectFragment
-        }
-      }
-    }
-  `),
-  variables: {
-    orgId: 1,
-  },
-})
-
-const { data: me } = useQuery({
-  query: graphql(/* GraphQL */ `
-    query Me {
-      me {
-        user {
-          id
-          username
-          githubId
-          organisations {
-            nodes {
-              id
-              name
-              slug
-            }
-          }
-        }
-      }
-    }
-  `),
-  variables: {},
-})
-
-const projects = computed(() => data.value?.projects?.nodes)
+const projects = computed(() => [])
 </script>
 
 <template>

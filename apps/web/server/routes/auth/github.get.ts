@@ -32,13 +32,14 @@ export default defineOAuthGitHubEventHandler({
 
     await setUserSession(event, {
       user: {
-        id: user.id, // backend user id?
+        id: user.id,
         name: user.name,
         email: user.email,
         username: user.login,
         githubId: user.id,
         avatarUrl: user.avatar_url,
         accessToken,
+        userId, // Database user ID from backend
       },
     })
 

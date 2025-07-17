@@ -1,8 +1,14 @@
 // auth.d.ts
 declare module "#auth-utils" {
   interface User {
-    // Add your own fields
+    id: number // GitHub ID
+    name: string
+    email: string
+    username: string
+    githubId: number
+    avatarUrl: string
     accessToken: string
+    userId?: string // Database user ID (UUID)
   }
 
   interface UserSession {

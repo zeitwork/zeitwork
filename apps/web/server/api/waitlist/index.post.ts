@@ -27,7 +27,7 @@ export default defineEventHandler(async (event) => {
         .from(waitlist)
         .where(and(eq(waitlist.xForwardedFor, ip), gte(waitlist.createdAt, subDays(now, 1))))
 
-      if (rateLimit.count > 10) {
+      if (rateLimit && rateLimit.count > 10) {
         return sendError(event, createError({ statusCode: 429, statusMessage: "Rate limit exceeded" }))
       }
     } catch {

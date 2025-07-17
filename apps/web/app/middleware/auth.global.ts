@@ -1,6 +1,3 @@
-import { useQuery } from "@urql/vue"
-import { graphql } from "~/gql"
-
 export default defineNuxtRouteMiddleware(async (to, from) => {
   // skip middleware on server
   if (import.meta.server) return
