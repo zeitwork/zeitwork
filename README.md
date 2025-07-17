@@ -116,9 +116,8 @@ bun run db:generate     # Generates SQL migrations
 bun run db:migrate      # Runs pending migrations
 ```
 
-> You’ll need to create a `.env` file — see `/apps/web/.env.example` or `/packages/database/.env.example`
+You’ll need to create a `.env.local` file — see `/.env.example`
 
-You’ll need to set up some local `.env` files — see `/apps/api/.env.example`.
 
 ---
 
@@ -140,19 +139,6 @@ Zeitwork is in active development, and we’d love your help.
 * Include tests where applicable
 * Keep PRs focused and well-described
 
-
----
-
-## 🧪 Roadmap (Early Preview)
-
-* [ ] Build cache optimization
-* [ ] Deploy previews for PRs
-* [ ] Custom domains & SSL
-* [ ] Post-deploy webhooks
-* [ ] Secrets management UI
-* [ ] CLI tool
-
----
 
 ## 📄 License
 
