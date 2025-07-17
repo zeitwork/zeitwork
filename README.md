@@ -1,45 +1,153 @@
 ![assets/og.png](assets/og.png)
 
-> [!NOTE]
-> This project is in early stage development.
+
+> ⚠️ **Note:** Zeitwork is currently in early-stage development. We welcome feedback and contributions.
 
 # Zeitwork
 
-> deploy any app with a simple `git push`
+**The easiest way to deploy any app — just push to Git.**
 
-Zeitwork is a Platform-as-a-Service that automatically builds and deploys your applications from GitHub. Connect your repository, and every commit triggers a new deployment. If your app has a Dockerfile, Zeitwork can run it. **Fully hosted, zero configuration, open source.**
+Zeitwork is an open-source **Platform-as-a-Service** (PaaS) that builds and deploys your applications directly from GitHub. Whether it’s a Node.js app, a Python service, or a full-stack monolith — if it has a `Dockerfile`, we’ll run it. Zero configuration. Fully hosted. No infrastructure headaches.
 
-## ✨ Features
+---
 
-- **Instant Deployments** - Push to GitHub, see your changes live in seconds
-- **Zero Configuration** - Just connect your repo and go - we handle everything
-- **Docker-First** - Any app with a Dockerfile can be deployed
-- **Fully Managed** - We handle the infrastructure, scaling, and operations
-- **Open Source** - Full transparency, no vendor lock-in, fork if you need to
-- **Continuous Deployment** - Every commit to your default branch triggers a new build and deploy
+## 🚀 Features
 
-## 🚀 How It Works
+* **One-Command Deploys**
+  Push to your main branch and get a live deployment automatically.
 
-1. **Sign up** for Zeitwork (free tier available)
-2. **Connect** your GitHub repository
-3. **Push** your code (make sure you have a Dockerfile)
-4. **Deploy** automatically - we handle the rest
+* **Zero Config**
+  Just connect your repo — no YAML, no pipelines, no surprises.
 
-That's it. No infrastructure to manage, no Kubernetes to learn, no servers to maintain.
+* **Docker-Native**
+  Bring your own `Dockerfile`. We’ll build and run your container as-is.
 
-## 🏗️ Why Open Source?
+* **Hosted & Scalable**
+  We manage infrastructure, scaling, networking, and health checks.
 
-Unlike proprietary platforms, Zeitwork gives you:
+* **Open Source**
+  Transparent by design. Fork it. Self-host it. Extend it.
 
-- **Full Transparency** - See exactly how your apps are deployed
-- **Community Driven** - Built in the open, with the community
-- **Self-Host Option** - While most use our hosted service, you can run your own if needed
+* **CI/CD by Default**
+  Every commit gets built, deployed, and versioned.
 
-## 🎯 Who's it for?
+---
 
-- **Startups** who want superb DX without vendor lock-in
-- **Developers** who value transparency and open source
-- **Teams** who need a simple, reliable deployment platform
-- **Companies** who might need to self-host in the future
+## 🧠 Why Zeitwork?
 
-Start deploying in seconds at [zeitwork.com](https://zeitwork.com)
+Most deployment platforms are either locked down or overengineered. Zeitwork strikes a balance:
+
+* No lock-in: self-host or extend anytime
+* No learning curve: no Kubernetes, no Terraform
+* No surprises: full transparency via open source
+
+Zeitwork is ideal for:
+
+* **Startups** that need fast iteration without vendor lock-in
+* **Developers** who care about clarity and control
+* **Teams** building with containers
+* **Companies** that may want to self-host later
+
+---
+
+## ⚙️ How It Works
+
+1. **Sign up** at [zeitwork.com](https://zeitwork.com) (Free tier available)
+2. **Connect your GitHub repo**
+3. **Ensure a valid `Dockerfile`** is present in the root
+4. **Push to your main branch**
+5. 🎉 Zeitwork builds and deploys your app automatically
+
+---
+
+## 🛠️ Local Development
+
+Zeitwork uses [Bun](https://bun.sh/) as the primary package manager and runtime.
+
+### Prerequisites
+
+* [Bun](https://bun.sh/) — v1.0 or higher
+* [Docker](https://www.docker.com/)
+* [Node.js](https://nodejs.org/) (for some tooling, optional)
+
+### Clone the Repo
+
+```bash
+git clone https://github.com/zeitwork/zeitwork.git
+cd zeitwork
+```
+
+### Install Dependencies
+
+```bash
+bun install
+```
+
+> ℹ️ This project uses [Bun workspaces](https://bun.sh/docs/project-management/workspaces). The root handles dependencies for all apps and packages.
+
+### Monorepo Structure
+
+```
+.
+├── apps/
+│   ├── api/             # Bun-based backend API
+│   ├── k8s/             # Kubernetes configs (dev/staging/prod)
+│   └── web/             # Nuxt-based frontend (default app)
+├── packages/
+│   └── database/        # Drizzle ORM setup and schema
+├── drizzle.config.ts    # DB config
+├── docker-compose.yaml  # Local services if needed
+└── bun.lockb            # Bun lockfile
+
+```
+
+### Development Scripts
+
+* Run frontend in dev mode:
+
+```bash
+bun run web:dev
+```
+
+* Run Drizzle CLI:
+
+```bash
+bun run db:generate     # Generates SQL migrations
+bun run db:migrate      # Runs pending migrations
+```
+
+You’ll need to create a `.env.local` file — see `/.env.example`
+
+
+---
+
+## 🤝 Contributing
+
+Zeitwork is in active development, and we’d love your help.
+
+### Ways to Contribute
+
+* Submit a bug report or feature suggestion via [GitHub Issues](https://github.com/zeitwork/zeitwork/issues)
+* Open a pull request to fix a bug or add a feature
+* Improve the documentation or examples
+* Share feedback on architecture or DX
+
+### Development Guidelines
+
+* Use conventional commits (`feat:`, `fix:`, etc.)
+* Follow the established coding style (we use Prettier & ESLint)
+* Include tests where applicable
+* Keep PRs focused and well-described
+
+
+## 📄 License
+
+MIT © [Zeitwork Contributors](https://github.com/zeitwork/zeitwork)
+
+---
+
+## 🌐 Get Started
+
+Visit [zeitwork.com](https://zeitwork.com) to deploy your first app — or clone the repo and make it yours.
+
+> 💬 Questions, suggestions, or feedback? [Open an issue](https://github.com/zeitwork/zeitwork/issues) or start a discussion.
