@@ -1,15 +1,11 @@
 import { useZeitworkClient } from "../../utils/api"
 
 export default defineEventHandler(async (event) => {
-  const { user, secure } = await requireUserSession(event)
+  const { secure } = await requireUserSession(event)
   if (!secure) throw createError({ statusCode: 401, message: "Unauthorized" })
 
-  if (!user.userId) {
-    throw createError({ statusCode: 401, message: "User ID not found in session" })
-  }
-
   const { data, error } = await useZeitworkClient().organisations.list({
-    userId: user.userId,
+    userId: secure.userId,
   })
 
   if (error) {

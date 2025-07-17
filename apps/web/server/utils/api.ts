@@ -1,6 +1,8 @@
 import * as k8s from "@kubernetes/client-node"
 import { useDrizzle, eq, and } from "./drizzle"
 import * as schema from "@zeitwork/database/schema"
+import { randomBytes } from "crypto"
+import { addDays } from "date-fns"
 
 type ZeitworkResponse<T> =
   | {
@@ -53,26 +55,35 @@ function getK8sClient() {
 }
 
 // Helper function to create or update namespace
-async function ensureNamespace(organisationId: string): Promise<void> {
+async function ensureNamespace(organisationNo: number): Promise<void> {
   const { coreV1Api } = getK8sClient()
-  const namespaceName = `org-${organisationId.toLowerCase()}`
+  const namespaceName = `tenant-${organisationNo}`
 
   try {
     await coreV1Api.readNamespace({ name: namespaceName })
+    console.log(`Namespace ${namespaceName} already exists`)
   } catch (error: any) {
     if (error.response?.statusCode === 404) {
       // Namespace doesn't exist, create it
+      console.log(`Creating namespace ${namespaceName}`)
       const namespace: k8s.V1Namespace = {
         metadata: {
           name: namespaceName,
           labels: {
-            "zeitwork.com/organisation-id": organisationId,
+            "zeitwork.com/organisation-id": organisationNo.toString(),
           },
         },
       }
-      await coreV1Api.createNamespace({ body: namespace })
+      try {
+        const result = await coreV1Api.createNamespace({ body: namespace })
+        console.log(`Namespace ${namespaceName} created successfully`)
+      } catch (createError: any) {
+        console.error(`Failed to create namespace ${namespaceName}:`, createError.response?.body || createError)
+        throw new Error(`Failed to create namespace: ${createError.response?.body?.message || createError.message}`)
+      }
     } else {
-      throw error
+      console.error(`Failed to check namespace ${namespaceName}:`, error.response?.body || error)
+      throw new Error(`Failed to check namespace: ${error.response?.body?.message || error.message}`)
     }
   }
 }
@@ -81,7 +92,7 @@ async function ensureNamespace(organisationId: string): Promise<void> {
 async function createOrUpdateApp(
   namespace: string,
   appName: string,
-  organisationId: string,
+  organisationNo: number,
   spec: AppSpec,
 ): Promise<void> {
   const { customObjectsApi } = getK8sClient()
@@ -96,7 +107,7 @@ async function createOrUpdateApp(
       name: appName,
       namespace: namespace,
       labels: {
-        "zeitwork.com/organisationId": organisationId.toString(),
+        "zeitwork.com/organisationId": organisationNo.toString(),
       },
     },
     spec: spec,
@@ -121,7 +132,16 @@ async function createOrUpdateApp(
       body: app,
     } as any) // Note: headers are configured at client level for patch operations
   } catch (error: any) {
-    if (error.response?.statusCode === 404) {
+    // Check for 404 in multiple possible locations in the error object
+    const is404 =
+      error.response?.statusCode === 404 ||
+      error.statusCode === 404 ||
+      error.body?.code === 404 ||
+      error.code === 404 ||
+      (error.response?.body && typeof error.response.body === "string" && error.response.body.includes('"code":404')) ||
+      (error.message && error.message.includes("404"))
+
+    if (is404) {
       // App doesn't exist, create it
       await customObjectsApi.createNamespacedCustomObject({
         group,
@@ -131,6 +151,7 @@ async function createOrUpdateApp(
         body: app,
       })
     } else {
+      console.error(`Failed to check/update app ${appName}:`, error.response?.body || error)
       throw error
     }
   }
@@ -146,6 +167,7 @@ export function useZeitworkClient() {
 
   interface Organisation {
     id: string
+    no: number
     name: string
     slug: string
     installationId?: number
@@ -174,8 +196,10 @@ export function useZeitworkClient() {
       return {
         data: {
           id: organisation.id,
+          no: organisation.no,
           name: organisation.name,
           slug: organisation.slug,
+          installationId: organisation.installationId || undefined,
         },
         error: null,
       }
@@ -223,8 +247,10 @@ export function useZeitworkClient() {
       return {
         data: {
           id: organisation.id,
+          no: organisation.no,
           name: organisation.name,
           slug: organisation.slug,
+          installationId: organisation.installationId || undefined,
         },
         error: null,
       }
@@ -245,15 +271,20 @@ export function useZeitworkClient() {
       const organisations = await db
         .select({
           id: schema.organisations.id,
+          no: schema.organisations.no,
           name: schema.organisations.name,
           slug: schema.organisations.slug,
+          installationId: schema.organisations.installationId,
         })
         .from(schema.organisations)
         .innerJoin(schema.organisationMembers, eq(schema.organisations.id, schema.organisationMembers.organisationId))
         .where(eq(schema.organisationMembers.userId, options.userId))
 
       return {
-        data: organisations,
+        data: organisations.map((org) => ({
+          ...org,
+          installationId: org.installationId || undefined,
+        })),
         error: null,
       }
     } catch (error) {
@@ -300,13 +331,21 @@ export function useZeitworkClient() {
       }
 
       // Ensure namespace exists for the organisation
-      await ensureNamespace(organisation.id)
+      try {
+        await ensureNamespace(organisation.no)
+      } catch (namespaceError: any) {
+        console.error(`Failed to ensure namespace for organisation ${organisation.id}:`, namespaceError)
+        return { data: null, error: new Error(`Failed to create namespace: ${namespaceError.message}`) }
+      }
 
-      const namespace = `org-${organisation.id.toLowerCase()}`
+      const namespace = `tenant-${organisation.no}`
+      // TODO: The Go implementation fetches the GitHub repo to get its numeric ID
+      // and uses `repo-${repoId}` format. For now, we use sanitized repo name.
+      // This needs to be updated to match Go implementation by adding GitHub API integration.
       const appName = `repo-${options.githubRepo.replace(/[^a-z0-9-]/gi, "-").toLowerCase()}`
 
       // Create or update the app
-      await createOrUpdateApp(namespace, appName, organisation.id, {
+      await createOrUpdateApp(namespace, appName, organisation.no, {
         description: options.name,
         desiredRevision: options.desiredRevisionSHA,
         githubInstallation: organisation.installationId,
@@ -316,7 +355,7 @@ export function useZeitworkClient() {
       })
 
       const project: Project = {
-        id: appName,
+        id: `${namespace}/${appName}`, // Match Go format: namespace/name
         k8sName: appName,
         name: options.name,
         organisationId: options.organisationId,
@@ -333,58 +372,74 @@ export function useZeitworkClient() {
 
   interface ListProjectsOptions {
     organisationId: string
+    organisationNo: number
   }
 
   async function listProjects(options: ListProjectsOptions): Promise<ZeitworkResponse<Project[]>> {
     try {
       const { customObjectsApi, coreV1Api } = getK8sClient()
-      const namespace = `org-${options.organisationId.toLowerCase()}`
+      const namespace = `tenant-${options.organisationNo}`
 
       // Check if namespace exists
       try {
         await coreV1Api.readNamespace({ name: namespace })
       } catch (error: any) {
-        if (error.response?.statusCode === 404) {
+        // Check for 404 in multiple possible locations in the error object
+        if (
+          error.response?.statusCode === 404 ||
+          error.statusCode === 404 ||
+          error.body?.code === 404 ||
+          (error.message && error.message.includes("404"))
+        ) {
           // Namespace doesn't exist, return empty list
           return { data: [], error: null }
         }
-        throw error
+        return { data: null, error: new Error(`Failed to access organisation namespace: ${error.message}`) }
       }
 
       // List apps in the namespace
-      const response = await customObjectsApi.listNamespacedCustomObject({
-        group: "zeitwork.com",
-        version: "v1alpha1",
-        namespace,
-        plural: "apps",
-      })
+      try {
+        const response = await customObjectsApi.listNamespacedCustomObject({
+          group: "zeitwork.com",
+          version: "v1alpha1",
+          namespace,
+          plural: "apps",
+        })
 
-      const apps = (response.body as any).items as App[]
-      const projects: Project[] = apps.map((app) => ({
-        id: app.metadata?.name || "",
-        k8sName: app.metadata?.name || "",
-        name: app.spec.description,
-        organisationId: options.organisationId,
-        githubOwner: app.spec.githubOwner,
-        githubRepo: app.spec.githubRepo,
-        port: app.spec.port,
-      }))
+        // The response structure might vary, so check for items in different locations
+        const responseData = response.body || response
+        const items = (responseData as any).items || []
 
-      return { data: projects, error: null }
-    } catch (error) {
-      return { data: null, error: error as Error }
+        const apps = items as App[]
+        const projects: Project[] = apps.map((app) => ({
+          id: `${namespace}/${app.metadata?.name || ""}`, // Match Go format
+          k8sName: app.metadata?.name || "",
+          name: app.spec.description,
+          organisationId: options.organisationId,
+          githubOwner: app.spec.githubOwner,
+          githubRepo: app.spec.githubRepo,
+          port: app.spec.port,
+        }))
+
+        return { data: projects, error: null }
+      } catch (error: any) {
+        return { data: null, error: new Error(`Failed to list projects: ${error.message}`) }
+      }
+    } catch (error: any) {
+      return { data: null, error: new Error(`Kubernetes client error: ${error.message}`) }
     }
   }
 
   interface GetProjectOptions {
     organisationId: string
+    organisationNo: number
     projectId: string
   }
 
   async function getProject(options: GetProjectOptions): Promise<ZeitworkResponse<Project>> {
     try {
       const { customObjectsApi } = getK8sClient()
-      const namespace = `org-${options.organisationId.toLowerCase()}`
+      const namespace = `tenant-${options.organisationNo}`
 
       const response = await customObjectsApi.getNamespacedCustomObject({
         group: "zeitwork.com",
@@ -394,9 +449,10 @@ export function useZeitworkClient() {
         name: options.projectId,
       })
 
-      const app = response.body as App
+      const responseData = response.body || response
+      const app = responseData as App
       const project: Project = {
-        id: app.metadata?.name || "",
+        id: `${namespace}/${app.metadata?.name || ""}`, // Match Go format
         k8sName: app.metadata?.name || "",
         name: app.spec.description,
         organisationId: options.organisationId,
@@ -426,12 +482,13 @@ export function useZeitworkClient() {
     projectId: string
     deploymentId: string
     organisationId: string
+    organisationNo: number
   }
 
   async function getDeployment(options: GetDeploymentOptions): Promise<ZeitworkResponse<Deployment>> {
     try {
       const { customObjectsApi } = getK8sClient()
-      const namespace = `org-${options.organisationId.toLowerCase()}`
+      const namespace = `tenant-${options.organisationNo}`
 
       const response = await customObjectsApi.getNamespacedCustomObject({
         group: "zeitwork.com",
@@ -441,7 +498,8 @@ export function useZeitworkClient() {
         name: options.deploymentId,
       })
 
-      const revision = response.body as AppRevision
+      const responseData = response.body || response
+      const revision = responseData as AppRevision
       const deployment: Deployment = {
         id: revision.metadata?.name || "",
         previewURL: `${revision.spec.commitSHA.substring(0, 7)}-${options.projectId}.zeitwork.app`,
@@ -458,14 +516,16 @@ export function useZeitworkClient() {
   interface ListDeploymentsOptions {
     projectId: string
     organisationId: string
+    organisationNo: number
   }
 
   async function listDeployments(options: ListDeploymentsOptions): Promise<ZeitworkResponse<Deployment[]>> {
     try {
       const { customObjectsApi } = getK8sClient()
-      const namespace = `org-${options.organisationId.toLowerCase()}`
+      const namespace = `tenant-${options.organisationNo}`
 
       // List app revisions with label selector
+      // Note: projectId should be the k8sName (e.g., "repo-123" or "repo-my-app")
       const response = await customObjectsApi.listNamespacedCustomObject({
         group: "zeitwork.com",
         version: "v1alpha1",
@@ -474,7 +534,11 @@ export function useZeitworkClient() {
         labelSelector: `zeitwork.com/app=${options.projectId}`,
       })
 
-      const revisions = (response.body as any).items as AppRevision[]
+      // The response structure might vary, so check for items in different locations
+      const responseData = response.body || response
+      const items = (responseData as any).items || []
+
+      const revisions = items as AppRevision[]
       const deployments: Deployment[] = revisions.map((revision) => ({
         id: revision.metadata?.name || "",
         previewURL: `${revision.spec.commitSHA.substring(0, 7)}-${options.projectId}.zeitwork.app`,
@@ -504,4 +568,39 @@ export function useZeitworkClient() {
       create: createOrganisation,
     },
   }
+}
+
+// Session management functions
+export async function createSession(userId: string): Promise<string> {
+  const db = useDrizzle()
+  const token = randomBytes(32).toString("hex")
+  const expiresAt = addDays(new Date(), 30) // 30 day sessions
+
+  await db.insert(schema.sessions).values({
+    userId,
+    token,
+    expiresAt,
+  })
+
+  return token
+}
+
+export async function verifySession(token: string): Promise<{ userId: string } | null> {
+  const db = useDrizzle()
+
+  const now = new Date()
+  const sessions = await db.select().from(schema.sessions).where(eq(schema.sessions.token, token)).limit(1)
+
+  const session = sessions[0]
+
+  if (!session || session.expiresAt < now) {
+    return null
+  }
+
+  return { userId: session.userId }
+}
+
+export async function deleteSession(token: string): Promise<void> {
+  const db = useDrizzle()
+  await db.delete(schema.sessions).where(eq(schema.sessions.token, token))
 }

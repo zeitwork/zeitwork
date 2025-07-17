@@ -1,8 +1,11 @@
 import { z } from "zod"
 import { useZeitworkClient } from "../../../../utils/api"
+import { organisations } from "@zeitwork/database/schema"
+import { eq } from "drizzle-orm"
+import { useDrizzle } from "../../../../utils/drizzle"
 
 const paramsSchema = z.object({
-  orgId: z.string().uuid(),
+  orgId: z.string(),
 })
 
 const bodySchema = z.object({
@@ -19,12 +22,25 @@ export default defineEventHandler(async (event) => {
   const { orgId } = await getValidatedRouterParams(event, paramsSchema.parse)
   const { name, githubOwner, githubRepo, port } = await readValidatedBody(event, bodySchema.parse)
 
+  // check if orgId is a uuid or a slug
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orgId)
+  let organisation: any
+  if (isUuid) {
+    ;[organisation] = await useDrizzle().select().from(organisations).where(eq(organisations.id, orgId)).limit(1)
+  } else {
+    ;[organisation] = await useDrizzle().select().from(organisations).where(eq(organisations.slug, orgId)).limit(1)
+  }
+
+  if (!organisation) {
+    throw createError({ statusCode: 404, message: "Organisation not found" })
+  }
+
   const { data, error } = await useZeitworkClient().projects.create({
     name,
     githubOwner,
     githubRepo,
     port,
-    organisationId: orgId,
+    organisationId: organisation.id,
   })
 
   if (error) {

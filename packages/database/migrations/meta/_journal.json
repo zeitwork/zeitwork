@@ -29,6 +29,13 @@
       "when": 1752748024512,
       "tag": "0003_shiny_supernaut",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1752748637573,
+      "tag": "0004_fine_molten_man",
+      "breakpoints": true
     }
   ]
 }

@@ -13,10 +13,24 @@ export default defineEventHandler(async (event) => {
 
   const { orgId, projectId, deployId } = await getValidatedRouterParams(event, paramsSchema.parse)
 
-  const { data, error } = await useZeitworkClient().deployments.get({
+  const client = useZeitworkClient()
+
+  // First, get the organisation to retrieve its numeric 'no' field
+  const { data: org, error: orgError } = await client.organisations.get({
+    organisationId: orgId,
+    userId: user.id,
+  })
+
+  if (orgError || !org) {
+    console.error(orgError)
+    throw createError({ statusCode: 404, message: "Organisation not found" })
+  }
+
+  const { data, error } = await client.deployments.get({
     projectId,
     deploymentId: deployId,
     organisationId: orgId,
+    organisationNo: org.no,
   })
 
   if (error) {
