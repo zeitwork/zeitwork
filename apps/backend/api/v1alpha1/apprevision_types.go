@@ -31,6 +31,7 @@ type AppRevisionSpec struct {
 // AppRevisionStatus defines the observed state of AppRevision
 type AppRevisionStatus struct {
 	ImageBuilt *string `json:"imageBuilt,omitempty"`
+	Ready      bool    `json:"ready"`
 }
 
 // +kubebuilder:object:root=true

@@ -89,7 +89,8 @@ func (r *AppRevisionReconciler) createBuildJob(ctx context.Context, revision *v1
 		Spec: batchv1.JobSpec{
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
-					RestartPolicy: corev1.RestartPolicyNever,
+					RuntimeClassName: pointer.String("gvisor"),
+					RestartPolicy:    corev1.RestartPolicyNever,
 					Volumes: []corev1.Volume{
 						{
 							Name: "workspace",
@@ -181,17 +182,34 @@ func (r *AppRevisionReconciler) ensureDeployment(ctx context.Context, revision *
 		},
 	}
 
+	probe := &corev1.Probe{
+		InitialDelaySeconds: 5,
+		TimeoutSeconds:      5,
+		PeriodSeconds:       5,
+		ProbeHandler: corev1.ProbeHandler{
+			HTTPGet: &corev1.HTTPGetAction{
+				Path: "/",
+				Port: intstr.IntOrString{
+					IntVal: app.Spec.Port,
+				},
+			},
+		},
+	}
+
 	_, err := controllerutil.CreateOrPatch(ctx, r.Client, deployment, func() error {
 		deployment.Spec = appsv1.DeploymentSpec{
 			Selector: &metav1.LabelSelector{MatchLabels: map[string]string{"app": app.Name, "revision": revision.Name}},
 			Template: corev1.PodTemplateSpec{
 				ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{"app": app.Name, "revision": revision.Name}},
 				Spec: corev1.PodSpec{
+					RuntimeClassName: pointer.String("gvisor"),
 					Containers: []corev1.Container{
 						{
-							Name:  "app-container",
-							Image: *revision.Status.ImageBuilt,
-							Ports: []corev1.ContainerPort{{Protocol: corev1.ProtocolTCP, ContainerPort: app.Spec.Port}},
+							Name:           "app-container",
+							Image:          *revision.Status.ImageBuilt,
+							Ports:          []corev1.ContainerPort{{Protocol: corev1.ProtocolTCP, ContainerPort: app.Spec.Port}},
+							ReadinessProbe: probe,
+							LivenessProbe:  probe,
 						},
 					},
 				},
@@ -203,6 +221,17 @@ func (r *AppRevisionReconciler) ensureDeployment(ctx context.Context, revision *
 	})
 	if err != nil {
 		return err
+	}
+
+	// if the deployment has at least one readyReplicas, we can set appRevision to ready
+	if deployment.Status.ReadyReplicas > 0 {
+		_, err = controllerutil.CreateOrPatch(ctx, r.Client, revision, func() error {
+			revision.Status.Ready = true
+			return nil
+		})
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -412,6 +441,7 @@ func (r *AppRevisionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.AppRevision{}).
 		Owns(&batchv1.Job{}).
+		Owns(&appsv1.Deployment{}).
 		Watches(&v1alpha1.App{}, handler.EnqueueRequestsFromMapFunc(r.findAppParents)).
 		Complete(r)
 }

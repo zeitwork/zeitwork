@@ -18,8 +18,13 @@ package controller
 
 import (
 	"context"
+	"fmt"
+	certmanagerv1 "github.com/cert-manager/cert-manager/pkg/apis/certmanager/v1"
+	cmmeta "github.com/cert-manager/cert-manager/pkg/apis/meta/v1"
+	projectcontourv1 "github.com/projectcontour/contour/apis/projectcontour/v1"
 	"github.com/zeitwork/zeitwork/internal/services"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -86,6 +91,92 @@ func (r *AppReconciler) ensureAppRevision(ctx context.Context, app *v1alpha1.App
 	return nil
 }
 
+func (r *AppReconciler) ensureProxy(ctx context.Context, app *v1alpha1.App, name, sha string) error {
+	// if the app does not have a fqdn set, no proxy is required
+	if app.Spec.FQDN == nil {
+		return nil
+	}
+
+	revision := &v1alpha1.AppRevision{}
+	err := r.Get(ctx, client.ObjectKey{Namespace: app.Namespace, Name: name}, revision)
+	if err != nil {
+		return err
+	}
+
+	// if the revision is not ready, we cannot proceed.
+	if !revision.Status.Ready {
+		return nil
+	}
+
+	// ensure the cert
+	err = r.ensureCertificate(ctx, revision, app)
+	if err != nil {
+		return err
+	}
+
+	// ensure the proxy
+	httpProxy := &projectcontourv1.HTTPProxy{ObjectMeta: metav1.ObjectMeta{
+		Name:      fmt.Sprintf("%s-proxy", app.Name),
+		Namespace: revision.Namespace,
+	}}
+
+	_, err = controllerutil.CreateOrPatch(ctx, r.Client, httpProxy, func() error {
+		httpProxy.Spec.VirtualHost = &projectcontourv1.VirtualHost{
+			Fqdn: *app.Spec.FQDN,
+			TLS: &projectcontourv1.TLS{
+				SecretName: fmt.Sprintf("%s-cert-tls", app.Name),
+			},
+		}
+		httpProxy.Spec.Routes = []projectcontourv1.Route{
+			{
+				Services: []projectcontourv1.Service{
+					{
+						Name: fmt.Sprintf("svc-%s", revision.Name),
+						Port: int(app.Spec.Port),
+					},
+				},
+			},
+		}
+		return controllerutil.SetControllerReference(revision, httpProxy, r.Scheme)
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *AppReconciler) ensureCertificate(ctx context.Context, revision *v1alpha1.AppRevision, app *v1alpha1.App) error {
+	cert := &certmanagerv1.Certificate{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      fmt.Sprintf("%s-cert-tls", app.Name),
+			Namespace: revision.Namespace,
+		},
+	}
+
+	_, err := controllerutil.CreateOrUpdate(ctx, r.Client, cert, func() error {
+		cert.Spec = certmanagerv1.CertificateSpec{
+			SecretName: fmt.Sprintf("%s-cert-tls", app.Name),
+			CommonName: *app.Spec.FQDN,
+			DNSNames:   []string{*app.Spec.FQDN},
+			IssuerRef: cmmeta.ObjectReference{
+				Name:  "letsencrypt",
+				Kind:  "ClusterIssuer",
+				Group: "cert-manager.io",
+			},
+			PrivateKey: &certmanagerv1.CertificatePrivateKey{
+				RotationPolicy: certmanagerv1.RotationPolicyAlways,
+			},
+		}
+		return controllerutil.SetControllerReference(revision, cert, r.Scheme)
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // ensureOwnerRef ensures the AppRevision has the correct owner reference
 func (r *AppReconciler) ensureOwnerRef(ctx context.Context, app *v1alpha1.App, revision *v1alpha1.AppRevision) error {
 	if !hasOwnerRef(app, revision) {
@@ -118,13 +209,20 @@ func (r *AppReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
-	// Check if DesiredRevisionSHA is set and handle AppRevision
+	// Check if DesiredRevisionSHA is set and handle AppRevision. if there is no sha set, nothing to do.
 	name, sha, ok := getDesiredRevisionName(app)
-	if ok {
-		if err := r.ensureAppRevision(ctx, app, name, sha); err != nil {
-			logger.Error(err, "failed to ensure AppRevision", "name", name, "sha", sha)
-			return ctrl.Result{}, err
-		}
+	if !ok {
+		return ctrl.Result{}, nil
+	}
+
+	if err := r.ensureAppRevision(ctx, app, name, sha); err != nil {
+		logger.Error(err, "failed to ensure AppRevision", "name", name, "sha", sha)
+		return ctrl.Result{}, err
+	}
+
+	if err := r.ensureProxy(ctx, app, name, sha); err != nil {
+		logger.Error(err, "failed to ensure Proxy", "name", name, "sha", sha)
+		return ctrl.Result{}, err
 	}
 
 	return ctrl.Result{}, nil
@@ -134,5 +232,6 @@ func (r *AppReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.R
 func (r *AppReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&v1alpha1.App{}).
+		Owns(&v1alpha1.AppRevision{}).
 		Complete(r)
 }
