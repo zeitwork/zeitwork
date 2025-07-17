@@ -19,7 +19,6 @@ package main
 import (
 	"crypto/tls"
 	"flag"
-	"github.com/zeitwork/zeitwork/internal/api"
 	"github.com/zeitwork/zeitwork/internal/services"
 	"os"
 
@@ -155,8 +154,6 @@ func main() {
 		setupLog.Error(err, "unable to create services")
 		os.Exit(1)
 	}
-
-	go api.StartAPI(&svc)
 
 	if err = (&controller.AppRevisionReconciler{
 		Client:   mgr.GetClient(),
