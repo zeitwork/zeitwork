@@ -210,13 +210,43 @@ export function useZeitworkClient() {
   }
 
   interface GetOrganisationOptions {
-    organisationId: string
+    organisationIdOrSlug: string
     userId: string
   }
 
   async function getOrganisation(options: GetOrganisationOptions): Promise<ZeitworkResponse<Organisation>> {
     try {
       const db = useDrizzle()
+
+      // First, try to find the organisation by slug or ID
+      let organisation = null
+
+      // Check if the parameter looks like a UUID (simple check for UUID v4/v7 format)
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        options.organisationIdOrSlug,
+      )
+
+      if (isUuid) {
+        // Try to find by ID first if it looks like a UUID
+        const [orgById] = await db
+          .select()
+          .from(schema.organisations)
+          .where(eq(schema.organisations.id, options.organisationIdOrSlug))
+          .limit(1)
+        organisation = orgById
+      } else {
+        // Try to find by slug if it doesn't look like a UUID
+        const [orgBySlug] = await db
+          .select()
+          .from(schema.organisations)
+          .where(eq(schema.organisations.slug, options.organisationIdOrSlug))
+          .limit(1)
+        organisation = orgBySlug
+      }
+
+      if (!organisation) {
+        return { data: null, error: new Error("Organisation not found") }
+      }
 
       // Check if user has access to this organisation
       const [memberRecord] = await db
@@ -225,24 +255,13 @@ export function useZeitworkClient() {
         .where(
           and(
             eq(schema.organisationMembers.userId, options.userId),
-            eq(schema.organisationMembers.organisationId, options.organisationId),
+            eq(schema.organisationMembers.organisationId, organisation.id),
           ),
         )
         .limit(1)
 
       if (!memberRecord) {
         return { data: null, error: new Error("Organisation not found or access denied") }
-      }
-
-      // Get the organisation
-      const [organisation] = await db
-        .select()
-        .from(schema.organisations)
-        .where(eq(schema.organisations.id, options.organisationId))
-        .limit(1)
-
-      if (!organisation) {
-        return { data: null, error: new Error("Organisation not found") }
       }
 
       return {

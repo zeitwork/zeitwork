@@ -2,7 +2,7 @@ import { z } from "zod"
 import { useZeitworkClient } from "../../../../../utils/api"
 
 const paramsSchema = z.object({
-  orgId: z.string().uuid(),
+  orgId: z.string(),
   projectId: z.string(),
 })
 
@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
 
   // First, get the organisation to retrieve its numeric 'no' field
   const { data: org, error: orgError } = await client.organisations.get({
-    organisationId: orgId,
+    organisationIdOrSlug: orgId,
     userId: user.id,
   })
 
@@ -25,15 +25,29 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, message: "Organisation not found" })
   }
 
-  const { data, error } = await client.projects.get({
+  const { data: project, error: projectError } = await client.projects.get({
     organisationId: orgId,
     organisationNo: org.no,
     projectId,
   })
 
-  if (error) {
-    throw createError({ statusCode: 500, message: error.message })
+  if (projectError || !project) {
+    throw createError({ statusCode: 500, message: projectError?.message || "Project not found" })
   }
 
-  return data
+  // Get deployments for this project
+  const { data: deployments, error: deploymentsError } = await client.deployments.list({
+    projectId,
+    organisationId: orgId,
+    organisationNo: org.no,
+  })
+
+  // Add the latest deployment URL to the project data
+  const latestDeployment = deployments && deployments.length > 0 ? deployments[0] : null
+  const projectWithLatestDeployment = {
+    ...project,
+    latestDeploymentURL: latestDeployment?.previewURL || null,
+  }
+
+  return projectWithLatestDeployment
 })

@@ -64,8 +64,8 @@ const justInstalled = computed(() => route.query.installed === "true")
       </div>
 
       <div v-if="projects && projects.length > 0" class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
-        <pre>{{ projects }}</pre>
-        <!-- <DProjectCard v-for="project in projects" :key="project.id" :project="project" /> -->
+        <!-- <pre>{{ projects }}</pre> -->
+        <DProjectCard v-for="project in projects" :key="project.id" :project="project" />
       </div>
 
       <div v-else-if="hasGitHubInstallation">

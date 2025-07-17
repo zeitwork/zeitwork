@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
 
   // First, get the organisation to retrieve its numeric 'no' field
   const { data: org, error: orgError } = await client.organisations.get({
-    organisationId: orgId,
+    organisationIdOrSlug: orgId,
     userId: user.id,
   })
 
