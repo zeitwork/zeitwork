@@ -6,6 +6,7 @@ const navigation = ref([
   { name: "Projects", to: `/${orgName}` },
   { name: "Domains", to: `/${orgName}/~/domains` },
   { name: "Storage", to: `/${orgName}/~/storage` },
+  { name: "Databases", to: `/${orgName}/~/databases` },
   { name: "Settings", to: `/${orgName}/~/settings` },
 ])
 </script>

@@ -46,17 +46,28 @@ async function handleSubmit(event: Event) {
 <template>
   <DPageWrapper>
     <div class="flex flex-col gap-4 py-12">
-      <h1>Create New Project</h1>
+      <h1 class="text-title-md">Create New Project</h1>
 
-      <form @submit="handleSubmit">
-        <div>
+      <form
+        @submit="handleSubmit"
+        class="bg-neutral border-neutral flex flex-col gap-4 rounded-lg border p-4 shadow-sm"
+      >
+        <div class="flex flex-col gap-1.5">
           <label for="name">Project Name</label>
-          <input id="name" v-model="formData.name" type="text" required placeholder="My Awesome Project" />
+          <input
+            class="border-neutral text-neutral rounded-md border px-2.5 py-2 text-sm"
+            id="name"
+            v-model="formData.name"
+            type="text"
+            required
+            placeholder="My Awesome Project"
+          />
         </div>
 
-        <div>
+        <div class="flex flex-col gap-1.5">
           <label for="githubOwner">GitHub Owner</label>
           <input
+            class="border-neutral text-neutral rounded-md border px-2.5 py-2 text-sm"
             id="githubOwner"
             v-model="formData.githubOwner"
             type="text"
@@ -65,19 +76,35 @@ async function handleSubmit(event: Event) {
           />
         </div>
 
-        <div>
+        <div class="flex flex-col gap-1.5">
           <label for="githubRepo">GitHub Repository</label>
-          <input id="githubRepo" v-model="formData.githubRepo" type="text" required placeholder="repository-name" />
+          <input
+            class="border-neutral text-neutral rounded-md border px-2.5 py-2 text-sm"
+            id="githubRepo"
+            v-model="formData.githubRepo"
+            type="text"
+            required
+            placeholder="repository-name"
+          />
         </div>
 
-        <div>
+        <div class="flex flex-col gap-1.5">
           <label for="port">Port</label>
-          <input id="port" v-model.number="formData.port" type="number" required min="1" max="65535" />
+          <input
+            class="border-neutral text-neutral rounded-md border px-2.5 py-2 text-sm"
+            id="port"
+            v-model.number="formData.port"
+            type="number"
+            required
+            min="1"
+            max="65535"
+          />
         </div>
 
-        <div>
+        <div class="flex flex-col gap-1.5">
           <label for="desiredRevisionSHA">Initial Revision SHA (optional)</label>
           <input
+            class="border-neutral text-neutral rounded-md border px-2.5 py-1.5 text-sm"
             id="desiredRevisionSHA"
             v-model="formData.desiredRevisionSHA"
             type="text"
@@ -90,9 +117,9 @@ async function handleSubmit(event: Event) {
         </div>
 
         <div>
-          <button type="submit" :disabled="isSubmitting">
+          <DButton type="submit" :disabled="isSubmitting" variant="primary" size="lg">
             {{ isSubmitting ? "Creating..." : "Create Project" }}
-          </button>
+          </DButton>
         </div>
       </form>
     </div>
