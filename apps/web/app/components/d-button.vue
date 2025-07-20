@@ -9,14 +9,14 @@ interface Props {
   variant?: "primary" | "secondary" | "tertiary" | "danger" | "danger-light" | "transparent" | "outline"
   iconLeft?: Component
   to?: any
-  size?: "XS" | "SM" | "MD" | "LG"
+  size?: "xs" | "sm" | "md" | "lg"
   type?: "submit" | "button"
   loading?: boolean
   disabled?: boolean
 }
 
 const props = defineProps<Props>()
-const { variant = "primary", size = "LG", type = "button", loading = false } = props
+const { variant = "primary", size = "lg", type = "button", loading = false } = props
 
 const variantClasses: { [key: string]: string } = {
   primary:
@@ -30,24 +30,24 @@ const variantClasses: { [key: string]: string } = {
 }
 
 const paddingClasses: { [key: string]: string } = {
-  XS: "px-2",
-  SM: "px-3",
-  MD: "px-3",
-  LG: "px-4",
+  xs: "px-2",
+  sm: "px-3",
+  md: "px-3",
+  lg: "px-4",
 }
 
 const heightClasses: { [key: string]: string } = {
-  XS: "h-6",
-  SM: "h-7",
-  MD: "h-8",
-  LG: "h-9",
+  xs: "h-6",
+  sm: "h-7",
+  md: "h-8",
+  lg: "h-9",
 }
 
 const widthClasses: { [key: string]: string } = {
-  XS: "w-5",
-  SM: "w-7",
-  MD: "w-8",
-  LG: "w-9",
+  xs: "w-5",
+  sm: "w-7",
+  md: "w-8",
+  lg: "w-9",
 }
 
 const sizeClass = computed(() => {

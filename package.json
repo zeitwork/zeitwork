@@ -13,7 +13,7 @@
     "drizzle-kit": "^0.31.4"
   },
   "peerDependencies": {
-    "typescript": "^5"
+    "typescript": "^5.8.3"
   },
   "workspaces": [
     "apps/web",
@@ -22,7 +22,7 @@
   "dependencies": {
     "@nuxt/icon": "^1.15.0",
     "date-fns": "^4.1.0",
-    "drizzle-orm": "^0.44.2",
+    "drizzle-orm": "^0.44.3",
     "postgres": "^3.4.7",
     "uuidv7": "^1.0.2"
   }

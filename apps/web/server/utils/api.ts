@@ -319,6 +319,7 @@ export function useZeitworkClient() {
     githubRepo: string
     port: number
     desiredRevisionSHA?: string
+    domain?: string
   }
 
   interface Project {
@@ -329,6 +330,7 @@ export function useZeitworkClient() {
     githubOwner: string
     githubRepo: string
     port: number
+    domain?: string
   }
 
   async function createProject(options: CreateProjectInput): Promise<ZeitworkResponse<Project>> {
@@ -395,6 +397,7 @@ export function useZeitworkClient() {
         githubOwner: options.githubOwner,
         githubRepo: options.githubRepo,
         port: options.port,
+        fqdn: options.domain,
       })
 
       const project: Project = {
@@ -405,6 +408,7 @@ export function useZeitworkClient() {
         githubOwner: options.githubOwner,
         githubRepo: options.githubRepo,
         port: options.port,
+        domain: options.domain,
       }
 
       return { data: project, error: null }
@@ -462,6 +466,7 @@ export function useZeitworkClient() {
           githubOwner: app.spec.githubOwner,
           githubRepo: app.spec.githubRepo,
           port: app.spec.port,
+          domain: app.spec.fqdn,
         }))
 
         return { data: projects, error: null }
@@ -502,6 +507,7 @@ export function useZeitworkClient() {
         githubOwner: app.spec.githubOwner,
         githubRepo: app.spec.githubRepo,
         port: app.spec.port,
+        domain: app.spec.fqdn,
       }
 
       return { data: project, error: null }
