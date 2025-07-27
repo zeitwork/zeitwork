@@ -4,6 +4,7 @@ import * as schema from "~~/packages/database/schema"
 import { randomBytes } from "crypto"
 import { addDays } from "date-fns"
 import { getRepository, getLatestCommitSHA } from "./github"
+import * as https from "https"
 
 type ZeitworkResponse<T> =
   | {
@@ -122,6 +123,96 @@ function getK8sClient() {
     if (!activeCluster) {
       throw new Error(`Cluster '${activeContext.cluster}' referenced by context '${currentContext}' not found`)
     }
+
+    // Check if cluster has CA certificate
+    let hasValidCA = false
+    if (activeCluster.caData) {
+      console.log("Cluster has CA certificate data")
+      // Check if it's already PEM format or needs base64 decoding
+      let caDataPem = activeCluster.caData
+
+      try {
+        // Check if it's already in PEM format
+        if (activeCluster.caData.includes("BEGIN CERTIFICATE")) {
+          console.log("CA certificate is already in PEM format (not base64 encoded)")
+          hasValidCA = true
+        } else {
+          // Try to decode as base64
+          try {
+            const decoded = Buffer.from(activeCluster.caData, "base64").toString("utf-8")
+            if (decoded.includes("BEGIN CERTIFICATE")) {
+              console.log("CA certificate was base64 encoded, decoded successfully")
+              caDataPem = decoded
+              hasValidCA = true
+            } else {
+              console.warn("CA certificate data doesn't look like PEM format after base64 decoding")
+            }
+          } catch (base64Error) {
+            console.warn("Failed to decode CA data as base64, might be in another format")
+          }
+        }
+
+        if (hasValidCA) {
+          // Count certificates in the bundle
+          const certCount = (caDataPem.match(/BEGIN CERTIFICATE/g) || []).length
+          console.log(`CA bundle contains ${certCount} certificate(s)`)
+        }
+      } catch (e) {
+        console.error("Error processing CA certificate data:", e)
+      }
+    } else if (activeCluster.caFile) {
+      console.log("Cluster references CA certificate file:", activeCluster.caFile)
+      hasValidCA = true
+    } else {
+      console.warn("Cluster has no CA certificate configured - this will cause TLS verification errors")
+    }
+
+    // Log the server URL to help debug
+    console.log("Kubernetes API server URL:", activeCluster.server)
+
+    // Check if we need to handle TLS verification
+    if (!hasValidCA || activeCluster.skipTLSVerify) {
+      console.warn("TLS verification issues detected")
+
+      // If skipTLSVerify is already set in the kubeconfig, respect it
+      if (activeCluster.skipTLSVerify) {
+        console.warn("Kubeconfig has skipTLSVerify set to true - TLS verification will be skipped")
+
+        // Apply custom HTTPS agent
+        const httpsAgent = new https.Agent({
+          rejectUnauthorized: false,
+        })
+
+        kc.applyToHTTPSOptions({
+          agent: httpsAgent,
+        })
+      } else if (!hasValidCA) {
+        // No CA certificate found
+        console.error("No CA certificate found in kubeconfig")
+        console.error("The kubeconfig needs a 'certificate-authority-data' field in the cluster configuration")
+        console.error("Or set 'insecure-skip-tls-verify: true' in the cluster configuration")
+
+        // Check if we should skip TLS verification (only for non-production)
+        if (config.kubeconfigSkipTLSVerify === "true") {
+          console.warn("WARNING: Configuring to skip TLS verification as per environment variable - this is insecure!")
+
+          // Apply custom HTTPS agent to the kubeconfig
+          const httpsAgent = new https.Agent({
+            rejectUnauthorized: false,
+          })
+
+          kc.applyToHTTPSOptions({
+            agent: httpsAgent,
+          })
+        } else {
+          console.error("TLS verification will fail. Options:")
+          console.error("1. Add the CA certificate to your kubeconfig")
+          console.error("2. Set NUXT_KUBE_CONFIG_SKIP_TLS_VERIFY=true to skip verification (insecure!)")
+        }
+      }
+    } else {
+      console.log("TLS configuration looks good - CA certificate found")
+    }
   } catch (error) {
     console.error("Failed to load kubeconfig:", error)
     console.error("Kubeconfig string length:", config.kubeConfig?.length || 0)
@@ -135,9 +226,17 @@ function getK8sClient() {
     throw new Error(`Invalid Kubernetes configuration: ${error instanceof Error ? error.message : "Unknown error"}`)
   }
 
+  // Create API clients
+  const coreV1Api = kc.makeApiClient(k8s.CoreV1Api)
+  const customObjectsApi = kc.makeApiClient(k8s.CustomObjectsApi)
+
+  // If we're in a non-production environment or have TLS issues, we might need to configure the clients
+  // The Kubernetes client should automatically use the CA certificate from the kubeconfig
+  // But if there are issues, we can access the underlying request options via kc.getRequestOptions()
+
   return {
-    coreV1Api: kc.makeApiClient(k8s.CoreV1Api),
-    customObjectsApi: kc.makeApiClient(k8s.CustomObjectsApi),
+    coreV1Api,
+    customObjectsApi,
     config: kc,
   }
 }

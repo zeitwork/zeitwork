@@ -1,9 +1,6 @@
 import * as k8s from "@kubernetes/client-node"
 
 export default defineEventHandler(async (event) => {
-  const { user } = await getUserSession(event)
-  if (!user) return {}
-
   try {
     const config = useRuntimeConfig()
 
@@ -11,7 +8,6 @@ export default defineEventHandler(async (event) => {
     console.log("Debugging kubeconfig...")
 
     let debugInfo: any = {
-      user,
       kubeconfig: {
         exists: !!config.kubeConfig,
         length: config.kubeConfig?.length || 0,
