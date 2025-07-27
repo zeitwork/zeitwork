@@ -49,6 +49,8 @@ export default defineNuxtConfig({
 
     githubAppId: process.env.NUXT_GITHUB_APP_ID || "",
     githubAppPrivateKey: process.env.NUXT_GITHUB_APP_PRIVATE_KEY || "",
+
+    kubeConfig: process.env.NUXT_KUBE_CONFIG || "",
   },
 
   modules: ["@nuxt/icon", "@nuxt/fonts", "nuxt-auth-utils"],

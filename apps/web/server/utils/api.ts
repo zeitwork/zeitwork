@@ -16,6 +16,11 @@ type ZeitworkResponse<T> =
     }
 
 // Kubernetes types for custom resources
+interface EnvVar {
+  name: string
+  value: string
+}
+
 interface AppSpec {
   description: string
   desiredRevision?: string
@@ -24,6 +29,7 @@ interface AppSpec {
   githubOwner: string
   githubRepo: string
   port: number
+  env?: EnvVar[]
 }
 
 interface AppStatus {
@@ -46,8 +52,9 @@ interface AppRevision extends k8s.KubernetesObject {
 
 // Initialize Kubernetes client
 function getK8sClient() {
+  const config = useRuntimeConfig()
   const kc = new k8s.KubeConfig()
-  kc.loadFromDefault()
+  kc.loadFromString(config.kubeConfig)
   return {
     coreV1Api: kc.makeApiClient(k8s.CoreV1Api),
     customObjectsApi: kc.makeApiClient(k8s.CustomObjectsApi),
@@ -320,6 +327,7 @@ export function useZeitworkClient() {
     port: number
     desiredRevisionSHA?: string
     domain?: string
+    env?: EnvVar[]
   }
 
   interface Project {
@@ -398,6 +406,7 @@ export function useZeitworkClient() {
         githubRepo: options.githubRepo,
         port: options.port,
         fqdn: options.domain,
+        env: options.env,
       })
 
       const project: Project = {

@@ -1,4 +1,4 @@
-import { defineConfig } from "drizzle-kit";
+import { defineConfig } from "drizzle-kit"
 
 export default defineConfig({
   dialect: "postgresql",
@@ -6,4 +6,4 @@ export default defineConfig({
   out: "./packages/database/migrations",
   dbCredentials: { url: process.env.NUXT_DSN! },
   casing: "snake_case",
-});
+})
