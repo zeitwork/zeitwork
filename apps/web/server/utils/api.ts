@@ -54,38 +54,11 @@ interface AppRevision extends k8s.KubernetesObject {
 // Initialize Kubernetes client
 function getK8sClient() {
   const config = useRuntimeConfig()
-  let rawConfig = config.kubeConfig
-  let decodedConfig = Buffer.from(rawConfig, "base64").toString("utf-8")
+
   const kc = new k8s.KubeConfig()
 
   try {
-    kc.loadFromString(decodedConfig)
-
-    // Log cluster information for debugging (without exposing sensitive data)
-    const cluster = kc.getCurrentCluster()
-    if (cluster) {
-      console.log(`Kubernetes cluster: ${cluster.name}, server: ${cluster.server}`)
-
-      // Check if CA certificate is present
-      if (cluster.caFile) {
-        console.log(`Using CA file: ${cluster.caFile}`)
-      } else if (cluster.caData) {
-        console.log(`Using inline CA certificate (${cluster.caData.length} chars)`)
-        // Verify it's valid base64
-        try {
-          const decoded = Buffer.from(cluster.caData, "base64").toString("utf-8")
-          if (decoded.includes("BEGIN CERTIFICATE")) {
-            console.log("CA certificate appears to be valid PEM format")
-          } else {
-            console.warn("CA certificate may not be in correct format")
-          }
-        } catch (e) {
-          console.error("Failed to decode CA certificate:", e)
-        }
-      } else {
-        console.warn("No CA certificate found in kubeconfig - this will cause TLS verification to fail")
-      }
-    }
+    kc.loadFromString(config.kubeConfig)
   } catch (error) {
     console.error("Failed to load kubeconfig:", error)
     throw new Error("Invalid Kubernetes configuration")

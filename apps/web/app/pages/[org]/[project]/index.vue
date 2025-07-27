@@ -55,10 +55,14 @@ const isDeployingLatestCommit = ref(false)
 
 async function deployLatestCommit() {
   isDeployingLatestCommit.value = true
-  await $fetch(`/api/organisations/${orgId}/projects/${projectId}/deploy`, {
-    method: "POST",
-  })
-  await refresh()
+  try {
+    await $fetch(`/api/organisations/${orgId}/projects/${projectId}/deploy`, {
+      method: "POST",
+    })
+    await refresh()
+  } catch (error) {
+    console.error("Failed to deploy latest commit:", error)
+  }
   isDeployingLatestCommit.value = false
 }
 </script>
