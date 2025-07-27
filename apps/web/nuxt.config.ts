@@ -25,6 +25,10 @@ export default defineNuxtConfig({
 
   vite: { plugins: [tailwindcss()] },
 
+  nitro: {
+    preset: "bun",
+  },
+
   runtimeConfig: {
     appUrl: "http://localhost:3000",
 
@@ -45,10 +49,6 @@ export default defineNuxtConfig({
 
     githubAppId: process.env.NUXT_GITHUB_APP_ID || "",
     githubAppPrivateKey: process.env.NUXT_GITHUB_APP_PRIVATE_KEY || "",
-
-    jwt: {
-      secret: process.env.NUXT_JWT_SECRET || "",
-    },
   },
 
   modules: ["@nuxt/icon", "@nuxt/fonts", "nuxt-auth-utils"],

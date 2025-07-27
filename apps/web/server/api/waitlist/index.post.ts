@@ -1,4 +1,4 @@
-import { waitlist } from "@zeitwork/database/schema"
+import { waitlist } from "~~/packages/database/schema"
 import { count, gte, eq } from "drizzle-orm"
 import { subDays } from "date-fns"
 import { z } from "zod"

@@ -1,5 +1,5 @@
 import { useDrizzle, eq } from "../../utils/drizzle"
-import * as schema from "@zeitwork/database/schema"
+import * as schema from "~~/packages/database/schema"
 import crypto from "crypto"
 import { useZeitworkClient } from "../../utils/api"
 

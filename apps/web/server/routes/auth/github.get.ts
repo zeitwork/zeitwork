@@ -1,5 +1,5 @@
 import { useDrizzle, eq } from "../../utils/drizzle"
-import * as schema from "@zeitwork/database/schema"
+import * as schema from "~~/packages/database/schema"
 
 export default defineOAuthGitHubEventHandler({
   config: {

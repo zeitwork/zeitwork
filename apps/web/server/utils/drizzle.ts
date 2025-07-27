@@ -1,4 +1,4 @@
-import * as schema from "@zeitwork/database/schema"
+import * as schema from "~~/packages/database/schema"
 export { sql, eq, and, or, asc, desc } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/postgres-js"
 import postgres from "postgres"

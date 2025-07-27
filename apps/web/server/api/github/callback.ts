@@ -1,6 +1,6 @@
 import { $fetch } from "ofetch"
 import { useDrizzle, eq } from "../../utils/drizzle"
-import * as schema from "@zeitwork/database/schema"
+import * as schema from "~~/packages/database/schema"
 
 interface GitHubAccessTokenResponse {
   access_token: string

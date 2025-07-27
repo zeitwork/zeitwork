@@ -1,9 +1,0 @@
-{
-  "name": "@zeitwork/database",
-  "version": "1.0.0",
-  "dependencies": {
-    "drizzle-orm": "^0.44.2",
-    "postgres": "^3.4.7",
-    "uuidv7": "^1.0.2"
-  }
-}

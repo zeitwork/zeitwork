@@ -1,6 +1,6 @@
 import { z } from "zod"
 import { useZeitworkClient } from "../../../../utils/api"
-import { organisations } from "@zeitwork/database/schema"
+import { organisations } from "~~/packages/database/schema"
 import { eq } from "drizzle-orm"
 import { useDrizzle } from "../../../../utils/drizzle"
 

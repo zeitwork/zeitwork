@@ -1,12 +1,5 @@
-import {
-  integer,
-  pgTable,
-  serial,
-  text,
-  timestamp,
-  uuid,
-} from "drizzle-orm/pg-core";
-import { uuidv7 } from "uuidv7";
+import { integer, pgTable, serial, text, timestamp, uuid } from "drizzle-orm/pg-core"
+import { uuidv7 } from "uuidv7"
 
 export const waitlist = pgTable("waitlist", {
   id: uuid().primaryKey().$defaultFn(uuidv7),
@@ -14,7 +7,7 @@ export const waitlist = pgTable("waitlist", {
   xForwardedFor: text(),
   country: text(),
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-}).enableRLS();
+}).enableRLS()
 
 export const users = pgTable("users", {
   id: uuid().primaryKey().$defaultFn(uuidv7),
@@ -24,7 +17,7 @@ export const users = pgTable("users", {
   username: text().notNull(),
   githubId: integer().notNull().unique(),
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-}).enableRLS();
+}).enableRLS()
 
 export const organisations = pgTable("organisations", {
   id: uuid().primaryKey().$defaultFn(uuidv7),
@@ -33,7 +26,7 @@ export const organisations = pgTable("organisations", {
   slug: text().notNull().unique(),
   installationId: integer(),
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-}).enableRLS();
+}).enableRLS()
 
 export const organisationMembers = pgTable("organisation_members", {
   id: uuid().primaryKey().$defaultFn(uuidv7),
@@ -41,7 +34,7 @@ export const organisationMembers = pgTable("organisation_members", {
   userId: uuid().references(() => users.id),
   organisationId: uuid().references(() => organisations.id),
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-}).enableRLS();
+}).enableRLS()
 
 export const sessions = pgTable("sessions", {
   id: uuid().primaryKey().$defaultFn(uuidv7),
@@ -52,4 +45,4 @@ export const sessions = pgTable("sessions", {
   token: text().notNull().unique(),
   expiresAt: timestamp({ withTimezone: true }).notNull(),
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-}).enableRLS();
+}).enableRLS()

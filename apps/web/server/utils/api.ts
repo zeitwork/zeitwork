@@ -1,6 +1,6 @@
 import * as k8s from "@kubernetes/client-node"
 import { useDrizzle, eq, and } from "./drizzle"
-import * as schema from "@zeitwork/database/schema"
+import * as schema from "~~/packages/database/schema"
 import { randomBytes } from "crypto"
 import { addDays } from "date-fns"
 import { getRepository, getLatestCommitSHA } from "./github"
