@@ -12,13 +12,11 @@ export default defineEventHandler(async (event) => {
   if (!success) return sendError(event, createError({ statusCode: 400, statusMessage: "Invalid request body" }))
 
   const ip = getRequestHeader(event, "x-forwarded-for")
-  const country = getRequestHeader(event, "x-vercel-ip-country")
   const now = new Date()
 
   if (process.env.NODE_ENV !== "development") {
     // If either ip or country is not set, return 400
-    if (!ip || !country)
-      return sendError(event, createError({ statusCode: 400, statusMessage: "Invalid request body" }))
+    if (!ip) return sendError(event, createError({ statusCode: 400, statusMessage: "Invalid request body" }))
 
     // Rate limit
     try {
@@ -42,7 +40,6 @@ export default defineEventHandler(async (event) => {
       .values({
         email: data.email,
         xForwardedFor: ip,
-        country,
       })
       .onConflictDoNothing({ target: waitlist.email })
   } catch (error) {

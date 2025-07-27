@@ -26,6 +26,17 @@ async function addDomain() {
   })
   await refresh()
 }
+
+const isDeployingLatestCommit = ref(false)
+
+async function deployLatestCommit() {
+  isDeployingLatestCommit.value = true
+  await $fetch(`/api/organisations/${orgId}/projects/${projectId}/deploy`, {
+    method: "POST",
+  })
+  await refresh()
+  isDeployingLatestCommit.value = false
+}
 </script>
 
 <template>
@@ -72,6 +83,11 @@ async function addDomain() {
               </NuxtLink>
             </div>
           </div>
+        </div>
+        <div>
+          <DButton :loading="isDeployingLatestCommit" variant="secondary" size="sm" @click="deployLatestCommit">
+            Deploy latest commit
+          </DButton>
         </div>
       </div>
     </div>

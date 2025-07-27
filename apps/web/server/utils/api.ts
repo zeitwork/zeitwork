@@ -720,6 +720,61 @@ export function useZeitworkClient() {
     }
   }
 
+  interface DeployProjectInput {
+    organisationId: string
+    organisationNo: number
+    projectId: string
+    commitSHA: string
+  }
+
+  async function deployProject(options: DeployProjectInput): Promise<ZeitworkResponse<{ deploymentId: string }>> {
+    try {
+      const { customObjectsApi } = getK8sClient()
+      const namespace = `tenant-${options.organisationNo}`
+
+      // Update the App's desiredRevision to trigger a deployment
+      const patchOps = [{ op: "replace", path: "/spec/desiredRevision", value: options.commitSHA }]
+
+      const patchOptions = {
+        group: "zeitwork.com",
+        version: "v1alpha1",
+        namespace,
+        plural: "apps",
+        name: options.projectId,
+        body: patchOps,
+        headers: {
+          "Content-Type": "application/json-patch+json",
+        },
+      } as any
+
+      console.log(`Deploying project ${options.projectId} with commit SHA: ${options.commitSHA}`)
+
+      try {
+        await customObjectsApi.patchNamespacedCustomObject(patchOptions)
+      } catch (patchError: any) {
+        // If replace fails because field doesn't exist, try add operation
+        if (patchError.response?.body?.message?.includes("does not exist")) {
+          console.log("Replace failed, trying add operation")
+          patchOps[0] = { op: "add", path: "/spec/desiredRevision", value: options.commitSHA }
+          await customObjectsApi.patchNamespacedCustomObject({
+            ...patchOptions,
+            body: patchOps,
+          })
+        } else {
+          throw patchError
+        }
+      }
+
+      // Generate a deployment ID based on the commit SHA and timestamp
+      const deploymentId = `${options.commitSHA.substring(0, 7)}-${Date.now()}`
+
+      return { data: { deploymentId }, error: null }
+    } catch (error) {
+      console.error(`Failed to deploy project:`, error)
+      return { data: null, error: error as Error }
+    }
+  }
+
   async function installGitHubForOrganisation(options: any): Promise<ZeitworkResponse<null>> {
     return { data: null, error: new Error("Not implemented") }
   }
@@ -811,6 +866,7 @@ export function useZeitworkClient() {
       list: listProjects,
       create: createProject,
       update: updateProject,
+      deploy: deployProject,
     },
     deployments: {
       get: getDeployment,

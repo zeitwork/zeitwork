@@ -11,6 +11,8 @@ function verifyWebhookSignature(payload: string, signature: string, secret: stri
 }
 
 export default defineEventHandler(async (event) => {
+  console.log(`[${new Date().toISOString()}] [POST] /api/github/webhook`)
+
   // Get raw body for signature verification
   const rawBody = await readRawBody(event)
   if (!rawBody) {
@@ -41,6 +43,8 @@ export default defineEventHandler(async (event) => {
   // Parse the webhook payload
   const payload = JSON.parse(rawBody)
   const eventType = getHeader(event, "x-github-event")
+
+  console.log(`[${new Date().toISOString()}] [POST] received event: ${eventType}`)
 
   const db = useDrizzle()
 

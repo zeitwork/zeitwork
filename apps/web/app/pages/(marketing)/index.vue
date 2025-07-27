@@ -60,7 +60,7 @@ async function handleSubmit() {
                 autocomplete="email"
                 type="email"
                 placeholder="Email"
-                class="inline-flex h-9 cursor-text items-center rounded-xl border border-transparent bg-neutral-700 px-3 text-sm text-neutral-100 transition-all duration-100 select-none hover:bg-neutral-600 focus:ring-2 focus:ring-neutral-500 focus:outline-none active:bg-neutral-500"
+                class="inline-flex h-9 cursor-text items-center rounded-md border border-transparent bg-neutral-700 px-3 text-sm text-neutral-100 transition-all duration-100 select-none hover:bg-neutral-600 focus:ring-2 focus:ring-neutral-500 focus:outline-none active:bg-neutral-500"
               />
               <MarketingButton type="submit" variant="primary">Join waitlist</MarketingButton>
             </div>
