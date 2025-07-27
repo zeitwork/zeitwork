@@ -26,7 +26,7 @@ export default defineNuxtConfig({
   vite: { plugins: [tailwindcss()] },
 
   nitro: {
-    preset: "node",
+    preset: "node_server",
   },
 
   runtimeConfig: {

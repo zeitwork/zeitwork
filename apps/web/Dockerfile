@@ -1,6 +1,6 @@
 # Use the official Node.js image
 # See available tags at https://hub.docker.com/_/node
-FROM node:24-alpine AS base
+FROM node:23-alpine AS base
 WORKDIR /usr/src/app
 
 # Install dependencies in a separate layer for better caching

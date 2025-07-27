@@ -27,3 +27,4 @@ logs
 prettier
 node_modules/*
 
+docker-compose.yaml
