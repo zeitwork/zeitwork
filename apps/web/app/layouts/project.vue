@@ -4,7 +4,8 @@ const orgName = route.params.org
 const projectName = route.params.project
 
 const navigation = ref([
-  { name: "Deployments", to: `/${orgName}/${projectName}` },
+  { name: "Overview", to: `/${orgName}/${projectName}` },
+  { name: "Deployments", to: `/${orgName}/${projectName}/deployments` },
   { name: "Logs", to: `/${orgName}/${projectName}/logs` },
   { name: "Settings", to: `/${orgName}/${projectName}/settings` },
 ])

@@ -2,6 +2,9 @@
 const route = useRoute()
 const orgSlug = computed<string>(() => route.params.org as string)
 
+// Search query
+const searchQuery = ref("")
+
 // Fetch organisation by slug
 const { data: organisation } = await useFetch(`/api/organisations/${orgSlug.value}`)
 
@@ -9,6 +12,24 @@ const { data: organisation } = await useFetch(`/api/organisations/${orgSlug.valu
 const { data: projects } = await useFetch(`/api/organisations/${organisation.value?.id}/projects`, {
   // Only fetch if organisation exists
   immediate: !!organisation.value?.id,
+})
+
+// Filter projects based on search query
+const filteredProjects = computed(() => {
+  if (!projects.value || !searchQuery.value.trim()) {
+    return projects.value || []
+  }
+
+  const query = searchQuery.value.toLowerCase().trim()
+  return projects.value.filter((project) => {
+    // Search in project name, GitHub owner, and GitHub repo
+    return (
+      project.name?.toLowerCase().includes(query) ||
+      project.githubOwner?.toLowerCase().includes(query) ||
+      project.githubRepo?.toLowerCase().includes(query) ||
+      `${project.githubOwner}/${project.githubRepo}`.toLowerCase().includes(query)
+    )
+  })
 })
 
 // Check if GitHub App is installed
@@ -59,13 +80,20 @@ const justInstalled = computed(() => route.query.installed === "true")
       </div>
 
       <div class="flex gap-2">
-        <DInput class="flex-1" placeholder="Search Projects..." />
+        <DInput v-model="searchQuery" class="flex-1" placeholder="Search Projects..." />
         <DButton :to="`/${orgSlug}/new`" :disabled="!hasGitHubInstallation">Add Project</DButton>
       </div>
 
-      <div v-if="projects && projects.length > 0" class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+      <div
+        v-if="filteredProjects && filteredProjects.length > 0"
+        class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
+      >
         <!-- <pre>{{ projects }}</pre> -->
-        <DProjectCard v-for="project in projects" :key="project.id" :project="project" />
+        <DProjectCard v-for="project in filteredProjects" :key="project.id" :project="project" />
+      </div>
+
+      <div v-else-if="hasGitHubInstallation && projects && projects.length > 0">
+        <p>No projects match your search.</p>
       </div>
 
       <div v-else-if="hasGitHubInstallation">
