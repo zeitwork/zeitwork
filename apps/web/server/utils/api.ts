@@ -55,7 +55,20 @@ interface AppRevision extends k8s.KubernetesObject {
 function getK8sClient() {
   const config = useRuntimeConfig()
   const kc = new k8s.KubeConfig()
-  kc.loadFromString(config.kubeConfig)
+
+  try {
+    kc.loadFromString(config.kubeConfig)
+
+    // Log cluster information for debugging (without exposing sensitive data)
+    const cluster = kc.getCurrentCluster()
+    if (cluster) {
+      console.log(`Kubernetes cluster: ${cluster.name}, server: ${cluster.server}`)
+    }
+  } catch (error) {
+    console.error("Failed to load kubeconfig:", error)
+    throw new Error("Invalid Kubernetes configuration")
+  }
+
   return {
     coreV1Api: kc.makeApiClient(k8s.CoreV1Api),
     customObjectsApi: kc.makeApiClient(k8s.CustomObjectsApi),

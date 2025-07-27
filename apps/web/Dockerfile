@@ -3,6 +3,9 @@
 FROM oven/bun:1 AS base
 WORKDIR /usr/src/app
 
+# Install ca-certificates for TLS verification
+RUN apt-get update && apt-get install -y ca-certificates && rm -rf /var/lib/apt/lists/*
+
 # install dependencies into temp directory
 # this will cache them and speed up future builds
 FROM base AS install
