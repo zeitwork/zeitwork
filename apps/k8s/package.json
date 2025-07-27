@@ -1,8 +1,6 @@
 {
   "name": "zeitwork-deployment",
-  "private": true,
-  "type": "module",
-  "main": "index.ts",
+  "main": "src/index.ts",
   "devDependencies": {
     "@types/node": "^18",
     "typescript": "^5.0.0"

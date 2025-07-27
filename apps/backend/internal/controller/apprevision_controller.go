@@ -210,6 +210,7 @@ func (r *AppRevisionReconciler) ensureDeployment(ctx context.Context, revision *
 							Ports:          []corev1.ContainerPort{{Protocol: corev1.ProtocolTCP, ContainerPort: app.Spec.Port}},
 							ReadinessProbe: probe,
 							LivenessProbe:  probe,
+							Env:            app.Spec.Env,
 						},
 					},
 				},

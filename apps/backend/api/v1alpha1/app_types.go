@@ -17,18 +17,20 @@ limitations under the License.
 package v1alpha1
 
 import (
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // AppSpec defines the desired state of App
 type AppSpec struct {
-	Description        string  `json:"description"`
-	DesiredRevisionSHA *string `json:"desiredRevision,omitempty"`
-	FQDN               *string `json:"fqdn,omitempty"`
-	GithubOwner        string  `json:"githubOwner"`
-	GithubRepo         string  `json:"githubRepo"`
-	GithubInstallation int64   `json:"githubInstallation"`
-	Port               int32   `json:"port"`
+	Description        string          `json:"description"`
+	DesiredRevisionSHA *string         `json:"desiredRevision,omitempty"`
+	FQDN               *string         `json:"fqdn,omitempty"`
+	GithubOwner        string          `json:"githubOwner"`
+	GithubRepo         string          `json:"githubRepo"`
+	GithubInstallation int64           `json:"githubInstallation"`
+	Port               int32           `json:"port"`
+	Env                []corev1.EnvVar `json:"env,omitempty"`
 }
 
 // AppStatus defines the observed state of App

@@ -4,23 +4,13 @@ import * as k8s from "@pulumi/kubernetes";
 
 
 export class Registry extends pulumi.ComponentResource {
-    public readonly pvc: k8s.core.v1.PersistentVolumeClaim;
     public readonly deployment: k8s.apps.v1.Deployment;
-    public readonly certificate: k8s.apiextensions.CustomResource;
     public readonly proxy: k8s.apiextensions.CustomResource;
     public readonly service: k8s.core.v1.Service;
+    public readonly certificate: k8s.apiextensions.CustomResource;
 
     constructor(name: string, args: {}, opts?: pulumi.ComponentResourceOptions) {
         super("zeitwork:component:Registry", name, {}, opts);
-
-        this.pvc = new k8s.core.v1.PersistentVolumeClaim(name + "-pvc", {
-            metadata: { namespace: "zeitwork-system" },
-            spec: {
-                accessModes: ["ReadWriteOnce"],
-                resources: { requests: { storage: '10G' } },
-                storageClassName: "local-path"
-            }
-        }, { parent: this });
 
         this.deployment = new k8s.apps.v1.Deployment(name + "-deployment", {
             metadata: { namespace: "zeitwork-system" },
@@ -34,17 +24,7 @@ export class Registry extends pulumi.ComponentResource {
                             name: "registry",
                             image: "registry:2",
                             ports: [{ containerPort: 5000 }],
-                            volumeMounts: [{
-                                name: "registry-storage",
-                                mountPath: "/var/lib/registry"
-                            }]
                         }],
-                        volumes: [{
-                            name: "registry-storage",
-                            persistentVolumeClaim: {
-                                claimName: this.pvc.metadata.name,
-                            }
-                        }]
                     }
                 }
             }
@@ -87,7 +67,7 @@ export class Registry extends pulumi.ComponentResource {
                     services: [{ name: this.service.metadata.name, port: 5000 }]
                 }]
             }
-        }, { parent: this, dependsOn: this.certificate });
+        }, { parent: this });
 
         this.registerOutputs();
     }

@@ -21,6 +21,7 @@ limitations under the License.
 package v1alpha1
 
 import (
+	"k8s.io/api/core/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
@@ -189,6 +190,13 @@ func (in *AppSpec) DeepCopyInto(out *AppSpec) {
 		in, out := &in.FQDN, &out.FQDN
 		*out = new(string)
 		**out = **in
+	}
+	if in.Env != nil {
+		in, out := &in.Env, &out.Env
+		*out = make([]v1.EnvVar, len(*in))
+		for i := range *in {
+			(*in)[i].DeepCopyInto(&(*out)[i])
+		}
 	}
 }
 

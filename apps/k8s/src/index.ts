@@ -1,7 +1,8 @@
 import * as pulumi from "@pulumi/pulumi";
 import * as k8s from "@pulumi/kubernetes";
 import { Registry } from "./registry";
-import { Postgres } from "./postgres";
+import {Hetzner} from "./hetzner";
+import {Metrics} from "./metrics";
 
 // Fetch kubeconfig from a Pulumi secret
 const config = new pulumi.Config();
@@ -14,6 +15,12 @@ const provider = new k8s.Provider("k8s", {
 const namespace = new k8s.core.v1.Namespace("zeitwork-system", {
     metadata: {name: "zeitwork-system"},
 }, {provider});
+
+// raw yaml for the service monitor
+
+const serviceMonitor = new k8s.yaml.v2.ConfigFile("service-monitor", {
+    file: "https://raw.githubusercontent.com/prometheus-operator/prometheus-operator/refs/heads/main/example/prometheus-operator-crd-full/monitoring.coreos.com_servicemonitors.yaml"
+}, {provider})
 
 // projectcontour as ingress controller
 const contour = new k8s.helm.v3.Release("contour", {
@@ -29,14 +36,14 @@ const contour = new k8s.helm.v3.Release("contour", {
             service: {
                 type: 'NodePort',
             }
+        },
+        metrics: {
+            serviceMonitor: {
+                enabled: true
+            }
         }
     }
-}, {provider});
-
-// local-path-provisioner for persistent storage
-new k8s.yaml.ConfigFile("local-path-storage", {
-    file: "https://raw.githubusercontent.com/rancher/local-path-provisioner/v0.0.31/deploy/local-path-storage.yaml",
-}, {provider, dependsOn: contour});
+}, {provider, dependsOn: [serviceMonitor]});
 
 // cert-manager for SSL certificates
 const certManager = new k8s.helm.v3.Release("cert-manager", {
@@ -72,11 +79,18 @@ const letsEncryptIssuer = new k8s.apiextensions.CustomResource("letsencrypt-issu
 }, {provider, dependsOn: certManager});
 
 // Deploy registry as a Pulumi component
-const registry = new Registry("zeitwork-registry", {
+const registry = new Registry("zeitwork-registry", {}, {
     provider,
 });
 
-// Deploy Postgres as a Pulumi component
-const postgres = new Postgres("zeitwork-postgres", {
-    provider,
+const hetzner = new Hetzner("hetzner", {}, {
+    provider
 });
+
+const metrics = new Metrics("victoria-metrics", {}, {
+    provider
+});
+
+// Export Grafana admin password as a secret
+export const grafanaAdminPassword = pulumi.secret(metrics.grafanaAdminPassword);
+
