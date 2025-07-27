@@ -21,6 +21,7 @@ const bodySchema = z.object({
       }),
     )
     .optional(),
+  basePath: z.string().optional(),
 })
 
 export default defineEventHandler(async (event) => {
@@ -28,7 +29,7 @@ export default defineEventHandler(async (event) => {
   if (!secure) throw createError({ statusCode: 401, message: "Unauthorized" })
 
   const { orgId } = await getValidatedRouterParams(event, paramsSchema.parse)
-  const { name, githubOwner, githubRepo, port, env } = await readValidatedBody(event, bodySchema.parse)
+  const { name, githubOwner, githubRepo, port, env, basePath } = await readValidatedBody(event, bodySchema.parse)
 
   // check if orgId is a uuid or a slug
   const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(orgId)
@@ -50,6 +51,7 @@ export default defineEventHandler(async (event) => {
     port,
     organisationId: organisation.id,
     env,
+    basePath,
   })
 
   if (error) {

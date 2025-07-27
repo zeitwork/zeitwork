@@ -30,6 +30,7 @@ interface AppSpec {
   githubRepo: string
   port: number
   env?: EnvVar[]
+  basePath?: string
 }
 
 interface AppStatus {
@@ -60,6 +61,38 @@ function getK8sClient() {
     customObjectsApi: kc.makeApiClient(k8s.CustomObjectsApi),
     config: kc,
   }
+}
+
+// Helper function to properly escape environment variable values
+function escapeEnvVarValue(value: string): string {
+  // Kubernetes expects newlines to be preserved in the JSON payload
+  // The value should already have actual newline characters from the frontend
+  // We need to ensure they're preserved when sent to Kubernetes
+
+  // Log if we have multi-line values for debugging
+  if (value.includes("\n")) {
+    console.log(`[escapeEnvVarValue] Processing multi-line value with ${value.split("\n").length} lines`)
+    console.log(`[escapeEnvVarValue] First 100 chars: "${value.substring(0, 100)}..."`)
+  }
+
+  // The value should be sent as-is to Kubernetes
+  // JSON.stringify will handle escaping when the request is made
+  return value
+}
+
+// Helper function to log environment variables for debugging
+function logEnvVars(envVars: EnvVar[] | undefined, context: string) {
+  if (!envVars || envVars.length === 0) return
+
+  console.log(`[${context}] Environment variables:`)
+  envVars.forEach((env, index) => {
+    const valuePreview = env.value.length > 50 ? env.value.substring(0, 50) + "..." : env.value
+    const hasNewlines = env.value.includes("\n")
+    console.log(`  [${index}] ${env.name}: "${valuePreview}" (length: ${env.value.length}, multiline: ${hasNewlines})`)
+    if (hasNewlines) {
+      console.log(`    Line count: ${env.value.split("\n").length}`)
+    }
+  })
 }
 
 // Helper function to create or update namespace
@@ -108,6 +141,19 @@ async function createOrUpdateApp(
   const version = "v1alpha1"
   const plural = "apps"
 
+  // Process environment variables to ensure proper escaping
+  if (spec.env) {
+    logEnvVars(spec.env, "Before processing")
+
+    // Ensure values are properly formatted
+    spec.env = spec.env.map((env) => ({
+      name: env.name,
+      value: escapeEnvVarValue(env.value),
+    }))
+
+    logEnvVars(spec.env, "After processing")
+  }
+
   const app = {
     apiVersion: `${group}/${version}`,
     kind: "App",
@@ -121,6 +167,11 @@ async function createOrUpdateApp(
     spec: spec,
   }
 
+  console.log(`Creating/updating app ${appName} in namespace ${namespace}`)
+  if (spec.env && spec.env.length > 0) {
+    console.log(`App has ${spec.env.length} environment variables`)
+  }
+
   try {
     // Try to get existing app
     await customObjectsApi.getNamespacedCustomObject({
@@ -131,14 +182,21 @@ async function createOrUpdateApp(
       name: appName,
     })
     // If it exists, patch it
-    await customObjectsApi.patchNamespacedCustomObject({
+    // Use JSON merge patch to ensure proper handling of multi-line values
+    const patchOptions = {
       group,
       version,
       namespace,
       plural,
       name: appName,
       body: app,
-    } as any) // Note: headers are configured at client level for patch operations
+      headers: {
+        "Content-Type": "application/merge-patch+json",
+      },
+    } as any
+
+    console.log(`Patching app ${appName} with JSON merge patch`)
+    await customObjectsApi.patchNamespacedCustomObject(patchOptions)
   } catch (error: any) {
     // Check for 404 in multiple possible locations in the error object
     const is404 =
@@ -151,6 +209,7 @@ async function createOrUpdateApp(
 
     if (is404) {
       // App doesn't exist, create it
+      console.log(`Creating new app ${appName}`)
       await customObjectsApi.createNamespacedCustomObject({
         group,
         version,
@@ -158,9 +217,47 @@ async function createOrUpdateApp(
         plural,
         body: app,
       })
+      console.log(`Successfully created app ${appName}`)
     } else {
       console.error(`Failed to check/update app ${appName}:`, error.response?.body || error)
       throw error
+    }
+  }
+
+  // Verify the app was created/updated with correct env vars
+  if (spec.env && spec.env.length > 0) {
+    try {
+      const verifyResponse = await customObjectsApi.getNamespacedCustomObject({
+        group,
+        version,
+        namespace,
+        plural,
+        name: appName,
+      })
+
+      const verifyData = verifyResponse.body || verifyResponse
+      const storedApp = verifyData as App
+
+      if (storedApp.spec.env) {
+        console.log(`[Verification] App ${appName} has ${storedApp.spec.env.length} env vars stored`)
+        logEnvVars(storedApp.spec.env, "Stored in Kubernetes")
+
+        // Check if any multi-line values were truncated
+        storedApp.spec.env.forEach((env, index) => {
+          const originalEnv = spec.env?.find((e) => e.name === env.name)
+          if (originalEnv && originalEnv.value !== env.value) {
+            console.error(`[ERROR] Env var ${env.name} was modified during storage!`)
+            console.error(`  Original length: ${originalEnv.value.length}, Stored length: ${env.value.length}`)
+            if (originalEnv.value.includes("\n")) {
+              console.error(
+                `  Original had ${originalEnv.value.split("\n").length} lines, stored has ${env.value.split("\n").length} lines`,
+              )
+            }
+          }
+        })
+      }
+    } catch (verifyError) {
+      console.error("Failed to verify app creation:", verifyError)
     }
   }
 }
@@ -328,6 +425,7 @@ export function useZeitworkClient() {
     desiredRevisionSHA?: string
     domain?: string
     env?: EnvVar[]
+    basePath?: string
   }
 
   interface Project {
@@ -339,11 +437,18 @@ export function useZeitworkClient() {
     githubRepo: string
     port: number
     domain?: string
+    basePath?: string
   }
 
   async function createProject(options: CreateProjectInput): Promise<ZeitworkResponse<Project>> {
     try {
       const db = useDrizzle()
+
+      // Log incoming environment variables
+      if (options.env && options.env.length > 0) {
+        console.log(`[createProject] Received ${options.env.length} environment variables`)
+        logEnvVars(options.env, "createProject input")
+      }
 
       // Get the organisation to check installation ID
       const [organisation] = await db
@@ -407,6 +512,7 @@ export function useZeitworkClient() {
         port: options.port,
         fqdn: options.domain,
         env: options.env,
+        basePath: options.basePath,
       })
 
       const project: Project = {
@@ -418,6 +524,7 @@ export function useZeitworkClient() {
         githubRepo: options.githubRepo,
         port: options.port,
         domain: options.domain,
+        basePath: options.basePath,
       }
 
       return { data: project, error: null }
@@ -476,6 +583,7 @@ export function useZeitworkClient() {
           githubRepo: app.spec.githubRepo,
           port: app.spec.port,
           domain: app.spec.fqdn,
+          basePath: app.spec.basePath,
         }))
 
         return { data: projects, error: null }
@@ -517,6 +625,7 @@ export function useZeitworkClient() {
         githubRepo: app.spec.githubRepo,
         port: app.spec.port,
         domain: app.spec.fqdn,
+        basePath: app.spec.basePath,
       }
 
       return { data: project, error: null }

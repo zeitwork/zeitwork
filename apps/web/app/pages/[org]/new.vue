@@ -11,6 +11,7 @@ const formData = reactive({
   port: 3000,
   desiredRevisionSHA: "",
   env: [] as Array<{ name: string; value: string }>,
+  basePath: "",
 })
 
 const error = ref<string | null>(null)
@@ -161,6 +162,20 @@ async function handleSubmit(event: Event) {
   isSubmitting.value = true
 
   try {
+    // Debug environment variables before sending
+    const envVarsToSend = formData.env.filter((e) => e.name && e.value)
+    if (envVarsToSend.length > 0) {
+      console.log(`[Frontend] Sending ${envVarsToSend.length} environment variables`)
+      envVarsToSend.forEach((env, index) => {
+        const hasNewlines = env.value.includes("\n")
+        console.log(`[${index}] ${env.name}: length=${env.value.length}, multiline=${hasNewlines}`)
+        if (hasNewlines) {
+          console.log(`  Line count: ${env.value.split("\n").length}`)
+          console.log(`  First 100 chars: "${env.value.substring(0, 100).replace(/\n/g, "\\n")}..."`)
+        }
+      })
+    }
+
     const response = await $fetch(`/api/organisations/${orgId.value}/projects`, {
       method: "POST",
       body: {
@@ -169,7 +184,8 @@ async function handleSubmit(event: Event) {
         githubRepo: formData.githubRepo,
         port: formData.port,
         desiredRevisionSHA: formData.desiredRevisionSHA || undefined,
-        env: formData.env.filter((e) => e.name && e.value), // Only include env vars with both name and value
+        env: envVarsToSend,
+        basePath: formData.basePath || undefined,
       },
     })
 
@@ -250,6 +266,20 @@ async function handleSubmit(event: Event) {
             type="text"
             placeholder="Leave empty for latest"
           />
+        </div>
+
+        <div class="flex flex-col gap-1.5">
+          <label for="basePath">Base Path (optional)</label>
+          <input
+            class="border-neutral text-neutral rounded-md border px-2.5 py-1.5 text-sm"
+            id="basePath"
+            v-model="formData.basePath"
+            type="text"
+            placeholder="e.g., /api or /app (leave empty for root)"
+          />
+          <p class="text-xs text-neutral-600 dark:text-neutral-400">
+            The base path in the repository where your Dockerfile is located.
+          </p>
         </div>
 
         <div class="flex flex-col gap-1.5">
