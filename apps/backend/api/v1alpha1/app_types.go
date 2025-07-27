@@ -31,6 +31,7 @@ type AppSpec struct {
 	GithubInstallation int64           `json:"githubInstallation"`
 	Port               int32           `json:"port"`
 	Env                []corev1.EnvVar `json:"env,omitempty"`
+	BasePath           *string         `json:"basePath,omitempty"`
 }
 
 // AppStatus defines the observed state of App
