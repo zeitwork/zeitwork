@@ -63,6 +63,26 @@ function getK8sClient() {
     const cluster = kc.getCurrentCluster()
     if (cluster) {
       console.log(`Kubernetes cluster: ${cluster.name}, server: ${cluster.server}`)
+
+      // Check if CA certificate is present
+      if (cluster.caFile) {
+        console.log(`Using CA file: ${cluster.caFile}`)
+      } else if (cluster.caData) {
+        console.log(`Using inline CA certificate (${cluster.caData.length} chars)`)
+        // Verify it's valid base64
+        try {
+          const decoded = Buffer.from(cluster.caData, "base64").toString("utf-8")
+          if (decoded.includes("BEGIN CERTIFICATE")) {
+            console.log("CA certificate appears to be valid PEM format")
+          } else {
+            console.warn("CA certificate may not be in correct format")
+          }
+        } catch (e) {
+          console.error("Failed to decode CA certificate:", e)
+        }
+      } else {
+        console.warn("No CA certificate found in kubeconfig - this will cause TLS verification to fail")
+      }
     }
   } catch (error) {
     console.error("Failed to load kubeconfig:", error)
@@ -560,6 +580,14 @@ export function useZeitworkClient() {
       try {
         await coreV1Api.readNamespace({ name: namespace })
       } catch (error: any) {
+        // Log detailed error information for debugging
+        console.error(`Error accessing namespace ${namespace}:`, {
+          message: error.message,
+          code: error.code,
+          statusCode: error.response?.statusCode || error.statusCode,
+          body: error.response?.body || error.body,
+        })
+
         // Check for 404 in multiple possible locations in the error object
         if (
           error.response?.statusCode === 404 ||
@@ -570,6 +598,17 @@ export function useZeitworkClient() {
           // Namespace doesn't exist, return empty list
           return { data: [], error: null }
         }
+
+        // For TLS/certificate errors, provide more helpful error message
+        if (error.message && error.message.includes("unable to verify the first certificate")) {
+          return {
+            data: null,
+            error: new Error(
+              `TLS certificate verification failed. The Kubernetes cluster's CA certificate may not be properly configured in the kubeconfig.`,
+            ),
+          }
+        }
+
         return { data: null, error: new Error(`Failed to access organisation namespace: ${error.message}`) }
       }
 
