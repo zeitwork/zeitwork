@@ -73,6 +73,12 @@ export class Metrics extends pulumi.ComponentResource {
             },
             values: {
                 adminPassword: this.grafanaAdminPassword,
+                persistence: {
+                    enabled: true,
+                    type: "pvc",
+                    size: "2Gi",
+                    accessModes: ["ReadWriteOnce"],
+                },
                 datasources: {
                     "datasources.yaml": {
                         apiVersion: 1,

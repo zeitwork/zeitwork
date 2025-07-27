@@ -98,8 +98,8 @@ func (r *AppRevisionReconciler) createBuildJob(ctx context.Context, revision *v1
 		Spec: batchv1.JobSpec{
 			Template: corev1.PodTemplateSpec{
 				Spec: corev1.PodSpec{
-					RuntimeClassName: pointer.String("gvisor"),
-					RestartPolicy:    corev1.RestartPolicyNever,
+					//RuntimeClassName: pointer.String("gvisor"),
+					RestartPolicy: corev1.RestartPolicyNever,
 					Volumes: []corev1.Volume{
 						{
 							Name: "workspace",

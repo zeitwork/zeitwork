@@ -137,7 +137,7 @@ func (r *AppReconciler) ensureProxy(ctx context.Context, app *v1alpha1.App, name
 				},
 			},
 		}
-		return controllerutil.SetControllerReference(revision, httpProxy, r.Scheme)
+		return controllerutil.SetControllerReference(app, httpProxy, r.Scheme)
 	})
 	if err != nil {
 		return err
@@ -168,7 +168,7 @@ func (r *AppReconciler) ensureCertificate(ctx context.Context, revision *v1alpha
 				RotationPolicy: certmanagerv1.RotationPolicyAlways,
 			},
 		}
-		return controllerutil.SetControllerReference(revision, cert, r.Scheme)
+		return controllerutil.SetControllerReference(app, cert, r.Scheme)
 	})
 	if err != nil {
 		return err
