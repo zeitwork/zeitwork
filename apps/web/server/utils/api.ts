@@ -58,10 +58,81 @@ function getK8sClient() {
   const kc = new k8s.KubeConfig()
 
   try {
-    kc.loadFromString(config.kubeConfig)
+    // Parse and potentially fix the kubeconfig
+    let kubeconfigString = config.kubeConfig
+
+    // If KUBECONFIG_CONTEXT is set, ensure it's set as current-context
+    if (config.kubeconfigContext) {
+      try {
+        const kubeconfigObj = JSON.parse(kubeconfigString)
+        kubeconfigObj["current-context"] = config.kubeconfigContext
+        kubeconfigString = JSON.stringify(kubeconfigObj)
+        console.log(`Set current-context to: ${config.kubeconfigContext}`)
+      } catch (e) {
+        // If it's YAML, try a simple string replacement
+        if (!kubeconfigString.includes("current-context:")) {
+          kubeconfigString = `current-context: ${config.kubeconfigContext}\n${kubeconfigString}`
+        } else {
+          kubeconfigString = kubeconfigString.replace(
+            /current-context:.*/,
+            `current-context: ${config.kubeconfigContext}`,
+          )
+        }
+      }
+    }
+
+    kc.loadFromString(kubeconfigString)
+
+    // Debug logging for kubeconfig
+    console.log("Kubeconfig loaded successfully")
+    console.log("Current context:", kc.getCurrentContext())
+    console.log(
+      "Available contexts:",
+      kc.getContexts().map((c) => c.name),
+    )
+    console.log(
+      "Available clusters:",
+      kc.getClusters().map((c) => c.name),
+    )
+
+    // Check if there's an active context
+    let currentContext = kc.getCurrentContext()
+    if (!currentContext) {
+      // If no current context, try to set the first available context
+      const contexts = kc.getContexts()
+      if (contexts.length > 0) {
+        console.warn(`No current context set, using first available context: ${contexts[0].name}`)
+        kc.setCurrentContext(contexts[0].name)
+        currentContext = contexts[0].name
+      } else {
+        throw new Error("No contexts available in kubeconfig")
+      }
+    }
+
+    // Check if the current context exists
+    const contexts = kc.getContexts()
+    const activeContext = contexts.find((c) => c.name === currentContext)
+    if (!activeContext) {
+      throw new Error(`Current context '${currentContext}' not found in contexts`)
+    }
+
+    // Check if the cluster referenced by the context exists
+    const clusters = kc.getClusters()
+    const activeCluster = clusters.find((c) => c.name === activeContext.cluster)
+    if (!activeCluster) {
+      throw new Error(`Cluster '${activeContext.cluster}' referenced by context '${currentContext}' not found`)
+    }
   } catch (error) {
     console.error("Failed to load kubeconfig:", error)
-    throw new Error("Invalid Kubernetes configuration")
+    console.error("Kubeconfig string length:", config.kubeConfig?.length || 0)
+    // Log first 200 chars of kubeconfig (without sensitive data)
+    if (config.kubeConfig) {
+      const preview = config.kubeConfig
+        .substring(0, 8)
+        .replace(/certificate-authority-data:.*/, "certificate-authority-data: [REDACTED]")
+      console.error("Kubeconfig preview:", preview)
+    }
+    throw new Error(`Invalid Kubernetes configuration: ${error instanceof Error ? error.message : "Unknown error"}`)
   }
 
   return {
