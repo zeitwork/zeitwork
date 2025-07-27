@@ -32,6 +32,15 @@ const contour = new k8s.helm.v3.Release("contour", {
     namespace: "zeitwork-contour",
     createNamespace: true,
     values: {
+        configInline: {
+            policy: {
+                "response-headers": {
+                    set: {
+                        "X-Powered-By": "running on zeitwork.com"
+                    }
+                }
+            }
+        },
         envoy: {
             service: {
                 type: 'NodePort',
@@ -41,7 +50,7 @@ const contour = new k8s.helm.v3.Release("contour", {
             serviceMonitor: {
                 enabled: true
             }
-        }
+        },
     }
 }, {provider, dependsOn: [serviceMonitor]});
 

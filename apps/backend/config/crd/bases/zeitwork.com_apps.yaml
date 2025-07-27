@@ -39,6 +39,8 @@ spec:
           spec:
             description: AppSpec defines the desired state of App
             properties:
+              basePath:
+                type: string
               description:
                 type: string
               desiredRevision:
