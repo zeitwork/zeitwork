@@ -639,7 +639,8 @@ export function useZeitworkClient() {
     organisationNo: number
     projectId: string
     domain?: string
-    // Add more fields here as needed for future updates
+    env?: EnvVar[]
+    basePath?: string
   }
 
   async function updateProject(options: UpdateProjectInput): Promise<ZeitworkResponse<Project>> {
@@ -650,14 +651,53 @@ export function useZeitworkClient() {
       // Prepare JSON Patch operations
       const patchOps: any[] = []
 
+      // Handle domain updates
       if (options.domain !== undefined) {
-        // Use "remove" operation for empty domain, "replace" or "add" for setting a domain
         if (options.domain === "" || options.domain === null) {
           patchOps.push({ op: "remove", path: "/spec/fqdn" })
         } else {
-          // Try to replace first, if field doesn't exist it will fail and we'll use add
           patchOps.push({ op: "replace", path: "/spec/fqdn", value: options.domain })
         }
+      }
+
+      // Handle basePath updates
+      if (options.basePath !== undefined) {
+        if (options.basePath === "" || options.basePath === null) {
+          patchOps.push({ op: "remove", path: "/spec/basePath" })
+        } else {
+          patchOps.push({ op: "replace", path: "/spec/basePath", value: options.basePath })
+        }
+      }
+
+      // Handle environment variable updates
+      if (options.env !== undefined) {
+        // Process environment variables
+        let processedEnv = options.env
+        if (processedEnv && processedEnv.length > 0) {
+          logEnvVars(processedEnv, "updateProject input")
+          processedEnv = processedEnv.map((env) => ({
+            name: env.name,
+            value: escapeEnvVarValue(env.value),
+          }))
+          logEnvVars(processedEnv, "updateProject after processing")
+        }
+
+        if (processedEnv.length === 0) {
+          // Remove env array if empty
+          patchOps.push({ op: "remove", path: "/spec/env" })
+        } else {
+          // Replace entire env array
+          patchOps.push({ op: "replace", path: "/spec/env", value: processedEnv })
+        }
+      }
+
+      if (patchOps.length === 0) {
+        // No updates to perform
+        return getProject({
+          organisationId: options.organisationId,
+          organisationNo: options.organisationNo,
+          projectId: options.projectId,
+        })
       }
 
       // Apply the patch using JSON Patch format
@@ -673,21 +713,67 @@ export function useZeitworkClient() {
         },
       } as any
 
-      console.log(`Patching app ${options.projectId} in namespace ${namespace} with operations:`, patchOps)
+      console.log(`Patching app ${options.projectId} with JSON patch operations:`, JSON.stringify(patchOps, null, 2))
 
       try {
         await customObjectsApi.patchNamespacedCustomObject(patchOptions)
       } catch (patchError: any) {
-        // If replace fails because field doesn't exist, try add operation
-        if (patchError.response?.body?.message?.includes("does not exist") && options.domain) {
-          console.log("Replace failed, trying add operation")
-          patchOps[0] = { op: "add", path: "/spec/fqdn", value: options.domain }
+        // If replace fails because field doesn't exist, retry with add operations
+        const needsRetry = patchError.response?.body?.message?.includes("does not exist")
+        if (needsRetry) {
+          console.log("Some replace operations failed, retrying with add operations where needed")
+
+          // Get current app to check which fields exist
+          const currentResponse = await customObjectsApi.getNamespacedCustomObject({
+            group: "zeitwork.com",
+            version: "v1alpha1",
+            namespace,
+            plural: "apps",
+            name: options.projectId,
+          })
+          const currentApp = (currentResponse.body || currentResponse) as App
+
+          // Rebuild patch operations based on what exists
+          const retryOps = patchOps.map((op) => {
+            if (op.op === "replace") {
+              // Check if the field exists in current app
+              if (op.path === "/spec/fqdn" && !currentApp.spec.fqdn) {
+                return { ...op, op: "add" }
+              }
+              if (op.path === "/spec/basePath" && !currentApp.spec.basePath) {
+                return { ...op, op: "add" }
+              }
+              if (op.path === "/spec/env" && !currentApp.spec.env) {
+                return { ...op, op: "add" }
+              }
+            }
+            return op
+          })
+
+          console.log(`Retrying with adjusted operations:`, JSON.stringify(retryOps, null, 2))
           await customObjectsApi.patchNamespacedCustomObject({
             ...patchOptions,
-            body: patchOps,
+            body: retryOps,
           })
         } else {
           throw patchError
+        }
+      }
+
+      // Verify the update if env vars were changed
+      if (options.env !== undefined && options.env.length > 0) {
+        const verifyResponse = await customObjectsApi.getNamespacedCustomObject({
+          group: "zeitwork.com",
+          version: "v1alpha1",
+          namespace,
+          plural: "apps",
+          name: options.projectId,
+        })
+
+        const verifiedApp = (verifyResponse.body || verifyResponse) as App
+        if (verifiedApp.spec.env) {
+          console.log(`[Verification] App ${options.projectId} now has ${verifiedApp.spec.env.length} env vars`)
+          logEnvVars(verifiedApp.spec.env, "Updated in Kubernetes")
         }
       }
 

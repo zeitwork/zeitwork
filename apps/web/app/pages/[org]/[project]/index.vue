@@ -18,6 +18,9 @@ const domains = computed(() => {
 })
 
 const domain = ref("")
+const envVariables = ref<Array<{ name: string; value: string }>>([])
+const isSavingEnv = ref(false)
+const envSaveError = ref<string | null>(null)
 
 async function addDomain() {
   await $fetch(`/api/organisations/${orgId}/projects/${projectId}`, {
@@ -25,6 +28,27 @@ async function addDomain() {
     body: { domain: domain.value },
   })
   await refresh()
+}
+
+async function saveEnvVariables() {
+  isSavingEnv.value = true
+  envSaveError.value = null
+  try {
+    await $fetch(`/api/organisations/${orgId}/projects/${projectId}`, {
+      method: "PATCH",
+      body: {
+        env: envVariables.value.filter((e) => e.name && e.value),
+      },
+    })
+    await refresh()
+    // Note: Environment variables are saved but not yet reflected in the project data
+    // as the backend doesn't return them in the GET response yet
+  } catch (error) {
+    console.error("Failed to save environment variables:", error)
+    envSaveError.value = "Failed to save environment variables. Please try again."
+  } finally {
+    isSavingEnv.value = false
+  }
 }
 
 const isDeployingLatestCommit = ref(false)
@@ -87,6 +111,20 @@ async function deployLatestCommit() {
         <div>
           <DButton :loading="isDeployingLatestCommit" variant="secondary" size="sm" @click="deployLatestCommit">
             Deploy latest commit
+          </DButton>
+        </div>
+      </div>
+    </div>
+    <div class="mt-6">
+      <h2 class="mb-4 text-lg font-semibold">Environment Variables</h2>
+      <div class="border-neutral rounded-lg border bg-white p-4">
+        <DEnvVariables v-model="envVariables" />
+        <div v-if="envSaveError" class="mt-4 text-sm text-red-600">
+          {{ envSaveError }}
+        </div>
+        <div class="mt-4">
+          <DButton :loading="isSavingEnv" variant="primary" size="md" @click="saveEnvVariables">
+            Save Environment Variables
           </DButton>
         </div>
       </div>

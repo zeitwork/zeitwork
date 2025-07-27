@@ -8,7 +8,15 @@ const paramsSchema = z.object({
 
 const bodySchema = z.object({
   domain: z.string().optional(),
-  // Add more fields here as needed for future updates
+  env: z
+    .array(
+      z.object({
+        name: z.string(),
+        value: z.string(),
+      }),
+    )
+    .optional(),
+  basePath: z.string().optional(),
 })
 
 export default defineEventHandler(async (event) => {
@@ -37,6 +45,8 @@ export default defineEventHandler(async (event) => {
     organisationNo: org.no,
     projectId,
     domain: body.domain,
+    env: body.env,
+    basePath: body.basePath,
   })
 
   if (updateError || !updatedProject) {

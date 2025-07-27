@@ -30,7 +30,7 @@ export default defineNuxtConfig({
   },
 
   runtimeConfig: {
-    appUrl: "http://localhost:3000",
+    appUrl: process.env.NUXT_APP_URL || "http://localhost:3000",
 
     public: {
       graphEndpoint: process.env.NUXT_PUBLIC_GRAPH_ENDPOINT,
@@ -40,12 +40,9 @@ export default defineNuxtConfig({
     oauth: {
       github: {
         clientId: process.env.NUXT_PUBLIC_GITHUB_CLIENT_ID || "",
-        redirectURL: process.env.NUXT_PUBLIC_APP_URL || "http://localhost:3000/auth/github",
+        redirectURL: process.env.NUXT_OAUTH_GITHUB_REDIRECT_URL || "http://localhost:3000/auth/github",
       },
     },
-
-    apiKey: process.env.NUXT_API_KEY || "",
-    apiUrl: process.env.NUXT_API_URL || "http://localhost:8080",
 
     githubAppId: process.env.NUXT_GITHUB_APP_ID || "",
     githubAppPrivateKey: process.env.NUXT_GITHUB_APP_PRIVATE_KEY || "",
