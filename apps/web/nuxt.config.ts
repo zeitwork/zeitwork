@@ -40,6 +40,7 @@ export default defineNuxtConfig({
     oauth: {
       github: {
         clientId: process.env.NUXT_PUBLIC_GITHUB_CLIENT_ID || "",
+        clientSecret: Buffer.from(process.env.NUXT_GITHUB_CLIENT_SECRET ?? "", "base64").toString("utf-8") ?? "",
         redirectURL: process.env.NUXT_OAUTH_GITHUB_REDIRECT_URL || "http://localhost:3000/auth/github",
       },
     },

@@ -54,10 +54,12 @@ interface AppRevision extends k8s.KubernetesObject {
 // Initialize Kubernetes client
 function getK8sClient() {
   const config = useRuntimeConfig()
+  let rawConfig = config.kubeConfig
+  let decodedConfig = Buffer.from(rawConfig, "base64").toString("utf-8")
   const kc = new k8s.KubeConfig()
 
   try {
-    kc.loadFromString(config.kubeConfig)
+    kc.loadFromString(decodedConfig)
 
     // Log cluster information for debugging (without exposing sensitive data)
     const cluster = kc.getCurrentCluster()
