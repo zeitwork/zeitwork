@@ -1,8 +1,8 @@
 <template>
   <DWrapper>
-    <div class="flex items-center justify-between py-8 px-4 md:px-8">
+    <div class="flex items-center justify-between px-4 py-8 md:px-8">
       <DLogo class="h-5 text-white md:h-6" full />
-      <div class="flex ml-4 md:ml-8 gap-1">
+      <div class="ml-4 flex gap-1 md:ml-8">
         <MarketingButton variant="secondary" to="https://github.com/zeitwork/zeitwork" target="_blank">
           <Icon name="uil:github" size="1.5em" class="md:mr-2" />
           <span class="hidden md:inline">GitHub</span>
@@ -13,7 +13,6 @@
         </MarketingButton>
         <MarketingButton variant="secondary" to="https://x.com/zeitwork" target="_blank">
           <Icon name="ri:twitter-x-fill" size="1.5em" class="md:mr-2" />
-          <span class="hidden md:inline">X</span>
         </MarketingButton>
       </div>
     </div>
