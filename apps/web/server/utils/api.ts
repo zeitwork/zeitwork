@@ -634,6 +634,92 @@ export function useZeitworkClient() {
     }
   }
 
+  interface UpdateProjectInput {
+    organisationId: string
+    organisationNo: number
+    projectId: string
+    domain?: string
+    // Add more fields here as needed for future updates
+  }
+
+  async function updateProject(options: UpdateProjectInput): Promise<ZeitworkResponse<Project>> {
+    try {
+      const { customObjectsApi } = getK8sClient()
+      const namespace = `tenant-${options.organisationNo}`
+
+      // Prepare JSON Patch operations
+      const patchOps: any[] = []
+
+      if (options.domain !== undefined) {
+        // Use "remove" operation for empty domain, "replace" or "add" for setting a domain
+        if (options.domain === "" || options.domain === null) {
+          patchOps.push({ op: "remove", path: "/spec/fqdn" })
+        } else {
+          // Try to replace first, if field doesn't exist it will fail and we'll use add
+          patchOps.push({ op: "replace", path: "/spec/fqdn", value: options.domain })
+        }
+      }
+
+      // Apply the patch using JSON Patch format
+      const patchOptions = {
+        group: "zeitwork.com",
+        version: "v1alpha1",
+        namespace,
+        plural: "apps",
+        name: options.projectId,
+        body: patchOps,
+        headers: {
+          "Content-Type": "application/json-patch+json",
+        },
+      } as any
+
+      console.log(`Patching app ${options.projectId} in namespace ${namespace} with operations:`, patchOps)
+
+      try {
+        await customObjectsApi.patchNamespacedCustomObject(patchOptions)
+      } catch (patchError: any) {
+        // If replace fails because field doesn't exist, try add operation
+        if (patchError.response?.body?.message?.includes("does not exist") && options.domain) {
+          console.log("Replace failed, trying add operation")
+          patchOps[0] = { op: "add", path: "/spec/fqdn", value: options.domain }
+          await customObjectsApi.patchNamespacedCustomObject({
+            ...patchOptions,
+            body: patchOps,
+          })
+        } else {
+          throw patchError
+        }
+      }
+
+      // Return the updated project
+      const updatedResponse = await customObjectsApi.getNamespacedCustomObject({
+        group: "zeitwork.com",
+        version: "v1alpha1",
+        namespace,
+        plural: "apps",
+        name: options.projectId,
+      })
+
+      const updatedApp = (updatedResponse.body || updatedResponse) as App
+      const project: Project = {
+        id: `${namespace}/${updatedApp.metadata?.name || ""}`,
+        k8sName: updatedApp.metadata?.name || "",
+        name: updatedApp.spec.description,
+        organisationId: options.organisationId,
+        githubOwner: updatedApp.spec.githubOwner,
+        githubRepo: updatedApp.spec.githubRepo,
+        port: updatedApp.spec.port,
+        domain: updatedApp.spec.fqdn,
+        basePath: updatedApp.spec.basePath,
+      }
+
+      return { data: project, error: null }
+    } catch (error) {
+      console.error(`Failed to update project:`, error)
+      return { data: null, error: error as Error }
+    }
+  }
+
   async function installGitHubForOrganisation(options: any): Promise<ZeitworkResponse<null>> {
     return { data: null, error: new Error("Not implemented") }
   }
@@ -724,6 +810,7 @@ export function useZeitworkClient() {
       get: getProject,
       list: listProjects,
       create: createProject,
+      update: updateProject,
     },
     deployments: {
       get: getDeployment,

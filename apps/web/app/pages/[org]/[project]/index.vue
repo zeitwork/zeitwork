@@ -7,7 +7,7 @@ const route = useRoute()
 const orgId = route.params.org
 const projectId = route.params.project
 
-const { data: project } = await useFetch(`/api/organisations/${orgId}/projects/${projectId}`)
+const { data: project, refresh } = await useFetch(`/api/organisations/${orgId}/projects/${projectId}`)
 
 const lastDeployUrl = computed(() => {
   return `https://${project.value?.latestDeploymentURL}`
@@ -16,6 +16,16 @@ const lastDeployUrl = computed(() => {
 const domains = computed(() => {
   return "app.example.com"
 })
+
+const domain = ref("")
+
+async function addDomain() {
+  await $fetch(`/api/organisations/${orgId}/projects/${projectId}`, {
+    method: "PATCH",
+    body: { domain: domain.value },
+  })
+  await refresh()
+}
 </script>
 
 <template>
@@ -39,8 +49,14 @@ const domains = computed(() => {
               <NuxtLink v-if="project.domain" :to="`https://${project.domain}`" target="_blank" external>
                 {{ project.domain }}
               </NuxtLink>
-              <div v-else>
-                <DButton variant="secondary" size="sm">Add Domain</DButton>
+              <div v-else class="flex gap-2">
+                <input
+                  v-model="domain"
+                  placeholder="example.com"
+                  type="text"
+                  class="border-neutral text-neutral rounded-md border px-2.5 py-1.5 text-sm"
+                />
+                <DButton variant="secondary" size="sm" @click="addDomain">Add Domain</DButton>
               </div>
             </div>
           </div>
