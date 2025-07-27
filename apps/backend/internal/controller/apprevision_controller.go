@@ -81,6 +81,15 @@ func (r *AppRevisionReconciler) createBuildJob(ctx context.Context, revision *v1
 		return fmt.Errorf("failed to get GitHub token for installation %d: %w", app.Spec.GithubInstallation, err)
 	}
 
+	// Determine build context and dockerfile paths based on BasePath
+	contextPath := "/workspace"
+	dockerfilePath := "/workspace"
+
+	if app.Spec.BasePath != nil && *app.Spec.BasePath != "" {
+		contextPath = fmt.Sprintf("/workspace/%s", *app.Spec.BasePath)
+		dockerfilePath = contextPath
+	}
+
 	job := &batchv1.Job{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      jobName,
@@ -120,8 +129,8 @@ func (r *AppRevisionReconciler) createBuildJob(ctx context.Context, revision *v1
 							Args: []string{
 								"build",
 								"--frontend=dockerfile.v0",
-								"--local=context=/workspace",
-								"--local=dockerfile=/workspace",
+								fmt.Sprintf("--local=context=%s", contextPath),
+								fmt.Sprintf("--local=dockerfile=%s", dockerfilePath),
 								fmt.Sprintf("--output=type=image,name=registry.zeitwork.com/%s:%s,push=true", revision.Name, revision.Spec.CommitSHA[:7]),
 								"--progress=plain",
 							},
