@@ -103,7 +103,7 @@ function head() {
 
       // Twitter
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:title", content: "Zeitwork – The fastest way to deploy and scale any application" },
+      { name: "twitter:title", content: "Zeitwork - The fastest way to deploy and scale any application" },
       {
         name: "twitter:description",
         content:
