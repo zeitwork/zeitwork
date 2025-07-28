@@ -5,6 +5,20 @@ definePageMeta({
   layout: "marketing",
 })
 
+useHead({
+  script: [
+    ...(process.env.NODE_ENV === "production"
+      ? [
+          {
+            defer: true,
+            "data-domain": "zeitwork.com",
+            src: "https://plausible.io/js/script.js",
+          },
+        ]
+      : []),
+  ],
+})
+
 const email = ref("")
 const isSuccess = ref<boolean | null>(null)
 const responseMessage = ref("")
