@@ -112,5 +112,16 @@ function head() {
       { name: "twitter:image", content: "https://zeitwork.com/og-image.png" },
       { name: "twitter:site", content: "@zeitwork" },
     ],
+    ...(process.env.NODE_ENV === "production"
+      ? {
+          script: [
+            {
+              defer: true,
+              "data-domain": "zeitwork.com",
+              src: "https://plausible.io/js/script.js",
+            },
+          ],
+        }
+      : {}),
   }
 }
