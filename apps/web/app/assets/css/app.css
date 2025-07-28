@@ -1,9 +1,9 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Inter", sans-serif;
+  --font-sans: "Inter Variable", sans-serif;
   --font-mono: "JetBrains Mono", monospace;
-  --font-display: "Satoshi", sans-serif;
+  --font-display: "Inter", sans-serif;
 
   /**
 	 * Neutral Colors
@@ -192,11 +192,11 @@
 }
 
 /* dark mode */
-@media (prefers-color-scheme: dark) {
+/* @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
   }
-}
+} */
 
 /* base */
 

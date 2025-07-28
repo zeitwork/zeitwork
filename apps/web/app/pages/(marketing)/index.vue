@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useWindowScroll } from "@vueuse/core"
+
 definePageMeta({
   layout: "marketing",
 })
@@ -29,55 +31,188 @@ async function handleSubmit() {
     isSuccess.value = false
   }
 }
+
+const { x, y } = useWindowScroll()
+
+const isAtTop = computed(() => y.value < 50)
 </script>
 
 <template>
-  <div class="min-h-screen bg-black">
-    <MarketingNavigation />
-    <DWrapper>
-      <div class="flex flex-col gap-12 py-15 md:py-42">
-        <div class="flex flex-col items-start gap-3">
-          <div
-            class="text-copy-sm mb-2.5 inline-flex rounded-full bg-green-900 px-2.5 py-1 font-bold text-green-400 uppercase"
-          >
-            Coming Soon
-          </div>
-
-          <h1 class="font-display max-w-3xl text-4xl text-white md:text-6xl">
-            The fastest way to deploy and scale any application
-          </h1>
-          <p class="max-w-xl text-neutral-400">
-            Connect your repository, and every commit triggers a new deployment. If your app has a Dockerfile, Zeitwork
-            can run it.
-          </p>
-        </div>
-        <div>
-          <form @submit.prevent="handleSubmit" class="flex flex-col gap-2">
-            <div class="flex gap-2">
-              <input
-                id="email"
-                v-model="email"
-                autocomplete="email"
-                type="email"
-                placeholder="Email"
-                class="inline-flex h-9 cursor-text items-center rounded-md border border-transparent bg-neutral-700 px-3 text-sm text-neutral-100 transition-all duration-100 select-none hover:bg-neutral-600 focus:ring-2 focus:ring-neutral-500 focus:outline-none active:bg-neutral-500"
-              />
-              <MarketingButton type="submit" variant="primary">Join waitlist</MarketingButton>
-            </div>
-            <div v-if="responseMessage" class="text-copy-sm" :class="[isSuccess ? 'text-green-400' : 'text-red-400']">
-              {{ responseMessage }}
-            </div>
-          </form>
+  <div class="min-h-screen bg-white">
+    <header
+      class="navbar fixed top-2 left-1/2 z-50 mx-auto flex w-full max-w-[78rem] -translate-x-1/2 justify-between rounded-2xl bg-white p-2 transition-all duration-300"
+      :class="isAtTop ? 'border border-transparent' : 'border border-neutral-200 shadow'"
+    >
+      <div class="flex items-center gap-4 px-2">
+        <NuxtLink to="/">
+          <Wordmark />
+        </NuxtLink>
+        <div
+          class="hidden rounded-xl border border-green-600/10 bg-green-100 px-2.5 py-1 text-sm font-medium text-green-600 md:inline"
+        >
+          coming soon
         </div>
       </div>
-    </DWrapper>
-
-    <div class="relative overflow-hidden">
-      <DWrapper class="relative z-10">
-        <div class="min-w-[900px] overflow-hidden rounded-t-xl border-x border-t border-white/30 bg-white/10 px-2 pt-2">
-          <img class="w-full rounded-t-md" src="/deployments.png" alt="" />
+      <div class="flex items-center gap-2">
+        <NuxtLink
+          to="https://discord.gg/GBgRbjMDpc"
+          target="_blank"
+          external
+          class="flex items-center justify-center rounded-lg px-2.5 py-2 hover:bg-neutral-100"
+        >
+          <Icon name="ri:discord-fill" size="1.5em" />
+        </NuxtLink>
+        <NuxtLink
+          to="https://x.com/zeitwork"
+          target="_blank"
+          external
+          class="hidden items-center justify-center rounded-lg px-2.5 py-2 hover:bg-neutral-100 md:flex"
+        >
+          <Icon name="ri:twitter-x-fill" size="1.5em" />
+        </NuxtLink>
+        <NuxtLink
+          to="https://github.com/zeitwork/zeitwork"
+          target="_blank"
+          external
+          class="flex items-center justify-center rounded-lg px-2.5 py-2 hover:bg-neutral-100"
+        >
+          <Icon name="uil:github" size="1.5em" />
+        </NuxtLink>
+        <!-- <NuxtLink
+          class="inline rounded-xl bg-neutral-100 px-4 py-2.5 text-sm text-neutral-900 outline-offset-1 hover:bg-neutral-200 focus:outline-2 active:bg-neutral-200"
+          to="/login"
+        >
+          Sign In
+        </NuxtLink>
+        <NuxtLink
+          class="inline rounded-xl bg-neutral-900 px-4 py-2.5 text-sm text-white outline-offset-1 hover:bg-neutral-800 focus:outline-2 active:bg-neutral-700"
+          to="/login"
+        >
+          Sign Up
+        </NuxtLink> -->
+      </div>
+    </header>
+    <div class="pt-24"></div>
+    <section class="px-4 py-20">
+      <div class="mx-auto mb-8 text-center"></div>
+      <h1 class="mx-auto mb-8 max-w-4xl text-center text-4xl md:text-6xl">
+        The fastest way to deploy <br class="hidden md:block" />
+        and scale <span class="font-bold">any</span> application
+      </h1>
+      <p class="mx-auto mb-10 max-w-xl text-center text-lg text-neutral-500">
+        Deploy anything with the simplicity of serverless. Connect your repo, push your code, and watch your app scale
+        automatically.
+      </p>
+      <div class="flex justify-center gap-3">
+        <form @submit.prevent="handleSubmit" class="flex w-full max-w-md flex-col justify-center gap-2">
+          <div class="flex w-full flex-col justify-center gap-2 md:flex-row">
+            <input
+              id="email"
+              v-model="email"
+              autocomplete="email"
+              type="email"
+              placeholder="Email"
+              class="inline rounded-xl bg-neutral-100 px-4 py-2.5 text-sm text-neutral-900 outline-offset-0 hover:bg-neutral-200 focus:outline-2 active:bg-neutral-200"
+            />
+            <button
+              type="submit"
+              class="inline rounded-xl bg-neutral-900 px-4 py-2.5 text-sm text-white outline-offset-1 hover:bg-neutral-800 focus:outline-2 active:bg-neutral-700"
+            >
+              Join Waitlist
+            </button>
+          </div>
+          <div
+            v-if="responseMessage"
+            class="text-copy-sm mx-auto mt-4 text-center font-medium"
+            :class="[isSuccess ? 'text-green-600' : 'text-red-600']"
+          >
+            {{ responseMessage }}
+          </div>
+        </form>
+        <!-- <NuxtLink
+          class="inline rounded-xl bg-neutral-900 px-4 py-2.5 text-sm text-white outline-offset-1 hover:bg-neutral-800 focus:outline-2 active:bg-neutral-700"
+          to="/login"
+        >
+          Start Building
+        </NuxtLink>
+        <NuxtLink
+          class="inline rounded-xl bg-neutral-100 px-4 py-2.5 text-sm text-neutral-900 outline-offset-1 hover:bg-neutral-200 focus:outline-2 active:bg-neutral-200"
+          to="/docs"
+        >
+          View Docs
+        </NuxtLink> -->
+      </div>
+    </section>
+    <section class="border-b border-neutral-200 px-4 pt-20">
+      <div class="relative">
+        <img src="/deployments-v2.png" alt="" class="mx-auto w-full max-w-7xl" />
+        <div
+          class="absolute bottom-0 left-1/2 h-40 w-full -translate-x-1/2 bg-linear-to-b from-transparent to-neutral-950/10"
+        ></div>
+      </div>
+    </section>
+    <section class="border-b border-neutral-200 px-4">
+      <div class="mx-auto max-w-7xl py-20">
+        <h2 class="mb-8 text-3xl text-neutral-900 md:text-5xl">Built for applications that don't fit in functions</h2>
+        <p class="mb-4 text-neutral-800"><strong class="font-semibold">Your app doesn't fit in a Lambda?</strong></p>
+        <p class="max-w-xl text-neutral-500">
+          Whether it's a Rails monolith, a machine learning model, a game backend, or a full-stack Next.js app.
+          Serverless platforms force you into their constraints. We don't. If it can run, it runs on Zeitwork. Full
+          stop.
+        </p>
+      </div>
+    </section>
+    <section>
+      <div class="mx-auto max-w-7xl px-4 py-20">
+        <h2 class="mb-8 text-3xl text-neutral-900 md:text-5xl">Developer experience without the limitations</h2>
+        <p class="mb-8 max-w-xl text-neutral-500">No infrastructure expertise required.</p>
+        <div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+          <div class="rounded-md border border-neutral-200">
+            <img src="/images/deploy-from-git.png" alt="" class="w-full p-6 pr-0" />
+            <div class="p-6">
+              <h3 class="mb-2 font-medium text-neutral-800">Deploy from Git</h3>
+              <p class="text-neutral-500">
+                Every commit triggers a new deployment. Branch previews, rollbacks, and deployment history included.
+              </p>
+            </div>
+          </div>
+          <div class="rounded-md border border-neutral-200 p-6">
+            <img src="/images/zero-configuration.png" alt="" class="p-6 pr-0" />
+            <h3 class="mb-2 font-medium text-neutral-800">Zero configuration</h3>
+            <p class="text-neutral-500">
+              No Dockerfile? No problem. We detect your framework and build it automatically. Bring your own Dockerfile
+              for full control.
+            </p>
+          </div>
+          <div class="rounded-md border border-neutral-200 p-6">
+            <img src="/images/auto-scaling.png" alt="" class="p-6 pr-0" />
+            <h3 class="mb-2 font-medium text-neutral-800">Auto-scaling that actually works</h3>
+            <p class="text-neutral-500">
+              Handle traffic spikes without manual intervention. Scale to zero when idle, scale to thousands when
+              needed.
+            </p>
+          </div>
+          <div class="rounded-md border border-neutral-200 p-6">
+            <h3 class="mb-2 font-medium text-neutral-800">80% cheaper than AWS</h3>
+            <p class="text-neutral-500">
+              We optimize infrastructure costs behind the scenes. You get enterprise performance at startup prices.
+            </p>
+          </div>
+          <div class="rounded-md border border-neutral-200 p-6">
+            <h3 class="mb-2 font-medium text-neutral-800">No DevOps required</h3>
+            <p class="text-neutral-500">
+              We handle all infrastructure, security patches, SSL certificates, and scaling. You just push code.
+            </p>
+          </div>
+          <div class="rounded-md border border-neutral-200 p-6">
+            <h3 class="mb-2 font-medium text-neutral-800">Full application support</h3>
+            <p class="text-neutral-500">
+              Long-running processes, background jobs, WebSockets, scheduled tasks—everything your app needs to run in
+              production.
+            </p>
+          </div>
         </div>
-      </DWrapper>
-    </div>
+      </div>
+    </section>
   </div>
 </template>
