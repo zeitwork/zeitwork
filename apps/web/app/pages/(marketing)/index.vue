@@ -177,7 +177,7 @@ const isAtTop = computed(() => y.value < 50)
             </div>
           </div>
           <div class="rounded-md border border-neutral-200 p-6">
-            <img src="/images/zero-configuration.png" alt="" class="p-6 pr-0" />
+            <img src="/images/zero-configuration.png" alt="" class="mx-auto p-6" />
             <h3 class="mb-2 font-medium text-neutral-800">Zero configuration</h3>
             <p class="text-neutral-500">
               No Dockerfile? No problem. We detect your framework and build it automatically. Bring your own Dockerfile
@@ -185,7 +185,7 @@ const isAtTop = computed(() => y.value < 50)
             </p>
           </div>
           <div class="rounded-md border border-neutral-200 p-6">
-            <img src="/images/auto-scaling.png" alt="" class="p-6 pr-0" />
+            <img src="/images/auto-scaling.png" alt="" class="mx-auto p-6" />
             <h3 class="mb-2 font-medium text-neutral-800">Auto-scaling that actually works</h3>
             <p class="text-neutral-500">
               Handle traffic spikes without manual intervention. Scale to zero when idle, scale to thousands when
