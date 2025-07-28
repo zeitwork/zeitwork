@@ -145,7 +145,7 @@ const isAtTop = computed(() => y.value < 50)
     </section>
     <section class="border-b border-neutral-200 px-4 pt-20">
       <div class="relative">
-        <img src="/deployments-v2.png" alt="" class="mx-auto w-full max-w-7xl" />
+        <img src="/deployments-v2.png" width="2400" height="1256" alt="" class="mx-auto w-full max-w-7xl" />
         <div
           class="absolute bottom-0 left-1/2 h-40 w-full -translate-x-1/2 bg-linear-to-b from-transparent to-neutral-950/10"
         ></div>
