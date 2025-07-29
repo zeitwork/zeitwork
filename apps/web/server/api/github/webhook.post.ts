@@ -5,9 +5,14 @@ import { useZeitworkClient } from "../../utils/api"
 
 // Verify GitHub webhook signature
 function verifyWebhookSignature(payload: string, signature: string, secret: string): boolean {
+  // GitHub sends the signature with "sha256=" prefix, so we need to extract just the hex part
+  const signatureHex = signature.startsWith("sha256=") ? signature.slice(7) : signature
+
   const hmac = crypto.createHmac("sha256", secret)
-  const digest = "sha256=" + hmac.update(payload).digest("hex")
-  return crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(digest))
+  const digest = hmac.update(payload).digest("hex")
+
+  // Use timingSafeEqual to prevent timing attacks
+  return crypto.timingSafeEqual(Buffer.from(signatureHex), Buffer.from(digest))
 }
 
 export default defineEventHandler(async (event) => {
