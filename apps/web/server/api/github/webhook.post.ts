@@ -1,27 +1,7 @@
 import { useDrizzle, eq } from "../../utils/drizzle"
 import * as schema from "~~/packages/database/schema"
-import crypto from "crypto"
+import { Webhooks } from "@octokit/webhooks"
 import { useZeitworkClient } from "../../utils/api"
-
-// Verify GitHub webhook signature
-function verifyWebhookSignature(payload: string, signature: string, secret: string): boolean {
-  // GitHub sends the signature with "sha256=" prefix, so we need to extract just the hex part
-  const signatureHex = signature.startsWith("sha256=") ? signature.slice(7) : signature
-
-  const hmac = crypto.createHmac("sha256", secret)
-  const digest = hmac.update(payload).digest("hex")
-
-  console.log(`[${new Date().toISOString()}] Webhook signature verification:`)
-  console.log(`  - Received signature: ${signature.substring(0, 20)}...`)
-  console.log(`  - Extracted hex: ${signatureHex.substring(0, 20)}...`)
-  console.log(`  - Computed digest: ${digest.substring(0, 20)}...`)
-  console.log(`  - Secret present: ${!!secret}`)
-  console.log(`  - Secret length: ${secret.length}`)
-  console.log(`  - Signatures match: ${signatureHex === digest}`)
-
-  // Use timingSafeEqual to prevent timing attacks
-  return crypto.timingSafeEqual(Buffer.from(signatureHex), Buffer.from(digest))
-}
 
 export default defineEventHandler(async (event) => {
   console.log(`[${new Date().toISOString()}] [POST] /api/github/webhook`)
@@ -37,7 +17,7 @@ export default defineEventHandler(async (event) => {
   }
   console.log(`[${new Date().toISOString()}] Raw body received, length: ${rawBody.length}`)
 
-  // Verify webhook signature
+  // Get signature and webhook secret
   const signature = getHeader(event, "x-hub-signature-256")
   const webhookSecret = useRuntimeConfig().githubWebhookSecret
 
@@ -52,8 +32,16 @@ export default defineEventHandler(async (event) => {
     })
   }
 
+  // Initialize webhooks with secret
+  const webhooks = new Webhooks({
+    secret: webhookSecret,
+  })
+
+  // Verify signature
   console.log(`[${new Date().toISOString()}] Starting signature verification...`)
-  if (!verifyWebhookSignature(rawBody, signature, webhookSecret)) {
+  const isValid = await webhooks.verify(rawBody, signature)
+
+  if (!isValid) {
     console.error(`[${new Date().toISOString()}] ERROR: Invalid signature`)
     throw createError({
       statusCode: 401,

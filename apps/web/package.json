@@ -14,6 +14,7 @@
     "@nuxt/fonts": "^0.11.4",
     "@nuxt/icon": "^1.15.0",
     "@nuxt/kit": "^3.17.6",
+    "@octokit/webhooks": "^14.1.1",
     "@vueuse/core": "^13.5.0",
     "@vueuse/nuxt": "^13.5.0",
     "@vueuse/router": "^13.5.0",
@@ -33,11 +34,11 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
-    "typescript": "^5.8.3",
-    "tailwindcss": "^4.1.11",
+    "@tailwindcss/vite": "^4.1.11",
     "prettier": "^3.6.2",
     "prettier-plugin-tailwindcss": "^0.6.14",
-    "@tailwindcss/vite": "^4.1.11"
+    "tailwindcss": "^4.1.11",
+    "typescript": "^5.8.3"
   },
   "trustedDependencies": [
     "@tailwindcss/oxide",
