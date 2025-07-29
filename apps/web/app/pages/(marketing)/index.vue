@@ -157,9 +157,9 @@ const isAtTop = computed(() => y.value < 50)
         </NuxtLink> -->
       </div>
     </section>
-    <section class="border-b border-neutral-200 px-4 pt-20">
+    <section class="border-b border-neutral-200 pt-20">
       <div class="relative">
-        <img src="/deployments-v2.png" width="2400" height="1256" alt="" class="mx-auto w-full max-w-7xl" />
+        <img src="/deployments-v2.png" width="2400" height="1256" alt="" class="mx-auto w-full max-w-7xl px-4" />
         <div
           class="absolute bottom-0 left-1/2 h-40 w-full -translate-x-1/2 bg-linear-to-b from-transparent to-neutral-950/10"
         ></div>
@@ -176,8 +176,8 @@ const isAtTop = computed(() => y.value < 50)
         </p>
       </div>
     </section>
-    <section>
-      <div class="mx-auto max-w-7xl px-4 py-20">
+    <section class="border-b border-neutral-200 px-4">
+      <div class="mx-auto max-w-7xl py-20">
         <h2 class="mb-8 text-3xl text-neutral-900 md:text-5xl">Developer experience without the limitations</h2>
         <p class="mb-8 max-w-xl text-neutral-500">No infrastructure expertise required.</p>
         <div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
@@ -229,8 +229,8 @@ const isAtTop = computed(() => y.value < 50)
       </div>
     </section>
     <!--  -->
-    <section>
-      <div class="mx-auto max-w-7xl px-4 py-20">
+    <section class="border-b border-neutral-200 px-4">
+      <div class="mx-auto max-w-7xl py-20">
         <h2 class="mb-8 text-3xl text-neutral-900 md:text-5xl">How it works</h2>
         <p class="mb-8 max-w-xl text-neutral-500">It's so simple that even your grandma could use it!</p>
         <div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
@@ -256,8 +256,8 @@ const isAtTop = computed(() => y.value < 50)
       </div>
     </section>
     <!--  -->
-    <section>
-      <div class="mx-auto max-w-7xl px-4 py-20">
+    <section class="border-b border-neutral-200 px-4">
+      <div class="mx-auto max-w-7xl py-20">
         <h2 class="mb-8 text-3xl text-neutral-900 md:text-5xl">Run anything, anywhere</h2>
         <p class="mb-8 max-w-xl text-neutral-500">We're serious! In fact, we will help you optimize it.</p>
         <div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
