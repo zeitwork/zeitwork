@@ -296,5 +296,41 @@ const isAtTop = computed(() => y.value < 50)
         </div>
       </div>
     </section>
+    <!--  -->
+    <section class="border-b border-neutral-200 px-4">
+      <div class="mx-auto max-w-7xl py-20">
+        <h2 class="mb-8 text-center text-3xl text-neutral-900 md:text-5xl">Ready to ship faster?</h2>
+        <p class="mx-auto mb-8 max-w-xs text-center text-neutral-500">
+          Stop wrestling with infrastructure. Stop overpaying for cloud. Start building.
+        </p>
+        <div class="flex justify-center gap-3">
+          <form @submit.prevent="handleSubmit" class="flex w-full max-w-md flex-col justify-center gap-2">
+            <div class="flex w-full flex-col justify-center gap-2 md:flex-row">
+              <input
+                id="email"
+                v-model="email"
+                autocomplete="email"
+                type="email"
+                placeholder="Email"
+                class="inline rounded-xl bg-neutral-100 px-4 py-2.5 text-sm text-neutral-900 outline-offset-0 hover:bg-neutral-200 focus:outline-2 active:bg-neutral-200"
+              />
+              <button
+                type="submit"
+                class="inline rounded-xl bg-neutral-900 px-4 py-2.5 text-sm text-white outline-offset-1 hover:bg-neutral-800 focus:outline-2 active:bg-neutral-700"
+              >
+                Join Waitlist
+              </button>
+            </div>
+            <div
+              v-if="responseMessage"
+              class="text-copy-sm mx-auto mt-4 text-center font-medium"
+              :class="[isSuccess ? 'text-green-600' : 'text-red-600']"
+            >
+              {{ responseMessage }}
+            </div>
+          </form>
+        </div>
+      </div>
+    </section>
   </div>
 </template>
