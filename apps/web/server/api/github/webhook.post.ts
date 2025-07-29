@@ -11,6 +11,14 @@ function verifyWebhookSignature(payload: string, signature: string, secret: stri
   const hmac = crypto.createHmac("sha256", secret)
   const digest = hmac.update(payload).digest("hex")
 
+  console.log(`[${new Date().toISOString()}] Webhook signature verification:`)
+  console.log(`  - Received signature: ${signature.substring(0, 20)}...`)
+  console.log(`  - Extracted hex: ${signatureHex.substring(0, 20)}...`)
+  console.log(`  - Computed digest: ${digest.substring(0, 20)}...`)
+  console.log(`  - Secret present: ${!!secret}`)
+  console.log(`  - Secret length: ${secret.length}`)
+  console.log(`  - Signatures match: ${signatureHex === digest}`)
+
   // Use timingSafeEqual to prevent timing attacks
   return crypto.timingSafeEqual(Buffer.from(signatureHex), Buffer.from(digest))
 }
@@ -21,35 +29,45 @@ export default defineEventHandler(async (event) => {
   // Get raw body for signature verification
   const rawBody = await readRawBody(event)
   if (!rawBody) {
+    console.error(`[${new Date().toISOString()}] ERROR: No body provided`)
     throw createError({
       statusCode: 400,
       statusMessage: "No body provided",
     })
   }
+  console.log(`[${new Date().toISOString()}] Raw body received, length: ${rawBody.length}`)
 
   // Verify webhook signature
   const signature = getHeader(event, "x-hub-signature-256")
   const webhookSecret = useRuntimeConfig().githubWebhookSecret
 
+  console.log(`[${new Date().toISOString()}] Signature header: ${signature ? "present" : "missing"}`)
+  console.log(`[${new Date().toISOString()}] Webhook secret: ${webhookSecret ? "configured" : "missing"}`)
+
   if (!signature || !webhookSecret) {
+    console.error(`[${new Date().toISOString()}] ERROR: Missing signature or webhook secret`)
     throw createError({
       statusCode: 401,
       statusMessage: "Missing signature or webhook secret",
     })
   }
 
+  console.log(`[${new Date().toISOString()}] Starting signature verification...`)
   if (!verifyWebhookSignature(rawBody, signature, webhookSecret)) {
+    console.error(`[${new Date().toISOString()}] ERROR: Invalid signature`)
     throw createError({
       statusCode: 401,
       statusMessage: "Invalid signature",
     })
   }
+  console.log(`[${new Date().toISOString()}] Signature verified successfully`)
 
   // Parse the webhook payload
   const payload = JSON.parse(rawBody)
   const eventType = getHeader(event, "x-github-event")
 
   console.log(`[${new Date().toISOString()}] [POST] received event: ${eventType}`)
+  console.log(`[${new Date().toISOString()}] Repository: ${payload.repository?.full_name || "unknown"}`)
 
   const db = useDrizzle()
 
