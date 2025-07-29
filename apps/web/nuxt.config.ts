@@ -58,6 +58,8 @@ export default defineNuxtConfig({
     githubAppId: process.env.NUXT_GITHUB_APP_ID || "",
     githubAppPrivateKey: process.env.NUXT_GITHUB_APP_PRIVATE_KEY || "",
 
+    githubWebhookSecret: process.env.NUXT_GITHUB_WEBHOOK_SECRET || "",
+
     kubeConfig: process.env.NUXT_KUBE_CONFIG || "",
   },
 

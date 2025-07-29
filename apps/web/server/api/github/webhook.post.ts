@@ -24,7 +24,7 @@ export default defineEventHandler(async (event) => {
 
   // Verify webhook signature
   const signature = getHeader(event, "x-hub-signature-256")
-  const webhookSecret = process.env.GITHUB_WEBHOOK_SECRET
+  const webhookSecret = useRuntimeConfig().githubWebhookSecret
 
   if (!signature || !webhookSecret) {
     throw createError({
@@ -105,9 +105,12 @@ export default defineEventHandler(async (event) => {
           })
 
           if (existingProject) {
-            // Use the existing project's port
-            port = existingProject.port
-            console.log(`Using existing project port: ${port}`)
+            useZeitworkClient().projects.deploy({
+              organisationId: organisation.id,
+              organisationNo: organisation.no,
+              projectId: projectK8sName,
+              commitSHA,
+            })
           }
         } catch (error) {
           // Project doesn't exist yet, will use default port

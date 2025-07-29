@@ -38,7 +38,7 @@ const hasGitHubInstallation = computed(() => !!organisation.value?.installationI
 // GitHub App installation URL
 const githubAppInstallUrl = computed(() => {
   const appName = "zeitwork" // Your GitHub App name
-  return `https://github.com/apps/${appName}/installations/new?state=${orgSlug.value}`
+  return `https://github.com/apps/${appName}/installations/new?state=${orgSlug.value}&redirect_uri=https://zeitwork.com/auth/github`
 })
 
 // Check for installation success message

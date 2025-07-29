@@ -228,5 +228,73 @@ const isAtTop = computed(() => y.value < 50)
         </div>
       </div>
     </section>
+    <!--  -->
+    <section>
+      <div class="mx-auto max-w-7xl px-4 py-20">
+        <h2 class="mb-8 text-3xl text-neutral-900 md:text-5xl">How it works</h2>
+        <p class="mb-8 max-w-xl text-neutral-500">It's so simple that even your grandma could use it!</p>
+        <div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+          <div class="rounded-md border border-neutral-200 p-6">
+            <h3 class="mb-2 font-medium text-neutral-800">Connect your repository</h3>
+            <p class="text-neutral-500">
+              Link your GitHub, GitLab, or Bitbucket repo. We'll detect your framework automatically.
+            </p>
+          </div>
+          <div class="rounded-md border border-neutral-200 p-6">
+            <h3 class="mb-2 font-medium text-neutral-800">Push your code</h3>
+            <p class="text-neutral-500">
+              Every push to main deploys to production. Create branches for preview environments.
+            </p>
+          </div>
+          <div class="rounded-md border border-neutral-200 p-6">
+            <h3 class="mb-2 font-medium text-neutral-800">Scale automatically</h3>
+            <p class="text-neutral-500">
+              We monitor your app and scale resources based on real usage. Pay only for what you use.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+    <!--  -->
+    <section>
+      <div class="mx-auto max-w-7xl px-4 py-20">
+        <h2 class="mb-8 text-3xl text-neutral-900 md:text-5xl">Run anything, anywhere</h2>
+        <p class="mb-8 max-w-xl text-neutral-500">We're serious! In fact, we will help you optimize it.</p>
+        <div class="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+          <div class="rounded-md border border-neutral-200 p-6">
+            <h3 class="mb-2 font-medium text-neutral-800">Web Applications</h3>
+            <p class="text-neutral-500">
+              Full-stack frameworks, APIs, microservices. If it serves HTTP, we'll scale it.
+            </p>
+          </div>
+          <div class="rounded-md border border-neutral-200 p-6">
+            <h3 class="mb-2 font-medium text-neutral-800">Background Jobs</h3>
+            <p class="text-neutral-500">Long-running processes, queue workers, scheduled tasks. They just work.</p>
+          </div>
+          <div class="rounded-md border border-neutral-200 p-6">
+            <h3 class="mb-2 font-medium text-neutral-800">Data & ML</h3>
+            <p class="text-neutral-500">
+              Jupyter notebooks, training pipelines, inference servers. GPU support coming soon.
+            </p>
+          </div>
+          <div class="rounded-md border border-neutral-200 p-6">
+            <h3 class="mb-2 font-medium text-neutral-800">Games & Real-time</h3>
+            <p class="text-neutral-500">
+              WebSocket servers, game backends, collaborative tools. Persistent connections included.
+            </p>
+          </div>
+          <div class="rounded-md border border-neutral-200 p-6">
+            <h3 class="mb-2 font-medium text-neutral-800">Internal Tools</h3>
+            <p class="text-neutral-500">Admin panels, dashboards, development environments. Secure by default.</p>
+          </div>
+          <div class="rounded-md border border-neutral-200 p-6">
+            <h3 class="mb-2 font-medium text-neutral-800">Legacy Systems</h3>
+            <p class="text-neutral-500">
+              That old Java app? The PHP monolith? If you can containerize it, we can run it.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
   </div>
 </template>
