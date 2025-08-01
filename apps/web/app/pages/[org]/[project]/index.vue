@@ -68,10 +68,9 @@ async function deployLatestCommit() {
 </script>
 
 <template>
-  <DPageWrapper>
-    <DPageTitle :title="project?.name ?? 'Project'"></DPageTitle>
+  <div class="p-4">
     <div v-if="project">
-      <div class="border-neutral mt-4 grid grid-cols-[1fr_2fr] gap-4 rounded-lg border bg-white p-4">
+      <div class="border-neutral grid grid-cols-[1fr_2fr] gap-4 rounded-lg border bg-white p-4">
         <div class="bg-neutral-subtle h-[300px] w-full rounded-md"></div>
         <div class="flex flex-col gap-2.5">
           <div class="flex flex-col gap-1.5">
@@ -119,19 +118,5 @@ async function deployLatestCommit() {
         </div>
       </div>
     </div>
-    <div class="mt-6">
-      <h2 class="mb-4 text-lg font-semibold">Environment Variables</h2>
-      <div class="border-neutral rounded-lg border bg-white p-4">
-        <DEnvVariables v-model="envVariables" />
-        <div v-if="envSaveError" class="mt-4 text-sm text-red-600">
-          {{ envSaveError }}
-        </div>
-        <div class="mt-4">
-          <DButton :loading="isSavingEnv" variant="primary" size="md" @click="saveEnvVariables">
-            Save Environment Variables
-          </DButton>
-        </div>
-      </div>
-    </div>
-  </DPageWrapper>
+  </div>
 </template>

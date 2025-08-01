@@ -54,7 +54,7 @@ const isAtTop = computed(() => y.value < 50)
 <template>
   <div class="min-h-screen bg-white">
     <header
-      class="navbar fixed top-2 left-1/2 z-50 mx-auto flex w-full max-w-[78rem] -translate-x-1/2 justify-between rounded-2xl bg-white p-2 transition-all duration-300"
+      class="navbar fixed top-2 left-1/2 z-50 mx-auto flex w-[calc(100%-2rem)] max-w-[78rem] -translate-x-1/2 justify-between rounded-2xl bg-white p-2 transition-all duration-300"
       :class="isAtTop ? 'border border-transparent' : 'border border-neutral-200 shadow'"
     >
       <div class="flex items-center gap-4 px-2">

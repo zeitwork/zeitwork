@@ -46,59 +46,54 @@ const justInstalled = computed(() => route.query.installed === "true")
 </script>
 
 <template>
-  <DPageWrapper>
-    <div class="flex flex-col gap-4 py-12">
-      <!-- Success message after installation -->
-      <div
-        v-if="justInstalled"
-        style="background: #d4edda; border: 1px solid #c3e6cb; padding: 12px; border-radius: 4px"
-      >
-        GitHub App installed successfully! You can now create projects.
-      </div>
-
-      <!-- GitHub App installation prompt -->
-      <div
-        v-if="!hasGitHubInstallation"
-        style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 16px; border-radius: 4px"
-      >
-        <h3>Install GitHub App Required</h3>
-        <p>To create and deploy projects, you need to install the Zeitwork GitHub App for this organisation.</p>
-        <a
-          :href="githubAppInstallUrl"
-          style="
-            display: inline-block;
-            margin-top: 8px;
-            padding: 8px 16px;
-            background: #24292e;
-            color: white;
-            text-decoration: none;
-            border-radius: 4px;
-          "
-        >
-          Install GitHub App
-        </a>
-      </div>
-
-      <div class="flex gap-2">
-        <DInput v-model="searchQuery" class="flex-1" placeholder="Search Projects..." />
-        <DButton :to="`/${orgSlug}/new`" :disabled="!hasGitHubInstallation">Add Project</DButton>
-      </div>
-
-      <div
-        v-if="filteredProjects && filteredProjects.length > 0"
-        class="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3"
-      >
-        <!-- <pre>{{ projects }}</pre> -->
-        <DProjectCard v-for="project in filteredProjects" :key="project.id" :project="project" />
-      </div>
-
-      <div v-else-if="hasGitHubInstallation && projects && projects.length > 0">
-        <p>No projects match your search.</p>
-      </div>
-
-      <div v-else-if="hasGitHubInstallation">
-        <p>No projects yet. Create your first project!</p>
-      </div>
+  <div class="@container flex flex-col gap-4 p-4">
+    <!-- Success message after installation -->
+    <div v-if="justInstalled" style="background: #d4edda; border: 1px solid #c3e6cb; padding: 12px; border-radius: 4px">
+      GitHub App installed successfully! You can now create projects.
     </div>
-  </DPageWrapper>
+
+    <!-- GitHub App installation prompt -->
+    <div
+      v-if="!hasGitHubInstallation"
+      style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 16px; border-radius: 4px"
+    >
+      <h3>Install GitHub App Required</h3>
+      <p>To create and deploy projects, you need to install the Zeitwork GitHub App for this organisation.</p>
+      <a
+        :href="githubAppInstallUrl"
+        style="
+          display: inline-block;
+          margin-top: 8px;
+          padding: 8px 16px;
+          background: #24292e;
+          color: white;
+          text-decoration: none;
+          border-radius: 4px;
+        "
+      >
+        Install GitHub App
+      </a>
+    </div>
+
+    <div class="flex gap-2">
+      <DInput v-model="searchQuery" class="flex-1" placeholder="Search Projects..." />
+      <DButton :to="`/${orgSlug}/new`" :disabled="!hasGitHubInstallation">Add Project</DButton>
+    </div>
+
+    <div
+      v-if="filteredProjects && filteredProjects.length > 0"
+      class="grid grid-cols-1 gap-4 @xl:grid-cols-2 @2xl:grid-cols-3 @3xl:grid-cols-4"
+    >
+      <!-- <pre>{{ projects }}</pre> -->
+      <DProjectCard v-for="project in filteredProjects" :key="project.id" :project="project" />
+    </div>
+
+    <div v-else-if="hasGitHubInstallation && projects && projects.length > 0">
+      <p>No projects match your search.</p>
+    </div>
+
+    <div v-else-if="hasGitHubInstallation">
+      <p>No projects yet. Create your first project!</p>
+    </div>
+  </div>
 </template>

@@ -44,7 +44,7 @@ const formattedDate = computed(() => {
 <template>
   <NuxtLink
     :to="`/${orgName}/${project.k8sName}`"
-    class="bg-neutral border-neutral text-copy hover:border-neutral-strong/20 flex flex-col items-start gap-2 rounded-lg border p-4 shadow-md hover:shadow-lg"
+    class="bg-neutral border-neutral text-copy hover:border-neutral-strong/20 flex flex-col items-start gap-2 rounded-lg border p-4 shadow-sm transition-all hover:shadow"
   >
     <div class="flex items-center gap-2">
       <img

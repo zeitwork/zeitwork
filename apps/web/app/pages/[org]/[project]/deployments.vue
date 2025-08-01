@@ -73,23 +73,39 @@ const getDeploymentStatus = (deployment: any) => {
 const getDeploymentUrl = (previewURL: string) => {
   return `https://${previewURL}`
 }
+
+const isDeployingLatestCommit = ref(false)
+
+async function deployLatestCommit() {
+  isDeployingLatestCommit.value = true
+  try {
+    await $fetch(`/api/organisations/${orgId}/projects/${projectId}/deploy`, {
+      method: "POST",
+    })
+    await refresh()
+  } catch (error) {
+    console.error("Failed to deploy latest commit:", error)
+  }
+  isDeployingLatestCommit.value = false
+}
 </script>
 
 <template>
-  <DPageWrapper>
-    <DPageTitle :title="`${project?.name} Deployments`" size="sm">
+  <div class="p-4">
+    <!-- <DPageTitle :title="`${project?.name} Deployments`" size="sm">
       <template #subtitle>
         <p class="text-neutral-subtle text-copy">
           Deployments are automatically created from commits to your GitHub repository
         </p>
       </template>
       <DButton @click="refresh" :loading="pending">Refresh</DButton>
-    </DPageTitle>
+    </DPageTitle> -->
 
-    <div class="mt-4 flex flex-col gap-4">
+    <div class="flex flex-col gap-4">
       <!-- Search bar -->
-      <div class="mb-8">
-        <DInput v-model="searchQuery" placeholder="Search deployments by ID or URL..." class="max-w-lg" />
+      <div class="flex w-full items-center justify-between gap-2">
+        <DInput v-model="searchQuery" placeholder="Search deployments by ID or URL..." class="w-full max-w-lg" />
+        <DButton @click="deployLatestCommit" :loading="isDeployingLatestCommit">Deploy latest commit</DButton>
       </div>
 
       <!-- Deployments list -->
@@ -158,5 +174,5 @@ const getDeploymentUrl = (previewURL: string) => {
         </div>
       </div>
     </div>
-  </DPageWrapper>
+  </div>
 </template>

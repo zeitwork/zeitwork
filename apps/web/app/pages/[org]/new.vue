@@ -200,14 +200,11 @@ async function handleSubmit(event: Event) {
 </script>
 
 <template>
-  <DPageWrapper>
-    <div class="flex flex-col gap-4 py-12">
+  <div class="p-8">
+    <div class="flex flex-col gap-4">
       <h1 class="text-title-md">Create New Project</h1>
 
-      <form
-        @submit="handleSubmit"
-        class="bg-neutral border-neutral flex flex-col gap-4 rounded-lg border p-4 shadow-sm"
-      >
+      <form @submit="handleSubmit" class="flex flex-col gap-4 rounded-lg">
         <div class="flex flex-col gap-1.5">
           <label for="name">Project Name</label>
           <input
@@ -373,5 +370,5 @@ async function handleSubmit(event: Event) {
         </div>
       </form>
     </div>
-  </DPageWrapper>
+  </div>
 </template>
