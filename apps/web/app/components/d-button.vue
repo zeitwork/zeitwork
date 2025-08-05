@@ -66,7 +66,7 @@ const isLoading = refDebounced(toRef(props, "loading"), 100)
     :is="to ? NuxtLink : 'button'"
     :type
     :to
-    class="relative flex min-w-7 cursor-default items-center justify-center gap-2 rounded-md text-sm ring-blue-600 outline-none select-none focus-visible:ring-2 focus-visible:ring-offset-2"
+    class="relative flex min-w-7 min-w-fit cursor-default items-center justify-center gap-2 rounded-md text-sm whitespace-pre ring-blue-600 outline-none select-none focus-visible:ring-2 focus-visible:ring-offset-2"
     :class="[sizeClass, variantClasses[variant], disabled ? 'pointer-events-none opacity-50' : '']"
     :disabled
   >

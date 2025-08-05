@@ -82,7 +82,7 @@ const justInstalled = computed(() => route.query.installed === "true")
 
     <div
       v-if="filteredProjects && filteredProjects.length > 0"
-      class="grid grid-cols-1 gap-4 @xl:grid-cols-2 @2xl:grid-cols-3 @3xl:grid-cols-4"
+      class="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4"
     >
       <!-- <pre>{{ projects }}</pre> -->
       <DProjectCard v-for="project in filteredProjects" :key="project.id" :project="project" />

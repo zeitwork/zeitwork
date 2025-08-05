@@ -63,7 +63,7 @@ const formattedDate = computed(() => {
         {{ project.githubOwner }}/{{ project.githubRepo }}
       </a>
     </div>
-    <p class="text-neutral-subtle line-clamp-1">{{ placeholderData.commitMessage }}</p>
+    <p class="text-neutral-subtle line-clamp-1 text-sm">{{ placeholderData.commitMessage }}</p>
     <div class="text-neutral-subtle text-copy-sm flex items-center gap-1">
       <p>{{ formattedDate }}</p>
       <p>on</p>
