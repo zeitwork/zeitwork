@@ -1,6 +1,6 @@
 # Use the official Node.js image
 # See available tags at https://hub.docker.com/r/oven/bun/tags
-FROM oven/bun:1 AS base
+FROM oven/bun:1-slim AS base
 WORKDIR /usr/src/app
 
 # Install dependencies in a separate layer for better caching
@@ -15,7 +15,7 @@ COPY --from=install /temp/dev/node_modules node_modules
 COPY . .
 
 # Build the project
-RUN npm run build
+RUN bun run build
 
 # Prepare the final production image
 FROM base AS release
