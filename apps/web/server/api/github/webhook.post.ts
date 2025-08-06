@@ -49,6 +49,29 @@ export default defineEventHandler(async (event) => {
     case "installation":
       if (payload.action === "created") {
         log(`GitHub App installed: ${payload.installation.id}`)
+        // 1. look up the organisation, update the organisation with the installation ID
+        const githubLogin = payload.installation.account.login.toLowerCase()
+
+        // Look up the organization by slug (which should match the GitHub login)
+        const [organisation] = await db
+          .select()
+          .from(schema.organisations)
+          .where(eq(schema.organisations.slug, githubLogin))
+          .limit(1)
+
+        if (organisation) {
+          // Update the organization with the installation ID
+          await db
+            .update(schema.organisations)
+            .set({ installationId: payload.installation.id })
+            .where(eq(schema.organisations.id, organisation.id))
+
+          log(
+            `Updated organisation ${organisation.name} (${organisation.slug}) with installation ID ${payload.installation.id}`,
+          )
+        } else {
+          log(`Organisation not found for GitHub account: ${githubLogin}`)
+        }
       } else if (payload.action === "deleted") {
         // Remove installation ID from all organisations that have it
         await db
