@@ -1,13 +1,13 @@
 # Use the official Node.js image
-# See available tags at https://hub.docker.com/_/node
-FROM node:23-alpine AS base
+# See available tags at https://hub.docker.com/r/oven/bun/tags
+FROM oven/bun:1 AS base
 WORKDIR /usr/src/app
 
 # Install dependencies in a separate layer for better caching
 FROM base AS install
 RUN mkdir -p /temp/dev
 COPY package.json /temp/dev/
-RUN cd /temp/dev && npm install
+RUN cd /temp/dev && bun install
 
 # Copy dependencies and source code
 FROM base AS prerelease
