@@ -9,7 +9,7 @@ export default defineNuxtConfig({
     head: head(),
   },
 
-  compatibilityDate: "2025-07-01",
+  compatibilityDate: "latest",
   future: { compatibilityVersion: 4 },
   fonts: {
     experimental: { disableLocalFallbacks: true },
