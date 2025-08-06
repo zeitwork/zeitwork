@@ -10,7 +10,7 @@ WORKDIR /usr/src/app
 # Install dependencies in a separate layer for better caching
 FROM base AS install
 RUN mkdir -p /temp/dev
-COPY bun.lock /temp/dev/
+COPY package.json bun.lock /temp/dev/
 RUN cd /temp/dev && bun install
 
 # Copy dependencies and source code
@@ -25,6 +25,7 @@ RUN bun run build
 FROM base AS release
 COPY --from=install /temp/dev/node_modules node_modules
 COPY --from=prerelease /usr/src/app/.output .output
+COPY --from=prerelease /usr/src/app/package.json .
 COPY --from=prerelease /usr/src/app/bun.lock .
 
 # Run the app
