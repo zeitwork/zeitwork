@@ -116,7 +116,19 @@ async function ensureNamespace(organisationNo: number): Promise<void> {
     await coreV1Api.readNamespace({ name: namespaceName })
     console.log(`Namespace ${namespaceName} already exists`)
   } catch (error: any) {
-    if (error.response?.statusCode === 404) {
+    // Check for 404 in multiple possible locations in the error object
+    const is404 =
+      error.response?.statusCode === 404 ||
+      error.statusCode === 404 ||
+      error.body?.code === 404 ||
+      error.code === 404 ||
+      (error.response?.body && typeof error.response.body === "object" && error.response.body.code === 404) ||
+      (error.response?.body && typeof error.response.body === "string" && error.response.body.includes('"code":404')) ||
+      (error.message && error.message.includes("404")) ||
+      (error.message && error.message.includes("not found")) ||
+      error.response?.body?.reason === "NotFound"
+
+    if (is404) {
       // Namespace doesn't exist, create it
       console.log(`Creating namespace ${namespaceName}`)
       const namespace: k8s.V1Namespace = {
@@ -132,10 +144,16 @@ async function ensureNamespace(organisationNo: number): Promise<void> {
         console.log(`Namespace ${namespaceName} created successfully`)
       } catch (createError: any) {
         console.error(`Failed to create namespace ${namespaceName}:`, createError.response?.body || createError)
+        console.error(`Create error details:`, {
+          statusCode: createError.response?.statusCode || createError.statusCode,
+          body: createError.response?.body || createError.body,
+          message: createError.message,
+        })
         throw new Error(`Failed to create namespace: ${createError.response?.body?.message || createError.message}`)
       }
     } else {
       console.error(`Failed to check namespace ${namespaceName}:`, error.response?.body || error)
+      console.error(`Full error object:`, JSON.stringify(error, null, 2))
       throw new Error(`Failed to check namespace: ${error.response?.body?.message || error.message}`)
     }
   }
