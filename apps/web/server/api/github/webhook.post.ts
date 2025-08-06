@@ -1,70 +1,54 @@
-import { useDrizzle, eq } from "../../utils/drizzle"
+import { useDrizzle, eq } from "~~/server/utils/drizzle"
 import * as schema from "~~/packages/database/schema"
 import { Webhooks } from "@octokit/webhooks"
-import { useZeitworkClient } from "../../utils/api"
+import { useZeitworkClient } from "~~/server/utils/api"
+
+const DEFAULT_PORT = 3000
 
 export default defineEventHandler(async (event) => {
-  console.log(`[${new Date().toISOString()}] [POST] /api/github/webhook`)
-
   // Get raw body for signature verification
   const rawBody = await readRawBody(event)
   if (!rawBody) {
-    console.error(`[${new Date().toISOString()}] ERROR: No body provided`)
     throw createError({
       statusCode: 400,
       statusMessage: "No body provided",
     })
   }
-  console.log(`[${new Date().toISOString()}] Raw body received, length: ${rawBody.length}`)
 
-  // Get signature and webhook secret
+  // Verify webhook signature
   const signature = getHeader(event, "x-hub-signature-256")
   const webhookSecret = useRuntimeConfig().githubWebhookSecret
 
-  console.log(`[${new Date().toISOString()}] Signature header: ${signature ? "present" : "missing"}`)
-  console.log(`[${new Date().toISOString()}] Webhook secret: ${webhookSecret ? "configured" : "missing"}`)
-
   if (!signature || !webhookSecret) {
-    console.error(`[${new Date().toISOString()}] ERROR: Missing signature or webhook secret`)
     throw createError({
       statusCode: 401,
       statusMessage: "Missing signature or webhook secret",
     })
   }
 
-  // Initialize webhooks with secret
-  const webhooks = new Webhooks({
-    secret: webhookSecret,
-  })
-
-  // Verify signature
-  console.log(`[${new Date().toISOString()}] Starting signature verification...`)
+  const webhooks = new Webhooks({ secret: webhookSecret })
   const isValid = await webhooks.verify(rawBody, signature)
 
   if (!isValid) {
-    console.error(`[${new Date().toISOString()}] ERROR: Invalid signature`)
     throw createError({
       statusCode: 401,
       statusMessage: "Invalid signature",
     })
   }
-  console.log(`[${new Date().toISOString()}] Signature verified successfully`)
 
   // Parse the webhook payload
   const payload = JSON.parse(rawBody)
   const eventType = getHeader(event, "x-github-event")
 
-  console.log(`[${new Date().toISOString()}] [POST] received event: ${eventType}`)
-  console.log(`[${new Date().toISOString()}] Repository: ${payload.repository?.full_name || "unknown"}`)
+  log(`Received ${eventType} event for ${payload.repository?.full_name || "unknown"}`)
 
   const db = useDrizzle()
+  const client = useZeitworkClient()
 
   switch (eventType) {
     case "installation":
-      // Handle installation created/deleted
       if (payload.action === "created") {
-        // Installation was created - user will be redirected to our install endpoint
-        console.log("GitHub App installed:", payload.installation.id)
+        log(`GitHub App installed: ${payload.installation.id}`)
       } else if (payload.action === "deleted") {
         // Remove installation ID from all organisations that have it
         await db
@@ -72,17 +56,15 @@ export default defineEventHandler(async (event) => {
           .set({ installationId: null })
           .where(eq(schema.organisations.installationId, payload.installation.id))
 
-        console.log("GitHub App uninstalled:", payload.installation.id)
+        log(`GitHub App uninstalled: ${payload.installation.id}`)
       }
       break
 
     case "installation_repositories":
-      // Handle repository access changes
-      console.log("Repository access changed:", payload)
+      log(`Repository access changed for installation ${payload.installation.id}`)
       break
 
     case "push":
-      // Handle push events (new commits)
       try {
         // Find the organization by installation ID
         const [organisation] = await db
@@ -92,23 +74,18 @@ export default defineEventHandler(async (event) => {
           .limit(1)
 
         if (!organisation) {
-          console.log("Organisation not found for installation ID:", payload.installation.id)
+          log(`Organisation not found for installation ID: ${payload.installation.id}`)
           return { received: true }
         }
 
-        // Extract repository information from the webhook payload
+        // Extract repository information
         const githubOwner = payload.repository.owner.login
         const githubRepo = payload.repository.name
         const commitSHA = payload.after // The SHA of the most recent commit after the push
-
-        // Try to get existing project to check its port
-        let port = 3000 // Default port
-        const client = useZeitworkClient()
-
-        // The project ID in Kubernetes is based on the GitHub repository ID
         const projectK8sName = `repo-${payload.repository.id}`
 
         try {
+          // Check if project exists
           const { data: existingProject } = await client.projects.get({
             organisationId: organisation.id,
             organisationNo: organisation.no,
@@ -116,42 +93,50 @@ export default defineEventHandler(async (event) => {
           })
 
           if (existingProject) {
-            useZeitworkClient().projects.deploy({
+            // Deploy the existing project with new commit
+            await client.projects.deploy({
               organisationId: organisation.id,
               organisationNo: organisation.no,
               projectId: projectK8sName,
               commitSHA,
             })
+            log(`Deployed existing project ${projectK8sName} with commit ${commitSHA}`)
           }
         } catch (error) {
-          // Project doesn't exist yet, will use default port
-          console.log(`Project ${projectK8sName} not found, using default port: ${port}`)
-        }
+          // Project doesn't exist, create it
+          const { data, error: createError } = await client.projects.create({
+            organisationId: organisation.id,
+            name: payload.repository.name,
+            githubOwner,
+            githubRepo,
+            port: DEFAULT_PORT,
+            desiredRevisionSHA: commitSHA,
+          })
 
-        // Create or update the project with the new commit SHA
-        const { data, error } = await client.projects.create({
-          organisationId: organisation.id,
-          name: payload.repository.name, // Use repo name as project name
-          githubOwner,
-          githubRepo,
-          port,
-          desiredRevisionSHA: commitSHA,
-        })
-
-        if (error) {
-          console.error("Failed to create/update project:", error)
-        } else {
-          console.log(`Push event processed: ${githubOwner}/${githubRepo} with commit ${commitSHA}`)
+          if (createError) {
+            logError(`Failed to create project ${projectK8sName}`, createError)
+          } else {
+            log(`Created new project ${projectK8sName} with commit ${commitSHA}`)
+          }
         }
       } catch (error) {
-        console.error("Error handling push event:", error)
+        logError("Error handling push event", error)
       }
       break
 
     default:
-      console.log(`Unhandled webhook event: ${eventType}`)
+      log(`Unhandled webhook event: ${eventType}`)
   }
 
   // Always return 200 to acknowledge receipt
   return { received: true }
 })
+
+// Simple logger helper
+function log(message: string) {
+  return console.log(`[GitHub Webhook] ${message}`)
+}
+
+function logError(message: string, error?: any) {
+  console.error(`[GitHub Webhook] ERROR: ${message}`, error || "")
+}
