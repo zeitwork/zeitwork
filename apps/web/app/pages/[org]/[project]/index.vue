@@ -18,6 +18,7 @@ const domains = computed(() => {
 })
 
 const domain = ref("")
+const isEditingDomain = ref(false)
 const envVariables = ref<Array<{ name: string; value: string }>>([])
 const isSavingEnv = ref(false)
 const envSaveError = ref<string | null>(null)
@@ -28,6 +29,28 @@ async function addDomain() {
     body: { domain: domain.value },
   })
   await refresh()
+  domain.value = ""
+  isEditingDomain.value = false
+}
+
+async function updateDomain() {
+  await $fetch(`/api/organisations/${orgId}/projects/${projectId}`, {
+    method: "PATCH",
+    body: { domain: domain.value },
+  })
+  await refresh()
+  domain.value = ""
+  isEditingDomain.value = false
+}
+
+function startEditingDomain() {
+  domain.value = project.value?.domain || ""
+  isEditingDomain.value = true
+}
+
+function cancelEditingDomain() {
+  domain.value = ""
+  isEditingDomain.value = false
 }
 
 async function saveEnvVariables() {
@@ -84,9 +107,22 @@ async function deployLatestCommit() {
           <div class="flex flex-col gap-1.5">
             <div class="text-neutral-subtle text-sm font-medium">Domain</div>
             <div class="text-neutral">
-              <NuxtLink v-if="project.domain" :to="`https://${project.domain}`" target="_blank" external>
-                {{ project.domain }}
-              </NuxtLink>
+              <div v-if="project.domain && !isEditingDomain" class="flex items-center gap-2">
+                <NuxtLink :to="`https://${project.domain}`" target="_blank" external>
+                  {{ project.domain }}
+                </NuxtLink>
+                <DButton variant="secondary" size="sm" @click="startEditingDomain">Edit</DButton>
+              </div>
+              <div v-else-if="isEditingDomain" class="flex gap-2">
+                <input
+                  v-model="domain"
+                  placeholder="example.com"
+                  type="text"
+                  class="border-neutral text-neutral rounded-md border px-2.5 py-1.5 text-sm"
+                />
+                <DButton variant="secondary" size="sm" @click="updateDomain">Update</DButton>
+                <DButton variant="secondary" size="sm" @click="cancelEditingDomain">Cancel</DButton>
+              </div>
               <div v-else class="flex gap-2">
                 <input
                   v-model="domain"
