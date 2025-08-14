@@ -8,6 +8,27 @@
       "when": 1754038554902,
       "tag": "0000_minor_la_nuit",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1754922857961,
+      "tag": "0001_tranquil_salo",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1754922905082,
+      "tag": "0002_tough_kid_colt",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1754922928915,
+      "tag": "0003_uneven_ultimatum",
+      "breakpoints": true
     }
   ]
 }

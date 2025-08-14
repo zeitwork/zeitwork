@@ -1,0 +1,1 @@
+ALTER TABLE "organisations" DROP CONSTRAINT "organisations_no_unique";
