@@ -88,6 +88,13 @@ export default defineEventHandler(async (event) => {
       break
 
     case "push":
+      // Only deploy pushes to the main branch
+      const branch = payload.ref?.replace("refs/heads/", "")
+      if (branch !== "main") {
+        log(`Skipping deployment for push to branch: ${branch}`)
+        return { received: true }
+      }
+
       try {
         // Find the organization by installation ID
         const [organisation] = await db

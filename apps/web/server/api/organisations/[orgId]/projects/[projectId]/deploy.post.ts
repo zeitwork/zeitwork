@@ -45,6 +45,14 @@ export default defineEventHandler(async (event) => {
     // Get repository info from GitHub
     const repoInfo = await getRepository(org.installationId, project.githubOwner, project.githubRepo)
 
+    // Only deploy from the main branch
+    if (repoInfo.defaultBranch !== "main") {
+      throw createError({
+        statusCode: 400,
+        message: `Deployments are only allowed from the main branch. Current default branch is: ${repoInfo.defaultBranch}`,
+      })
+    }
+
     // Get the latest commit SHA from the default branch
     const latestCommitSHA = await getLatestCommitSHA(
       org.installationId,
