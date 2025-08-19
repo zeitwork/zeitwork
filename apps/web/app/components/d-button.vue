@@ -9,23 +9,21 @@ interface Props {
   variant?: "primary" | "secondary" | "tertiary" | "danger" | "danger-light" | "transparent" | "outline"
   iconLeft?: Component
   to?: any
-  size?: "xs" | "sm" | "md" | "lg"
+  size?: "xs" | "sm" | "md"
   type?: "submit" | "button"
   loading?: boolean
   disabled?: boolean
 }
 
 const props = defineProps<Props>()
-const { variant = "primary", size = "lg", type = "button", loading = false } = props
+const { variant = "primary", size = "md", type = "button", loading = false } = props
 
 const variantClasses: { [key: string]: string } = {
-  primary:
-    "bg-neutral-inverse text-neutral-inverse hover:bg-neutral-inverse-hover active:bg-neutral-inverse-hover border border-transparent",
-  secondary: "bg-neutral-100 text-neutral-700 hover:bg-neutral-200 active:bg-neutral-300 border border-transparent",
-  tertiary: "bg-purple-100 text-purple-700 hover:bg-purple-200 border border-transparent",
+  primary: "bg-surface text-neutral hover:bg-surface-subtle border border-neutral shadow-xs",
+  secondary: "bg-neutral-subtle text-neutral hover:bg-neutral-strong active:bg-neutral border border-transparent",
+  transparent: "text-neutral-700 hover:bg-neutral-subtle active:bg-neutral-strong border border-transparent",
   danger: "bg-red-700 text-white hover:bg-red-600 border border-transparent",
   "danger-light": "text-red-700 bg-red-100 hover:bg-red-200 active:bg-red-300 border border-transparent",
-  transparent: "text-neutral-700 hover:bg-neutral-950/5 active:bg-neutral-200 border border-transparent",
   outline: "text-neutral-600 border border-neutral-100 hover:bg-neutral-50 active:bg-neutral-100",
 }
 
@@ -33,21 +31,18 @@ const paddingClasses: { [key: string]: string } = {
   xs: "px-2",
   sm: "px-3",
   md: "px-3",
-  lg: "px-4",
 }
 
 const heightClasses: { [key: string]: string } = {
   xs: "h-6",
   sm: "h-7",
   md: "h-8",
-  lg: "h-9",
 }
 
 const widthClasses: { [key: string]: string } = {
   xs: "w-5",
   sm: "w-7",
   md: "w-8",
-  lg: "w-9",
 }
 
 const sizeClass = computed(() => {

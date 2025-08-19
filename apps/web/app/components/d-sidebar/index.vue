@@ -15,7 +15,7 @@ const { links } = defineProps<Props>()
 </script>
 
 <template>
-  <div class="h-screen w-[300px]">
+  <div class="h-screen w-[210px]">
     <div class="flex h-14 items-center px-6">
       <NuxtLink :to="`/${orgSlug}`" class="flex items-center gap-4">
         <d-logo />

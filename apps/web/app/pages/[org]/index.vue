@@ -1,4 +1,11 @@
 <script setup lang="ts">
+definePageMeta({
+  layoutTransition: {
+    name: "layout-forward",
+    mode: "out-in",
+  },
+})
+
 const route = useRoute()
 const orgSlug = computed<string>(() => route.params.org as string)
 
@@ -77,7 +84,8 @@ const justInstalled = computed(() => route.query.installed === "true")
 
     <div class="flex gap-2">
       <DInput v-model="searchQuery" class="flex-1" placeholder="Search Projects..." />
-      <DButton :to="`/${orgSlug}/new`" :disabled="!hasGitHubInstallation">Add Project</DButton>
+      <!-- <DButton :to="`/${orgSlug}/new`" :disabled="!hasGitHubInstallation">Add Project</DButton> -->
+      <DButton :to="`/${orgSlug}/new`">Add Project</DButton>
     </div>
 
     <div

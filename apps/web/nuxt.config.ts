@@ -7,6 +7,7 @@ export default defineNuxtConfig({
 
   app: {
     head: head(),
+    layoutTransition: { name: "layout-forward", mode: "out-in" },
   },
 
   compatibilityDate: "latest",

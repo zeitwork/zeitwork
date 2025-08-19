@@ -19,15 +19,16 @@ const isActive = computed(() => {
 </script>
 
 <template>
-  <NuxtLink
-    class="block rounded-lg border px-3 py-2 text-sm"
-    :class="[
-      isActive
-        ? 'border-neutral-200 bg-white text-neutral-700 shadow-sm'
-        : 'border-transparent text-neutral-500 hover:bg-neutral-100',
-    ]"
-    :to="to"
-  >
-    {{ name }}
+  <NuxtLink class="group relative flex h-8 items-center px-3 text-sm" :to="to">
+    <div
+      class="bg-surface-strong absolute rounded-lg transition-all group-active:inset-[-1px]"
+      :class="[isActive ? 'inset-0 opacity-100' : 'inset-1 opacity-0 group-hover:inset-0 group-hover:opacity-100']"
+    ></div>
+    <div
+      class="z-10 transition-all"
+      :class="[isActive ? 'text-neutral' : 'text-neutral-subtle group-hover:text-neutral']"
+    >
+      {{ name }}
+    </div>
   </NuxtLink>
 </template>
