@@ -24,7 +24,7 @@ defineProps<Props>()
     <div class="z-10 flex w-full items-center">
       <div class="flex flex-1 items-center gap-2 overflow-hidden whitespace-nowrap">
         <slot name="leading"></slot>
-        <div class="truncate">
+        <div class="truncate py-0.5">
           <slot>{{ label }}</slot>
         </div>
       </div>

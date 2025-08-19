@@ -64,7 +64,7 @@ export default defineNuxtConfig({
     kubeConfig: process.env.NUXT_KUBE_CONFIG || "",
   },
 
-  modules: ["@nuxt/icon", "@nuxt/fonts", "nuxt-auth-utils"],
+  modules: ["@nuxt/icon", "@nuxt/fonts", "nuxt-auth-utils", "motion-v/nuxt"],
 })
 
 function head() {
