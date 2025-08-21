@@ -1,0 +1,51 @@
+# Firecracker Manager Configuration
+# This file contains the configuration for connecting to your server
+
+server:
+  # Used to configure proper root access on the server
+  user: "tom"
+
+  # The IP address or hostname of your Ubuntu server
+  host: "192.168.178.33"
+
+  # SSH port (default is 22)
+  port: 22
+
+  # Optional: Override the default SSH key path
+  # If not specified, uses ~/.ssh/firecracker_manager_rsa
+  # ssh_key_path: "/path/to/custom/key"
+
+# Firecracker VM Configuration (optional)
+vm:
+  # Number of vCPUs for the VM
+  vcpu_count: 1
+
+  # Memory size in MiB
+  memory_mib: 128
+
+  # Kernel image URL (optional, uses default if not specified)
+  # kernel_url: "https://s3.amazonaws.com/spec.ccfc.min/firecracker-ci/v1.5/x86_64/vmlinux-5.10.186"
+
+# Software Versions Configuration
+# Set to "latest" to automatically fetch and use the latest stable version
+# Or specify a specific version like "v1.6.0" or "1.6.0"
+versions:
+  # Firecracker microVM version
+  # Latest stable as of 2024: v1.6.0
+  firecracker: "latest"
+
+  # containerd container runtime version
+  # Latest stable as of 2024: v2.0.0
+  containerd: "latest"
+
+  # runc OCI runtime version
+  # Latest stable as of 2024: v1.1.14
+  runc: "latest"
+
+  # CNI plugins version for container networking
+  # Latest stable as of 2024: v1.5.1
+  cni_plugins: "latest"
+
+  # Go programming language version (for building firecracker-containerd)
+  # Latest stable as of 2024: 1.23.0
+  go: "1.25.0"
