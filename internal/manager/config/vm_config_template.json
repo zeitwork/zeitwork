@@ -1,0 +1,25 @@
+{
+    "boot-source": {
+        "kernel_image_path": "{{KERNEL_PATH}}",
+        "boot_args": "console=ttyS0 reboot=k panic=1 pci=off init={{INIT_PATH}}"
+    },
+    "drives": [
+        {
+            "drive_id": "rootfs",
+            "path_on_host": "{{ROOTFS_PATH}}",
+            "is_root_device": true,
+            "is_read_only": false
+        }
+    ],
+    "machine-config": {
+        "vcpu_count": {{VCPU_COUNT}},
+        "mem_size_mib": {{MEMORY_MIB}}
+    },
+    "network-interfaces": [],
+    "logger": {
+        "log_path": "{{LOG_PATH}}"
+    },
+    "metrics": {
+        "metrics_path": "{{METRICS_PATH}}"
+    }
+}
