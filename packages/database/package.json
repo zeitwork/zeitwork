@@ -3,6 +3,13 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio",
+    "db:check": "drizzle-kit check"
+  },
   "devDependencies": {
     "@types/bun": "latest"
   },
@@ -12,6 +19,7 @@
   "dependencies": {
     "drizzle-kit": "^0.31.4",
     "drizzle-orm": "^0.44.4",
+    "postgres": "^3.4.7",
     "uuidv7": "^1.0.2"
   }
 }

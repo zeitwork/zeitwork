@@ -28,7 +28,7 @@ export const instances = pgTable("instances", {
   state: text().notNull(), // pending, starting, running, stopping, stopped, failed, terminated
   resources: jsonb().notNull(), // { vcpu: 1, memory: 1024 }
   defaultPort: integer().notNull(),
-  ipAddress: text().notNull(),
+  ipAddress: text().notNull(), // ipv6 address
   environmentVariables: text().notNull(), // { key: "value" }
   ...timestamps,
 });
