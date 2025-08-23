@@ -1,0 +1,38 @@
+[Unit]
+Description=Zeitwork Node Agent Service
+Documentation=https://github.com/zeitwork/zeitwork
+After=network.target
+Requires=network.target
+
+[Service]
+Type=simple
+# Node agent needs root for VM management
+User=root
+Group=root
+WorkingDirectory=/var/lib/zeitwork
+
+# Environment file contains configuration
+EnvironmentFile=/etc/zeitwork/node-agent.env
+
+# Start the service
+ExecStart=/usr/local/bin/zeitwork-node-agent
+
+# Restart policy
+Restart=always
+RestartSec=10
+
+# Security settings (limited due to root requirement)
+NoNewPrivileges=false
+PrivateTmp=false
+
+# Resource limits
+LimitNOFILE=1048576
+LimitNPROC=32768
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=zeitwork-node-agent
+
+[Install]
+WantedBy=multi-user.target
