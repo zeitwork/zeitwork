@@ -10,6 +10,7 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "drizzle-kit": "^0.31.4",
     "drizzle-orm": "^0.44.4",
     "uuidv7": "^1.0.2"
   }
