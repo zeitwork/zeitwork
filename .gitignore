@@ -1,0 +1,181 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Go specific
+/vendor/
+go.sum.local
+*.test
+*.out
+coverage.txt
+coverage.html
+*.prof
+*.log
+
+# Build directories
+/bin/
+/dist/
+/build/
+/tmp/
+
+# Compiled binaries
+/cmd/edge-proxy/edge-proxy
+/cmd/load-balancer/load-balancer
+/cmd/node-agent/node-agent
+/cmd/operator/operator
+
+# Node.js / TypeScript
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.npm
+.yarn
+.pnp.*
+.yarn-integrity
+
+# TypeScript cache
+*.tsbuildinfo
+.tsc-cache/
+
+# Build outputs
+dist/
+build/
+out/
+.next/
+.nuxt/
+.cache/
+.parcel-cache/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+.env.development
+.env.test
+.env.production
+*.env
+!deployments/config/*.env
+
+# IDE - VSCode
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+*.code-workspace
+
+# IDE - IntelliJ / GoLand
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# IDE - Cursor
+.cursor/
+
+# OS Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+*~
+*.swp
+*.swo
+*.swn
+.directory
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+*.sql.go.backup
+
+# Firecracker / VM related
+*.img
+*.qcow2
+*.vmdk
+*.rootfs
+*.ext4
+firecracker-*
+/kernel/
+/images/
+
+# Terraform
+*.tfstate
+*.tfstate.*
+.terraform/
+.terraform.lock.hcl
+terraform.tfvars
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+
+# Secrets and certificates
+*.pem
+*.key
+*.crt
+*.cert
+*.p12
+*.pfx
+private/
+secrets/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Test coverage
+coverage/
+.nyc_output/
+*.lcov
+
+# Temporary files
+temp/
+tmp/
+.tmp/
+*.tmp
+*.temp
+
+# Archive (if you want to ignore archived files)
+# _archive_/
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Package files
+*.tar.gz
+*.zip
+*.tar
+*.tgz
+
+# Python (if any Python scripts)
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+venv/
+env/
+.Python
+
+# Go workspace file
+go.work
+go.work.sum
+
+# sqlc generated files cache
+.sqlc/
