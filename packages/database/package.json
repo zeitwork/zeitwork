@@ -1,0 +1,16 @@
+{
+  "name": "database",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.44.4",
+    "uuidv7": "^1.0.2"
+  }
+}
