@@ -27,6 +27,7 @@ func main() {
 		Port:        cfg.Port,
 		OperatorURL: cfg.OperatorURL,
 		Algorithm:   cfg.Algorithm,
+		HealthPort:  cfg.HealthPort,
 	}, logger)
 	if err != nil {
 		logger.Error("Failed to create load balancer service", "error", err)
@@ -48,8 +49,9 @@ func main() {
 	}()
 
 	// Start the service
-	logger.Info("Starting load balancer service",
+	logger.Info("Starting L4 load balancer service",
 		"port", cfg.Port,
+		"health_port", cfg.HealthPort,
 		"environment", cfg.Environment,
 		"algorithm", cfg.Algorithm,
 	)

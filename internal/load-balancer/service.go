@@ -4,17 +4,16 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
-	"net/http/httputil"
-	"net/url"
 	"sync"
 	"sync/atomic"
 	"time"
 )
 
-// Service represents the load balancer service
+// Service represents the L4 load balancer service
 type Service struct {
 	logger     *slog.Logger
 	config     *Config
@@ -25,8 +24,11 @@ type Service struct {
 	backendsMu sync.RWMutex
 	currentIdx atomic.Uint32 // For round-robin
 
-	// Reverse proxy
-	proxy *httputil.ReverseProxy
+	// TCP listener
+	listener net.Listener
+
+	// Connection tracking
+	activeConnections sync.WaitGroup
 }
 
 // Config holds the configuration for the load balancer service
@@ -34,19 +36,25 @@ type Config struct {
 	Port        string
 	OperatorURL string
 	Algorithm   string // round-robin, least-connections, ip-hash
+	HealthPort  string // Port for health check HTTP endpoint
 }
 
 // Backend represents a backend server
 type Backend struct {
 	ID          string
-	URL         *url.URL
+	Address     string // IP:Port for TCP connection
 	Healthy     bool
 	Connections int32
 	LastCheck   time.Time
 }
 
-// NewService creates a new load balancer service
+// NewService creates a new L4 load balancer service
 func NewService(config *Config, logger *slog.Logger) (*Service, error) {
+	// Set default health port if not specified
+	if config.HealthPort == "" {
+		config.HealthPort = "8083"
+	}
+
 	s := &Service{
 		logger:     logger,
 		config:     config,
@@ -54,21 +62,16 @@ func NewService(config *Config, logger *slog.Logger) (*Service, error) {
 		backends:   make([]*Backend, 0),
 	}
 
-	// Create reverse proxy with custom director
-	s.proxy = &httputil.ReverseProxy{
-		Director:     s.director,
-		ErrorHandler: s.errorHandler,
-	}
-
 	return s, nil
 }
 
-// Start starts the load balancer service
+// Start starts the L4 load balancer service
 func (s *Service) Start(ctx context.Context) error {
-	s.logger.Info("Starting load balancer service",
+	s.logger.Info("Starting L4 load balancer service",
 		"port", s.config.Port,
 		"algorithm", s.config.Algorithm,
 		"operator_url", s.config.OperatorURL,
+		"health_port", s.config.HealthPort,
 	)
 
 	// Start service discovery
@@ -77,90 +80,76 @@ func (s *Service) Start(ctx context.Context) error {
 	// Start health checking
 	go s.checkHealthPeriodically(ctx)
 
-	// Create HTTP server
-	mux := http.NewServeMux()
-	s.setupRoutes(mux)
+	// Start health check HTTP endpoint (for monitoring the LB itself)
+	go s.startHealthEndpoint(ctx)
 
-	server := &http.Server{
-		Addr:    ":" + s.config.Port,
-		Handler: mux,
+	// Create TCP listener
+	listener, err := net.Listen("tcp", ":"+s.config.Port)
+	if err != nil {
+		return fmt.Errorf("failed to create TCP listener: %w", err)
 	}
+	s.listener = listener
 
-	// Start server in goroutine
+	// Accept connections in a goroutine
 	go func() {
-		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			s.logger.Error("Failed to start HTTP server", "error", err)
+		for {
+			conn, err := listener.Accept()
+			if err != nil {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					s.logger.Error("Failed to accept connection", "error", err)
+					continue
+				}
+			}
+
+			// Handle each connection in a goroutine
+			s.activeConnections.Add(1)
+			go s.handleConnection(ctx, conn)
 		}
 	}()
 
 	// Wait for context cancellation
 	<-ctx.Done()
 
-	// Shutdown server
-	s.logger.Info("Shutting down load balancer service")
-	return server.Shutdown(context.Background())
-}
+	// Shutdown
+	s.logger.Info("Shutting down L4 load balancer service")
 
-// setupRoutes sets up the HTTP routes for the load balancer
-func (s *Service) setupRoutes(mux *http.ServeMux) {
-	// Health check
-	mux.HandleFunc("GET /health", s.handleHealth)
-
-	// Backend management
-	mux.HandleFunc("GET /backends", s.handleGetBackends)
-
-	// Proxy all other requests
-	mux.HandleFunc("/", s.handleProxy)
-}
-
-// handleHealth handles health check requests
-func (s *Service) handleHealth(w http.ResponseWriter, r *http.Request) {
-	s.backendsMu.RLock()
-	healthyCount := 0
-	for _, backend := range s.backends {
-		if backend.Healthy {
-			healthyCount++
-		}
-	}
-	totalCount := len(s.backends)
-	s.backendsMu.RUnlock()
-
-	response := map[string]interface{}{
-		"status":           "healthy",
-		"algorithm":        s.config.Algorithm,
-		"total_backends":   totalCount,
-		"healthy_backends": healthyCount,
+	// Close listener
+	if s.listener != nil {
+		s.listener.Close()
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
-}
+	// Wait for active connections to finish (with timeout)
+	done := make(chan struct{})
+	go func() {
+		s.activeConnections.Wait()
+		close(done)
+	}()
 
-// handleGetBackends returns the list of backends
-func (s *Service) handleGetBackends(w http.ResponseWriter, r *http.Request) {
-	s.backendsMu.RLock()
-	backends := make([]map[string]interface{}, len(s.backends))
-	for i, backend := range s.backends {
-		backends[i] = map[string]interface{}{
-			"id":          backend.ID,
-			"url":         backend.URL.String(),
-			"healthy":     backend.Healthy,
-			"connections": backend.Connections,
-			"last_check":  backend.LastCheck,
-		}
+	select {
+	case <-done:
+		s.logger.Info("All connections closed gracefully")
+	case <-time.After(30 * time.Second):
+		s.logger.Warn("Timeout waiting for connections to close")
 	}
-	s.backendsMu.RUnlock()
 
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(backends)
+	return nil
 }
 
-// handleProxy proxies requests to backend servers
-func (s *Service) handleProxy(w http.ResponseWriter, r *http.Request) {
+// handleConnection handles a single TCP connection
+func (s *Service) handleConnection(ctx context.Context, clientConn net.Conn) {
+	defer s.activeConnections.Done()
+	defer clientConn.Close()
+
+	// Get client address for logging and IP hash
+	clientAddr := clientConn.RemoteAddr().String()
+
 	// Select backend based on algorithm
-	backend := s.selectBackend(r)
+	backend := s.selectBackend(clientAddr)
 	if backend == nil {
-		http.Error(w, "No healthy backends available", http.StatusServiceUnavailable)
+		s.logger.Warn("No healthy backends available", "client", clientAddr)
 		return
 	}
 
@@ -168,16 +157,55 @@ func (s *Service) handleProxy(w http.ResponseWriter, r *http.Request) {
 	atomic.AddInt32(&backend.Connections, 1)
 	defer atomic.AddInt32(&backend.Connections, -1)
 
-	// Set the backend URL in the request context
-	ctx := context.WithValue(r.Context(), "backend", backend)
-	r = r.WithContext(ctx)
+	// Connect to backend
+	backendConn, err := net.DialTimeout("tcp", backend.Address, 5*time.Second)
+	if err != nil {
+		s.logger.Error("Failed to connect to backend",
+			"backend", backend.ID,
+			"address", backend.Address,
+			"error", err)
+		return
+	}
+	defer backendConn.Close()
 
-	// Proxy the request
-	s.proxy.ServeHTTP(w, r)
+	s.logger.Debug("Proxying connection",
+		"client", clientAddr,
+		"backend", backend.Address)
+
+	// Create a context for this connection
+	connCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	// Bidirectional copy
+	errChan := make(chan error, 2)
+
+	// Client to backend
+	go func() {
+		_, err := io.Copy(backendConn, clientConn)
+		errChan <- err
+		cancel()
+	}()
+
+	// Backend to client
+	go func() {
+		_, err := io.Copy(clientConn, backendConn)
+		errChan <- err
+		cancel()
+	}()
+
+	// Wait for either direction to finish or context cancellation
+	select {
+	case <-connCtx.Done():
+		// Connection finished or context cancelled
+	case err := <-errChan:
+		if err != nil && err != io.EOF {
+			s.logger.Debug("Connection error", "error", err)
+		}
+	}
 }
 
 // selectBackend selects a backend based on the configured algorithm
-func (s *Service) selectBackend(r *http.Request) *Backend {
+func (s *Service) selectBackend(clientAddr string) *Backend {
 	s.backendsMu.RLock()
 	defer s.backendsMu.RUnlock()
 
@@ -206,9 +234,8 @@ func (s *Service) selectBackend(r *http.Request) *Backend {
 
 	case "ip-hash":
 		// Hash the client IP to select backend
-		clientIP := r.RemoteAddr
 		hash := 0
-		for _, c := range clientIP {
+		for _, c := range clientAddr {
 			hash = hash*31 + int(c)
 		}
 		if hash < 0 {
@@ -223,31 +250,66 @@ func (s *Service) selectBackend(r *http.Request) *Backend {
 	}
 }
 
-// director modifies the request to point to the selected backend
-func (s *Service) director(req *http.Request) {
-	backend, ok := req.Context().Value("backend").(*Backend)
-	if !ok {
-		s.logger.Error("No backend in request context")
-		return
+// startHealthEndpoint starts an HTTP endpoint for health checks
+func (s *Service) startHealthEndpoint(ctx context.Context) {
+	mux := http.NewServeMux()
+
+	// Health check endpoint
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+		s.backendsMu.RLock()
+		healthyCount := 0
+		for _, backend := range s.backends {
+			if backend.Healthy {
+				healthyCount++
+			}
+		}
+		totalCount := len(s.backends)
+		s.backendsMu.RUnlock()
+
+		response := map[string]interface{}{
+			"status":           "healthy",
+			"type":             "L4",
+			"algorithm":        s.config.Algorithm,
+			"total_backends":   totalCount,
+			"healthy_backends": healthyCount,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+	})
+
+	// Backend status endpoint
+	mux.HandleFunc("GET /backends", func(w http.ResponseWriter, r *http.Request) {
+		s.backendsMu.RLock()
+		backends := make([]map[string]interface{}, len(s.backends))
+		for i, backend := range s.backends {
+			backends[i] = map[string]interface{}{
+				"id":          backend.ID,
+				"address":     backend.Address,
+				"healthy":     backend.Healthy,
+				"connections": backend.Connections,
+				"last_check":  backend.LastCheck,
+			}
+		}
+		s.backendsMu.RUnlock()
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(backends)
+	})
+
+	server := &http.Server{
+		Addr:    ":" + s.config.HealthPort,
+		Handler: mux,
 	}
 
-	// Update the request to point to the backend
-	req.URL.Scheme = backend.URL.Scheme
-	req.URL.Host = backend.URL.Host
-	req.Host = backend.URL.Host
+	go func() {
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			s.logger.Error("Failed to start health endpoint", "error", err)
+		}
+	}()
 
-	// Add X-Forwarded headers
-	if clientIP, _, err := net.SplitHostPort(req.RemoteAddr); err == nil {
-		req.Header.Set("X-Forwarded-For", clientIP)
-	}
-	req.Header.Set("X-Forwarded-Proto", "http")
-	req.Header.Set("X-Forwarded-Host", req.Host)
-}
-
-// errorHandler handles errors from the reverse proxy
-func (s *Service) errorHandler(w http.ResponseWriter, r *http.Request, err error) {
-	s.logger.Error("Proxy error", "error", err, "path", r.URL.Path)
-	http.Error(w, "Bad Gateway", http.StatusBadGateway)
+	<-ctx.Done()
+	server.Shutdown(context.Background())
 }
 
 // discoverBackendsPeriodically discovers backends from the operator
@@ -310,15 +372,9 @@ func (s *Service) discoverBackends(ctx context.Context) {
 			port = 8080
 		}
 
-		backendURL, err := url.Parse(fmt.Sprintf("http://%s:%d", inst.IPAddress, port))
-		if err != nil {
-			s.logger.Error("Failed to parse backend URL", "error", err, "instance", inst.ID)
-			continue
-		}
-
 		newBackends = append(newBackends, &Backend{
 			ID:      inst.ID,
-			URL:     backendURL,
+			Address: fmt.Sprintf("%s:%d", inst.IPAddress, port),
 			Healthy: true, // Will be checked by health checker
 		})
 	}
@@ -352,40 +408,46 @@ func (s *Service) checkHealth(ctx context.Context) {
 	copy(backends, s.backends)
 	s.backendsMu.RUnlock()
 
+	var wg sync.WaitGroup
 	for _, backend := range backends {
-		go s.checkBackendHealth(ctx, backend)
+		wg.Add(1)
+		go func(b *Backend) {
+			defer wg.Done()
+			s.checkBackendHealth(ctx, b)
+		}(backend)
 	}
+	wg.Wait()
 }
 
-// checkBackendHealth checks the health of a single backend
+// checkBackendHealth checks the health of a single backend using TCP
 func (s *Service) checkBackendHealth(ctx context.Context, backend *Backend) {
-	healthURL := fmt.Sprintf("%s/health", backend.URL.String())
+	// Try to establish a TCP connection
+	dialer := net.Dialer{
+		Timeout: 5 * time.Second,
+	}
 
-	req, err := http.NewRequestWithContext(ctx, "GET", healthURL, nil)
+	conn, err := dialer.DialContext(ctx, "tcp", backend.Address)
 	if err != nil {
+		if backend.Healthy {
+			s.logger.Warn("Backend became unhealthy", "id", backend.ID, "address", backend.Address, "error", err)
+		}
 		backend.Healthy = false
 		backend.LastCheck = time.Now()
 		return
 	}
-
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		backend.Healthy = false
-		backend.LastCheck = time.Now()
-		s.logger.Warn("Backend unhealthy", "id", backend.ID, "error", err)
-		return
-	}
-	defer resp.Body.Close()
-
-	backend.Healthy = resp.StatusCode == http.StatusOK
-	backend.LastCheck = time.Now()
+	conn.Close()
 
 	if !backend.Healthy {
-		s.logger.Warn("Backend unhealthy", "id", backend.ID, "status", resp.StatusCode)
+		s.logger.Info("Backend became healthy", "id", backend.ID, "address", backend.Address)
 	}
+	backend.Healthy = true
+	backend.LastCheck = time.Now()
 }
 
 // Close closes the load balancer service
 func (s *Service) Close() error {
+	if s.listener != nil {
+		return s.listener.Close()
+	}
 	return nil
 }

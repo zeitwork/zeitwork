@@ -36,6 +36,7 @@ type LoadBalancerConfig struct {
 	BaseConfig
 	OperatorURL string
 	Algorithm   string // round-robin, least-connections, ip-hash
+	HealthPort  string // Port for health check HTTP endpoint
 }
 
 // EdgeProxyConfig contains configuration for the edge proxy service
@@ -82,6 +83,7 @@ func LoadLoadBalancerConfig() (*LoadBalancerConfig, error) {
 		BaseConfig:  loadBaseConfig("load-balancer"),
 		OperatorURL: getEnvOrDefault("OPERATOR_URL", "http://localhost:8080"),
 		Algorithm:   getEnvOrDefault("LB_ALGORITHM", "round-robin"),
+		HealthPort:  getEnvOrDefault("HEALTH_PORT", "8083"),
 	}
 
 	return config, nil
