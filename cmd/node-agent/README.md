@@ -1,0 +1,1 @@
+Node agent is a binary that we copy over to the new host and spin it up. It will have all that is needed to get the instance ready. It will embed all relevant dependencies. In our case that is containerd, firecrackervms, etc. When the node starts first it will connect to the node pool and register itself.
