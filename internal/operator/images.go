@@ -86,10 +86,52 @@ func (s *Service) createImage(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(image)
 }
 
-// updateImageStatus updates the status of an image (stub)
+// updateImageStatus updates the status of an image
 func (s *Service) updateImageStatus(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement image status update
-	http.Error(w, "Not implemented", http.StatusNotImplemented)
+	ctx := r.Context()
+
+	imageIDStr := r.PathValue("id")
+	imageID, err := uuid.Parse(imageIDStr)
+	if err != nil {
+		http.Error(w, "Invalid image ID", http.StatusBadRequest)
+		return
+	}
+
+	var req struct {
+		Status string `json:"status"`
+		Size   int32  `json:"size"`
+		Hash   string `json:"hash"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request", http.StatusBadRequest)
+		return
+	}
+
+	pgID := pgtype.UUID{Bytes: imageID, Valid: true}
+
+	if req.Hash != "" {
+		_, err = s.db.Queries().ImageUpdateHash(ctx, &database.ImageUpdateHashParams{
+			ID:        pgID,
+			ImageHash: req.Hash,
+		})
+		if err != nil {
+			s.logger.Error("Failed to update hash", "error", err)
+		}
+	}
+
+	params := database.ImageUpdateStatusParams{
+		ID:        pgID,
+		Status:    req.Status,
+		ImageSize: pgtype.Int4{Int32: req.Size, Valid: true},
+	}
+	image, err := s.db.Queries().ImageUpdateStatus(ctx, &params)
+	if err != nil {
+		s.logger.Error("Failed to update status", "error", err)
+		http.Error(w, "Failed to update", http.StatusInternalServerError)
+		return
+	}
+
+	json.NewEncoder(w).Encode(image)
 }
 
 // deleteImage deletes an image (stub)
