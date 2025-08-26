@@ -204,6 +204,46 @@ func (q *Queries) NodeFindByState(ctx context.Context, state string) ([]*Node, e
 	return items, nil
 }
 
+const nodeUpdate = `-- name: NodeUpdate :one
+UPDATE nodes 
+SET 
+    ip_address = COALESCE($2, ip_address),
+    state = COALESCE($3, state),
+    resources = COALESCE($4, resources),
+    updated_at = NOW()
+WHERE id = $1
+RETURNING id, region_id, hostname, ip_address, state, resources, created_at, updated_at, deleted_at
+`
+
+type NodeUpdateParams struct {
+	ID        pgtype.UUID     `json:"id"`
+	IpAddress string          `json:"ip_address"`
+	State     string          `json:"state"`
+	Resources json.RawMessage `json:"resources"`
+}
+
+func (q *Queries) NodeUpdate(ctx context.Context, arg *NodeUpdateParams) (*Node, error) {
+	row := q.db.QueryRow(ctx, nodeUpdate,
+		arg.ID,
+		arg.IpAddress,
+		arg.State,
+		arg.Resources,
+	)
+	var i Node
+	err := row.Scan(
+		&i.ID,
+		&i.RegionID,
+		&i.Hostname,
+		&i.IpAddress,
+		&i.State,
+		&i.Resources,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return &i, err
+}
+
 const nodeUpdateResources = `-- name: NodeUpdateResources :one
 UPDATE nodes SET resources = $2, updated_at = NOW() WHERE id = $1 RETURNING id, region_id, hostname, ip_address, state, resources, created_at, updated_at, deleted_at
 `

@@ -107,6 +107,45 @@ func (q *Queries) InstanceFind(ctx context.Context) ([]*Instance, error) {
 	return items, nil
 }
 
+const instanceFindByDeployment = `-- name: InstanceFindByDeployment :many
+SELECT i.id, i.region_id, i.node_id, i.image_id, i.state, i.resources, i.default_port, i.ip_address, i.environment_variables, i.created_at, i.updated_at, i.deleted_at FROM instances i
+JOIN deployment_instances di ON i.id = di.instance_id
+WHERE di.deployment_id = $1 AND i.state = 'running'
+`
+
+func (q *Queries) InstanceFindByDeployment(ctx context.Context, deploymentID pgtype.UUID) ([]*Instance, error) {
+	rows, err := q.db.Query(ctx, instanceFindByDeployment, deploymentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*Instance
+	for rows.Next() {
+		var i Instance
+		if err := rows.Scan(
+			&i.ID,
+			&i.RegionID,
+			&i.NodeID,
+			&i.ImageID,
+			&i.State,
+			&i.Resources,
+			&i.DefaultPort,
+			&i.IpAddress,
+			&i.EnvironmentVariables,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const instanceFindById = `-- name: InstanceFindById :one
 SELECT id, region_id, node_id, image_id, state, resources, default_port, ip_address, environment_variables, created_at, updated_at, deleted_at FROM instances WHERE id = $1
 `

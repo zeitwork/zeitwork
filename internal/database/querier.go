@@ -27,6 +27,7 @@ type Querier interface {
 	DeploymentFindByEnvironment(ctx context.Context, projectEnvironmentID pgtype.UUID) ([]*Deployment, error)
 	DeploymentFindById(ctx context.Context, id pgtype.UUID) (*Deployment, error)
 	DeploymentFindByImage(ctx context.Context, imageID pgtype.UUID) ([]*Deployment, error)
+	DeploymentFindByNanoID(ctx context.Context, nanoid pgtype.Text) (*Deployment, error)
 	DeploymentFindByOrganisation(ctx context.Context, organisationID pgtype.UUID) ([]*Deployment, error)
 	DeploymentFindByProject(ctx context.Context, projectID pgtype.UUID) ([]*Deployment, error)
 	DeploymentFindByStatus(ctx context.Context, status string) ([]*Deployment, error)
@@ -82,6 +83,7 @@ type Querier interface {
 	InstanceCreate(ctx context.Context, arg *InstanceCreateParams) (*Instance, error)
 	InstanceDelete(ctx context.Context, id pgtype.UUID) error
 	InstanceFind(ctx context.Context) ([]*Instance, error)
+	InstanceFindByDeployment(ctx context.Context, deploymentID pgtype.UUID) ([]*Instance, error)
 	InstanceFindById(ctx context.Context, id pgtype.UUID) (*Instance, error)
 	InstanceFindByImage(ctx context.Context, imageID pgtype.UUID) ([]*Instance, error)
 	InstanceFindByNode(ctx context.Context, nodeID pgtype.UUID) ([]*Instance, error)
@@ -96,6 +98,7 @@ type Querier interface {
 	NodeFindById(ctx context.Context, id pgtype.UUID) (*Node, error)
 	NodeFindByRegion(ctx context.Context, regionID pgtype.UUID) ([]*Node, error)
 	NodeFindByState(ctx context.Context, state string) ([]*Node, error)
+	NodeUpdate(ctx context.Context, arg *NodeUpdateParams) (*Node, error)
 	NodeUpdateResources(ctx context.Context, arg *NodeUpdateResourcesParams) (*Node, error)
 	NodeUpdateState(ctx context.Context, arg *NodeUpdateStateParams) (*Node, error)
 	OrganisationCreate(ctx context.Context, arg *OrganisationCreateParams) (*Organisation, error)

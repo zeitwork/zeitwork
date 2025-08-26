@@ -26,5 +26,15 @@ UPDATE nodes SET state = $2, updated_at = NOW() WHERE id = $1 RETURNING *;
 -- name: NodeUpdateResources :one
 UPDATE nodes SET resources = $2, updated_at = NOW() WHERE id = $1 RETURNING *;
 
+-- name: NodeUpdate :one
+UPDATE nodes 
+SET 
+    ip_address = COALESCE($2, ip_address),
+    state = COALESCE($3, state),
+    resources = COALESCE($4, resources),
+    updated_at = NOW()
+WHERE id = $1
+RETURNING *;
+
 -- name: NodeDelete :exec
 DELETE FROM nodes WHERE id = $1;

@@ -39,6 +39,9 @@ UPDATE deployments SET image_id = $2, updated_at = NOW() WHERE id = $1 RETURNING
 -- name: DeploymentDelete :exec
 DELETE FROM deployments WHERE id = $1;
 
+-- name: DeploymentFindByNanoID :one
+SELECT * FROM deployments WHERE nanoid = $1;
+
 -- name: DeploymentInstanceFindById :one
 SELECT * FROM deployment_instances WHERE id = $1;
 

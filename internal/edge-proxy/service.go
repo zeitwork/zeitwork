@@ -10,9 +10,13 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
+	"strings"
 	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/zeitwork/zeitwork/internal/database"
 	"golang.org/x/time/rate"
 )
 
@@ -32,6 +36,17 @@ type Service struct {
 
 	// SSL/TLS
 	tlsConfig *tls.Config
+
+	// Domain-based routing
+	routingCache map[string]*RouteTarget // domain -> backend
+	routingMu    sync.RWMutex
+}
+
+// RouteTarget represents a routing target
+type RouteTarget struct {
+	BackendURL  *url.URL
+	InstanceID  string
+	LastUpdated time.Time
 }
 
 // Config holds the configuration for the edge proxy service
@@ -233,7 +248,16 @@ func (s *Service) handleProxy(w http.ResponseWriter, r *http.Request) {
 
 	r.Header.Set("X-Forwarded-Host", r.Host)
 
-	// Proxy the request
+	// Route based on domain
+	if backend := s.routeByDomain(r.Host); backend != nil {
+		// Create a custom proxy for this specific backend
+		proxy := httputil.NewSingleHostReverseProxy(backend)
+		proxy.ErrorHandler = s.errorHandler
+		proxy.ServeHTTP(w, r)
+		return
+	}
+
+	// Fall back to default load balancer
 	s.proxy.ServeHTTP(w, r)
 }
 
@@ -316,4 +340,144 @@ func (s *Service) checkLoadBalancerHealth() bool {
 // Close closes the edge proxy service
 func (s *Service) Close() error {
 	return nil
+}
+
+// routeByDomain routes traffic based on the domain
+func (s *Service) routeByDomain(host string) *url.URL {
+	// Extract domain from host (remove port if present)
+	domain := host
+	if idx := strings.Index(host, ":"); idx != -1 {
+		domain = host[:idx]
+	}
+
+	// Check cache first
+	s.routingMu.RLock()
+	target, exists := s.routingCache[domain]
+	s.routingMu.RUnlock()
+
+	if exists && time.Since(target.LastUpdated) < 5*time.Minute {
+		return target.BackendURL
+	}
+
+	// Query database for routing information
+	if backend := s.lookupDomainRoute(domain); backend != nil {
+		// Update cache
+		s.routingMu.Lock()
+		s.routingCache[domain] = &RouteTarget{
+			BackendURL:  backend,
+			LastUpdated: time.Now(),
+		}
+		s.routingMu.Unlock()
+		return backend
+	}
+
+	return nil
+}
+
+// lookupDomainRoute looks up the backend for a domain in the database
+func (s *Service) lookupDomainRoute(domain string) *url.URL {
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		return nil
+	}
+
+	db, err := database.NewDB(dbURL)
+	if err != nil {
+		s.logger.Error("Failed to connect to database", "error", err)
+		return nil
+	}
+	defer db.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	// Query routing cache table for the domain
+	route, err := db.Queries().RoutingCacheFindByDomain(ctx, domain)
+	if err != nil || !route.DeploymentID.Valid {
+		// Try to find by deployment URL pattern
+		// Format: project-nanoid-org.zeitwork.app
+		if strings.HasSuffix(domain, ".zeitwork.app") {
+			parts := strings.Split(domain, ".")
+			if len(parts) >= 2 {
+				subdomain := parts[0]
+				// Extract nanoid from subdomain (format: project-nanoid-org)
+				subParts := strings.Split(subdomain, "-")
+				if len(subParts) >= 2 {
+					nanoid := subParts[len(subParts)-2] // Second to last part
+
+					// Find deployment by nanoid
+					deployment, err := db.Queries().DeploymentFindByNanoID(ctx, pgtype.Text{String: nanoid, Valid: true})
+					if err == nil && deployment.Status == "active" {
+						// Find running instances for this deployment
+						instances, err := db.Queries().InstanceFindByDeployment(ctx, deployment.ID)
+						if err == nil && len(instances) > 0 {
+							// Pick a random instance (simple load balancing)
+							instance := instances[time.Now().Unix()%int64(len(instances))]
+							if instance.IpAddress != "" {
+								backendURL, err := url.Parse(fmt.Sprintf("http://%s:8080", instance.IpAddress))
+								if err == nil {
+									// Update routing cache for next time
+									go s.updateRoutingCache(domain, instance.IpAddress)
+									return backendURL
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		return nil
+	}
+
+	// Use cached route - parse instances JSON to get an IP
+	if route.Instances != nil {
+		var instances []string
+		if err := json.Unmarshal(route.Instances, &instances); err == nil && len(instances) > 0 {
+			// Pick a random instance
+			instance := instances[time.Now().Unix()%int64(len(instances))]
+			backendURL, err := url.Parse(fmt.Sprintf("http://%s:8080", instance))
+			if err == nil {
+				return backendURL
+			}
+		}
+	}
+
+	return nil
+}
+
+// updateRoutingCache updates the routing cache in the database
+func (s *Service) updateRoutingCache(domain, targetIP string) {
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		return
+	}
+
+	db, err := database.NewDB(dbURL)
+	if err != nil {
+		return
+	}
+	defer db.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	// Get deployment for this domain
+	var deploymentID pgtype.UUID
+	route, err := db.Queries().RoutingCacheFindByDomain(ctx, domain)
+	if err == nil {
+		deploymentID = route.DeploymentID
+	}
+
+	// Update instances list
+	instances, _ := json.Marshal([]string{targetIP})
+
+	// Update or insert routing cache entry
+	_, err = db.Queries().RoutingCacheUpsert(ctx, &database.RoutingCacheUpsertParams{
+		Domain:       domain,
+		DeploymentID: deploymentID,
+		Instances:    instances,
+	})
+	if err != nil {
+		s.logger.Error("Failed to update routing cache", "error", err)
+	}
 }
