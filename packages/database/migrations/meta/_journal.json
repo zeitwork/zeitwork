@@ -8,6 +8,13 @@
       "when": 1755950465054,
       "tag": "0000_blushing_electro",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1756233784597,
+      "tag": "0001_brown_wraith",
+      "breakpoints": true
     }
   ]
 }

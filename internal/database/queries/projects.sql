@@ -19,6 +19,10 @@ UPDATE projects SET name = $2, slug = $3, updated_at = NOW() WHERE id = $1 RETUR
 -- name: ProjectDelete :exec
 DELETE FROM projects WHERE id = $1;
 
+-- name: ProjectFindByGitHubRepo :many
+-- TODO: For now, return empty set. Need to add github_repo field to projects table
+SELECT * FROM projects WHERE FALSE;
+
 -- name: ProjectEnvironmentFindById :one
 SELECT * FROM project_environments WHERE id = $1;
 

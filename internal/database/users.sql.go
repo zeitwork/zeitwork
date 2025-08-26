@@ -166,22 +166,22 @@ func (q *Queries) UserFindByUsername(ctx context.Context, username string) (*Use
 }
 
 const userUpdate = `-- name: UserUpdate :one
-UPDATE users SET name = $2, email = $3, username = $4, updated_at = NOW() WHERE id = $1 RETURNING id, name, email, username, github_user_id, created_at, updated_at, deleted_at
+UPDATE users SET name = $2, username = $3, github_user_id = $4, updated_at = NOW() WHERE id = $1 RETURNING id, name, email, username, github_user_id, created_at, updated_at, deleted_at
 `
 
 type UserUpdateParams struct {
-	ID       pgtype.UUID `json:"id"`
-	Name     string      `json:"name"`
-	Email    string      `json:"email"`
-	Username string      `json:"username"`
+	ID           pgtype.UUID `json:"id"`
+	Name         string      `json:"name"`
+	Username     string      `json:"username"`
+	GithubUserID pgtype.Int4 `json:"github_user_id"`
 }
 
 func (q *Queries) UserUpdate(ctx context.Context, arg *UserUpdateParams) (*User, error) {
 	row := q.db.QueryRow(ctx, userUpdate,
 		arg.ID,
 		arg.Name,
-		arg.Email,
 		arg.Username,
+		arg.GithubUserID,
 	)
 	var i User
 	err := row.Scan(

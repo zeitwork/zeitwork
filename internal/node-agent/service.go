@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/zeitwork/zeitwork/internal/shared/s3"
 )
 
 // Service represents the node agent service that runs on each compute node
@@ -25,6 +26,7 @@ type Service struct {
 	config     *Config
 	httpClient *http.Client
 	nodeID     uuid.UUID
+	s3Client   *s3.Client
 
 	// Firecracker VM management
 	instances map[string]*Instance // instance_id -> instance
@@ -40,6 +42,11 @@ type Config struct {
 	VMWorkDir         string
 	KernelImagePath   string
 	BuilderRootfsPath string
+	S3Endpoint        string
+	S3Bucket          string
+	S3AccessKey       string
+	S3SecretKey       string
+	S3Region          string
 }
 
 // Instance represents a running VM instance
@@ -78,11 +85,31 @@ func NewService(config *Config, logger *slog.Logger) (*Service, error) {
 		logger.Info("Generated new node ID", "node_id", nodeID)
 	}
 
+	// Create S3 client if configured
+	var s3Client *s3.Client
+	if config.S3Bucket != "" && config.S3AccessKey != "" && config.S3SecretKey != "" {
+		s3Config := &s3.Config{
+			Endpoint:        config.S3Endpoint,
+			Region:          config.S3Region,
+			Bucket:          config.S3Bucket,
+			AccessKeyID:     config.S3AccessKey,
+			SecretAccessKey: config.S3SecretKey,
+			UseSSL:          !strings.HasPrefix(config.S3Endpoint, "http://"),
+			Prefix:          "zeitwork",
+		}
+		var err error
+		s3Client, err = s3.NewClient(s3Config, logger)
+		if err != nil {
+			logger.Warn("Failed to create S3 client, using local storage", "error", err)
+		}
+	}
+
 	return &Service{
 		logger:     logger,
 		config:     config,
 		httpClient: &http.Client{Timeout: 30 * time.Second},
 		nodeID:     nodeID,
+		s3Client:   s3Client,
 		instances:  make(map[string]*Instance),
 	}, nil
 }
@@ -436,6 +463,27 @@ func (s *Service) buildInVM(imageID string, githubRepo string) {
 	if err := s.createRootfsFromDockerTar(imageTar, rootfsPath, imageID); err != nil {
 		s.notifyBuildFailed(imageID, fmt.Sprintf("rootfs creation failed: %v", err))
 		return
+	}
+
+	// Upload to S3 if configured
+	if s.s3Client != nil {
+		file, err := os.Open(rootfsPath)
+		if err != nil {
+			s.notifyBuildFailed(imageID, "failed to open rootfs for upload")
+			return
+		}
+		defer file.Close()
+
+		fi, _ := file.Stat()
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		defer cancel()
+
+		if err := s.s3Client.UploadImage(ctx, imageID, file, fi.Size()); err != nil {
+			s.logger.Error("Failed to upload image to S3", "error", err, "imageID", imageID)
+			// Continue anyway - local copy is available
+		} else {
+			s.logger.Info("Uploaded image to S3", "imageID", imageID)
+		}
 	}
 
 	// Hash and size

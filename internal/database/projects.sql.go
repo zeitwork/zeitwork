@@ -210,6 +210,39 @@ func (q *Queries) ProjectFind(ctx context.Context) ([]*Project, error) {
 	return items, nil
 }
 
+const projectFindByGitHubRepo = `-- name: ProjectFindByGitHubRepo :many
+SELECT id, name, slug, organisation_id, created_at, updated_at, deleted_at FROM projects WHERE FALSE
+`
+
+// TODO: For now, return empty set. Need to add github_repo field to projects table
+func (q *Queries) ProjectFindByGitHubRepo(ctx context.Context) ([]*Project, error) {
+	rows, err := q.db.Query(ctx, projectFindByGitHubRepo)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*Project
+	for rows.Next() {
+		var i Project
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.OrganisationID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const projectFindById = `-- name: ProjectFindById :one
 SELECT id, name, slug, organisation_id, created_at, updated_at, deleted_at FROM projects WHERE id = $1
 `
