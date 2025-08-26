@@ -25,3 +25,6 @@ UPDATE images SET image_hash = $2, updated_at = NOW() WHERE id = $1 RETURNING *;
 
 -- name: ImageDelete :exec
 DELETE FROM images WHERE id = $1;
+
+-- name: ImageDequeuePending :one
+SELECT * FROM images WHERE status = 'pending' ORDER BY created_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED;

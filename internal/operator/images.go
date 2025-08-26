@@ -3,9 +3,11 @@ package operator
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/zeitwork/zeitwork/internal/database"
 )
 
 // listImages returns all images
@@ -49,8 +51,39 @@ func (s *Service) getImage(w http.ResponseWriter, r *http.Request) {
 
 // createImage creates a new image (stub)
 func (s *Service) createImage(w http.ResponseWriter, r *http.Request) {
-	// TODO: Implement image creation
-	http.Error(w, "Not implemented", http.StatusNotImplemented)
+	var req struct {
+		GitHubRepo string `json:"github_repo"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+	if req.GitHubRepo == "" {
+		http.Error(w, "github_repo is required", http.StatusBadRequest)
+		return
+	}
+	name := strings.ReplaceAll(req.GitHubRepo, "/", "-")
+	repository, err := json.Marshal(map[string]string{"type": "github", "repo": req.GitHubRepo})
+	if err != nil {
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	}
+	params := database.ImageCreateParams{
+		Name:       name,
+		Status:     "pending",
+		Repository: repository,
+		ImageSize:  pgtype.Int4{Int32: 0, Valid: true},
+		ImageHash:  "",
+	}
+	image, err := s.db.Queries().ImageCreate(r.Context(), &params)
+	if err != nil {
+		s.logger.Error("Failed to create image", "error", err)
+		http.Error(w, "Failed to create image", http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(image)
 }
 
 // updateImageStatus updates the status of an image (stub)
