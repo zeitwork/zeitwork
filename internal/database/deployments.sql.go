@@ -13,10 +13,11 @@ import (
 
 const deploymentCreate = `-- name: DeploymentCreate :one
 INSERT INTO deployments (
-    project_id, project_environment_id, status, commit_hash, image_id, organisation_id
+    project_id, project_environment_id, status, commit_hash, image_id, organisation_id,
+    deployment_url, nanoid, min_instances, rollout_strategy
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
-) RETURNING id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+) RETURNING id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at, deployment_url, nanoid, rollout_strategy, min_instances, activated_at, deactivated_at
 `
 
 type DeploymentCreateParams struct {
@@ -26,6 +27,10 @@ type DeploymentCreateParams struct {
 	CommitHash           string      `json:"commit_hash"`
 	ImageID              pgtype.UUID `json:"image_id"`
 	OrganisationID       pgtype.UUID `json:"organisation_id"`
+	DeploymentUrl        pgtype.Text `json:"deployment_url"`
+	Nanoid               pgtype.Text `json:"nanoid"`
+	MinInstances         int32       `json:"min_instances"`
+	RolloutStrategy      string      `json:"rollout_strategy"`
 }
 
 func (q *Queries) DeploymentCreate(ctx context.Context, arg *DeploymentCreateParams) (*Deployment, error) {
@@ -36,6 +41,10 @@ func (q *Queries) DeploymentCreate(ctx context.Context, arg *DeploymentCreatePar
 		arg.CommitHash,
 		arg.ImageID,
 		arg.OrganisationID,
+		arg.DeploymentUrl,
+		arg.Nanoid,
+		arg.MinInstances,
+		arg.RolloutStrategy,
 	)
 	var i Deployment
 	err := row.Scan(
@@ -49,6 +58,12 @@ func (q *Queries) DeploymentCreate(ctx context.Context, arg *DeploymentCreatePar
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.DeploymentUrl,
+		&i.Nanoid,
+		&i.RolloutStrategy,
+		&i.MinInstances,
+		&i.ActivatedAt,
+		&i.DeactivatedAt,
 	)
 	return &i, err
 }
@@ -63,7 +78,7 @@ func (q *Queries) DeploymentDelete(ctx context.Context, id pgtype.UUID) error {
 }
 
 const deploymentFind = `-- name: DeploymentFind :many
-SELECT id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at FROM deployments ORDER BY created_at DESC
+SELECT id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at, deployment_url, nanoid, rollout_strategy, min_instances, activated_at, deactivated_at FROM deployments ORDER BY created_at DESC
 `
 
 func (q *Queries) DeploymentFind(ctx context.Context) ([]*Deployment, error) {
@@ -86,6 +101,12 @@ func (q *Queries) DeploymentFind(ctx context.Context) ([]*Deployment, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.DeploymentUrl,
+			&i.Nanoid,
+			&i.RolloutStrategy,
+			&i.MinInstances,
+			&i.ActivatedAt,
+			&i.DeactivatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -98,7 +119,7 @@ func (q *Queries) DeploymentFind(ctx context.Context) ([]*Deployment, error) {
 }
 
 const deploymentFindByEnvironment = `-- name: DeploymentFindByEnvironment :many
-SELECT id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at FROM deployments WHERE project_environment_id = $1 ORDER BY created_at DESC
+SELECT id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at, deployment_url, nanoid, rollout_strategy, min_instances, activated_at, deactivated_at FROM deployments WHERE project_environment_id = $1 ORDER BY created_at DESC
 `
 
 func (q *Queries) DeploymentFindByEnvironment(ctx context.Context, projectEnvironmentID pgtype.UUID) ([]*Deployment, error) {
@@ -121,6 +142,12 @@ func (q *Queries) DeploymentFindByEnvironment(ctx context.Context, projectEnviro
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.DeploymentUrl,
+			&i.Nanoid,
+			&i.RolloutStrategy,
+			&i.MinInstances,
+			&i.ActivatedAt,
+			&i.DeactivatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -133,7 +160,7 @@ func (q *Queries) DeploymentFindByEnvironment(ctx context.Context, projectEnviro
 }
 
 const deploymentFindById = `-- name: DeploymentFindById :one
-SELECT id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at FROM deployments WHERE id = $1
+SELECT id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at, deployment_url, nanoid, rollout_strategy, min_instances, activated_at, deactivated_at FROM deployments WHERE id = $1
 `
 
 func (q *Queries) DeploymentFindById(ctx context.Context, id pgtype.UUID) (*Deployment, error) {
@@ -150,12 +177,18 @@ func (q *Queries) DeploymentFindById(ctx context.Context, id pgtype.UUID) (*Depl
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.DeploymentUrl,
+		&i.Nanoid,
+		&i.RolloutStrategy,
+		&i.MinInstances,
+		&i.ActivatedAt,
+		&i.DeactivatedAt,
 	)
 	return &i, err
 }
 
 const deploymentFindByImage = `-- name: DeploymentFindByImage :many
-SELECT id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at FROM deployments WHERE image_id = $1 ORDER BY created_at DESC
+SELECT id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at, deployment_url, nanoid, rollout_strategy, min_instances, activated_at, deactivated_at FROM deployments WHERE image_id = $1 ORDER BY created_at DESC
 `
 
 func (q *Queries) DeploymentFindByImage(ctx context.Context, imageID pgtype.UUID) ([]*Deployment, error) {
@@ -178,6 +211,53 @@ func (q *Queries) DeploymentFindByImage(ctx context.Context, imageID pgtype.UUID
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.DeploymentUrl,
+			&i.Nanoid,
+			&i.RolloutStrategy,
+			&i.MinInstances,
+			&i.ActivatedAt,
+			&i.DeactivatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const deploymentFindByOrganisation = `-- name: DeploymentFindByOrganisation :many
+SELECT id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at, deployment_url, nanoid, rollout_strategy, min_instances, activated_at, deactivated_at FROM deployments WHERE organisation_id = $1 ORDER BY created_at DESC
+`
+
+func (q *Queries) DeploymentFindByOrganisation(ctx context.Context, organisationID pgtype.UUID) ([]*Deployment, error) {
+	rows, err := q.db.Query(ctx, deploymentFindByOrganisation, organisationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*Deployment
+	for rows.Next() {
+		var i Deployment
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.ProjectEnvironmentID,
+			&i.Status,
+			&i.CommitHash,
+			&i.ImageID,
+			&i.OrganisationID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.DeploymentUrl,
+			&i.Nanoid,
+			&i.RolloutStrategy,
+			&i.MinInstances,
+			&i.ActivatedAt,
+			&i.DeactivatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -190,7 +270,7 @@ func (q *Queries) DeploymentFindByImage(ctx context.Context, imageID pgtype.UUID
 }
 
 const deploymentFindByProject = `-- name: DeploymentFindByProject :many
-SELECT id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at FROM deployments WHERE project_id = $1 ORDER BY created_at DESC
+SELECT id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at, deployment_url, nanoid, rollout_strategy, min_instances, activated_at, deactivated_at FROM deployments WHERE project_id = $1 ORDER BY created_at DESC
 `
 
 func (q *Queries) DeploymentFindByProject(ctx context.Context, projectID pgtype.UUID) ([]*Deployment, error) {
@@ -213,6 +293,12 @@ func (q *Queries) DeploymentFindByProject(ctx context.Context, projectID pgtype.
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.DeploymentUrl,
+			&i.Nanoid,
+			&i.RolloutStrategy,
+			&i.MinInstances,
+			&i.ActivatedAt,
+			&i.DeactivatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -225,7 +311,7 @@ func (q *Queries) DeploymentFindByProject(ctx context.Context, projectID pgtype.
 }
 
 const deploymentFindByStatus = `-- name: DeploymentFindByStatus :many
-SELECT id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at FROM deployments WHERE status = $1 ORDER BY created_at DESC
+SELECT id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at, deployment_url, nanoid, rollout_strategy, min_instances, activated_at, deactivated_at FROM deployments WHERE status = $1 ORDER BY created_at DESC
 `
 
 func (q *Queries) DeploymentFindByStatus(ctx context.Context, status string) ([]*Deployment, error) {
@@ -248,6 +334,12 @@ func (q *Queries) DeploymentFindByStatus(ctx context.Context, status string) ([]
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.DeploymentUrl,
+			&i.Nanoid,
+			&i.RolloutStrategy,
+			&i.MinInstances,
+			&i.ActivatedAt,
+			&i.DeactivatedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -377,7 +469,7 @@ func (q *Queries) DeploymentInstanceFindByInstance(ctx context.Context, instance
 }
 
 const deploymentUpdateImage = `-- name: DeploymentUpdateImage :one
-UPDATE deployments SET image_id = $2, updated_at = NOW() WHERE id = $1 RETURNING id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at
+UPDATE deployments SET image_id = $2, updated_at = NOW() WHERE id = $1 RETURNING id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at, deployment_url, nanoid, rollout_strategy, min_instances, activated_at, deactivated_at
 `
 
 type DeploymentUpdateImageParams struct {
@@ -399,21 +491,31 @@ func (q *Queries) DeploymentUpdateImage(ctx context.Context, arg *DeploymentUpda
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.DeploymentUrl,
+		&i.Nanoid,
+		&i.RolloutStrategy,
+		&i.MinInstances,
+		&i.ActivatedAt,
+		&i.DeactivatedAt,
 	)
 	return &i, err
 }
 
 const deploymentUpdateStatus = `-- name: DeploymentUpdateStatus :one
-UPDATE deployments SET status = $2, updated_at = NOW() WHERE id = $1 RETURNING id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at
+UPDATE deployments 
+SET status = $2, activated_at = $3, updated_at = NOW() 
+WHERE id = $1 
+RETURNING id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at, deployment_url, nanoid, rollout_strategy, min_instances, activated_at, deactivated_at
 `
 
 type DeploymentUpdateStatusParams struct {
-	ID     pgtype.UUID `json:"id"`
-	Status string      `json:"status"`
+	ID          pgtype.UUID        `json:"id"`
+	Status      string             `json:"status"`
+	ActivatedAt pgtype.Timestamptz `json:"activated_at"`
 }
 
 func (q *Queries) DeploymentUpdateStatus(ctx context.Context, arg *DeploymentUpdateStatusParams) (*Deployment, error) {
-	row := q.db.QueryRow(ctx, deploymentUpdateStatus, arg.ID, arg.Status)
+	row := q.db.QueryRow(ctx, deploymentUpdateStatus, arg.ID, arg.Status, arg.ActivatedAt)
 	var i Deployment
 	err := row.Scan(
 		&i.ID,
@@ -426,6 +528,12 @@ func (q *Queries) DeploymentUpdateStatus(ctx context.Context, arg *DeploymentUpd
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.DeploymentUrl,
+		&i.Nanoid,
+		&i.RolloutStrategy,
+		&i.MinInstances,
+		&i.ActivatedAt,
+		&i.DeactivatedAt,
 	)
 	return &i, err
 }

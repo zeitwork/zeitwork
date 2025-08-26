@@ -10,6 +10,23 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type BuildQueue struct {
+	ID               pgtype.UUID        `json:"id"`
+	ProjectID        pgtype.UUID        `json:"project_id"`
+	ImageID          pgtype.UUID        `json:"image_id"`
+	Priority         int32              `json:"priority"`
+	Status           string             `json:"status"`
+	GithubRepo       string             `json:"github_repo"`
+	CommitHash       string             `json:"commit_hash"`
+	Branch           string             `json:"branch"`
+	BuildStartedAt   pgtype.Timestamptz `json:"build_started_at"`
+	BuildCompletedAt pgtype.Timestamptz `json:"build_completed_at"`
+	BuildLog         pgtype.Text        `json:"build_log"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt        pgtype.Timestamptz `json:"deleted_at"`
+}
+
 type Deployment struct {
 	ID                   pgtype.UUID        `json:"id"`
 	ProjectID            pgtype.UUID        `json:"project_id"`
@@ -21,6 +38,12 @@ type Deployment struct {
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt            pgtype.Timestamptz `json:"deleted_at"`
+	DeploymentUrl        pgtype.Text        `json:"deployment_url"`
+	Nanoid               pgtype.Text        `json:"nanoid"`
+	RolloutStrategy      string             `json:"rollout_strategy"`
+	MinInstances         int32              `json:"min_instances"`
+	ActivatedAt          pgtype.Timestamptz `json:"activated_at"`
+	DeactivatedAt        pgtype.Timestamptz `json:"deactivated_at"`
 }
 
 type DeploymentInstance struct {
@@ -69,15 +92,18 @@ type GithubInstallation struct {
 }
 
 type Image struct {
-	ID         pgtype.UUID        `json:"id"`
-	Name       string             `json:"name"`
-	Status     string             `json:"status"`
-	Repository json.RawMessage    `json:"repository"`
-	ImageSize  pgtype.Int4        `json:"image_size"`
-	ImageHash  string             `json:"image_hash"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt  pgtype.Timestamptz `json:"deleted_at"`
+	ID            pgtype.UUID        `json:"id"`
+	Name          string             `json:"name"`
+	Status        string             `json:"status"`
+	Repository    json.RawMessage    `json:"repository"`
+	ImageSize     pgtype.Int4        `json:"image_size"`
+	ImageHash     string             `json:"image_hash"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt     pgtype.Timestamptz `json:"deleted_at"`
+	S3Bucket      pgtype.Text        `json:"s3_bucket"`
+	S3Key         pgtype.Text        `json:"s3_key"`
+	BuilderNodeID pgtype.UUID        `json:"builder_node_id"`
 }
 
 type Instance struct {
@@ -93,6 +119,19 @@ type Instance struct {
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt            pgtype.Timestamptz `json:"deleted_at"`
+}
+
+type Ipv6Allocation struct {
+	ID          pgtype.UUID        `json:"id"`
+	RegionID    pgtype.UUID        `json:"region_id"`
+	NodeID      pgtype.UUID        `json:"node_id"`
+	InstanceID  pgtype.UUID        `json:"instance_id"`
+	Ipv6Address string             `json:"ipv6_address"`
+	Prefix      string             `json:"prefix"`
+	State       string             `json:"state"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt   pgtype.Timestamptz `json:"deleted_at"`
 }
 
 type Node struct {
@@ -176,6 +215,17 @@ type Region struct {
 	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
 }
 
+type RoutingCache struct {
+	ID           pgtype.UUID        `json:"id"`
+	Domain       string             `json:"domain"`
+	DeploymentID pgtype.UUID        `json:"deployment_id"`
+	Instances    json.RawMessage    `json:"instances"`
+	Version      int32              `json:"version"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
+}
+
 type Session struct {
 	ID        pgtype.UUID        `json:"id"`
 	UserID    pgtype.UUID        `json:"user_id"`
@@ -184,6 +234,19 @@ type Session struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
+}
+
+type TlsCertificate struct {
+	ID          pgtype.UUID        `json:"id"`
+	Domain      string             `json:"domain"`
+	Certificate string             `json:"certificate"`
+	PrivateKey  string             `json:"private_key"`
+	Issuer      string             `json:"issuer"`
+	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+	AutoRenew   bool               `json:"auto_renew"`
+	CreatedAt   pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt   pgtype.Timestamptz `json:"deleted_at"`
 }
 
 type User struct {

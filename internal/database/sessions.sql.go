@@ -165,6 +165,25 @@ func (q *Queries) SessionFindByUser(ctx context.Context, userID pgtype.UUID) ([]
 	return items, nil
 }
 
+const sessionFindByUserAndNotExpired = `-- name: SessionFindByUserAndNotExpired :one
+SELECT id, user_id, token, expires_at, created_at, updated_at, deleted_at FROM sessions WHERE user_id = $1 AND expires_at > NOW() ORDER BY created_at DESC LIMIT 1
+`
+
+func (q *Queries) SessionFindByUserAndNotExpired(ctx context.Context, userID pgtype.UUID) (*Session, error) {
+	row := q.db.QueryRow(ctx, sessionFindByUserAndNotExpired, userID)
+	var i Session
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Token,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return &i, err
+}
+
 const sessionUpdate = `-- name: SessionUpdate :one
 UPDATE sessions SET expires_at = $2, updated_at = NOW() WHERE id = $1 RETURNING id, user_id, token, expires_at, created_at, updated_at, deleted_at
 `

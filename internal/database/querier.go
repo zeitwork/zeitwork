@@ -11,12 +11,23 @@ import (
 )
 
 type Querier interface {
+	BuildQueueComplete(ctx context.Context, arg *BuildQueueCompleteParams) (*BuildQueue, error)
+	BuildQueueCreate(ctx context.Context, arg *BuildQueueCreateParams) (*BuildQueue, error)
+	BuildQueueDelete(ctx context.Context, id pgtype.UUID) error
+	BuildQueueDequeuePending(ctx context.Context) (*BuildQueue, error)
+	BuildQueueFail(ctx context.Context, arg *BuildQueueFailParams) (*BuildQueue, error)
+	BuildQueueFindById(ctx context.Context, id pgtype.UUID) (*BuildQueue, error)
+	BuildQueueFindByImage(ctx context.Context, imageID pgtype.UUID) (*BuildQueue, error)
+	BuildQueueFindByProject(ctx context.Context, projectID pgtype.UUID) ([]*BuildQueue, error)
+	BuildQueueFindPending(ctx context.Context) ([]*BuildQueue, error)
+	BuildQueueUpdateStatus(ctx context.Context, arg *BuildQueueUpdateStatusParams) (*BuildQueue, error)
 	DeploymentCreate(ctx context.Context, arg *DeploymentCreateParams) (*Deployment, error)
 	DeploymentDelete(ctx context.Context, id pgtype.UUID) error
 	DeploymentFind(ctx context.Context) ([]*Deployment, error)
 	DeploymentFindByEnvironment(ctx context.Context, projectEnvironmentID pgtype.UUID) ([]*Deployment, error)
 	DeploymentFindById(ctx context.Context, id pgtype.UUID) (*Deployment, error)
 	DeploymentFindByImage(ctx context.Context, imageID pgtype.UUID) ([]*Deployment, error)
+	DeploymentFindByOrganisation(ctx context.Context, organisationID pgtype.UUID) ([]*Deployment, error)
 	DeploymentFindByProject(ctx context.Context, projectID pgtype.UUID) ([]*Deployment, error)
 	DeploymentFindByStatus(ctx context.Context, status string) ([]*Deployment, error)
 	DeploymentInstanceCreate(ctx context.Context, arg *DeploymentInstanceCreateParams) (*DeploymentInstance, error)
@@ -49,6 +60,16 @@ type Querier interface {
 	GithubInstallationFindByOrganisation(ctx context.Context, organisationID pgtype.UUID) ([]*GithubInstallation, error)
 	GithubInstallationFindByUser(ctx context.Context, userID pgtype.UUID) ([]*GithubInstallation, error)
 	GithubInstallationUpdate(ctx context.Context, arg *GithubInstallationUpdateParams) (*GithubInstallation, error)
+	IPv6AllocationAllocate(ctx context.Context, arg *IPv6AllocationAllocateParams) (*Ipv6Allocation, error)
+	IPv6AllocationCreate(ctx context.Context, arg *IPv6AllocationCreateParams) (*Ipv6Allocation, error)
+	IPv6AllocationFindAvailable(ctx context.Context, arg *IPv6AllocationFindAvailableParams) ([]*Ipv6Allocation, error)
+	IPv6AllocationFindByAddress(ctx context.Context, ipv6Address string) (*Ipv6Allocation, error)
+	IPv6AllocationFindById(ctx context.Context, id pgtype.UUID) (*Ipv6Allocation, error)
+	IPv6AllocationFindByInstance(ctx context.Context, instanceID pgtype.UUID) (*Ipv6Allocation, error)
+	IPv6AllocationFindByNode(ctx context.Context, nodeID pgtype.UUID) ([]*Ipv6Allocation, error)
+	IPv6AllocationFindByRegion(ctx context.Context, regionID pgtype.UUID) ([]*Ipv6Allocation, error)
+	IPv6AllocationRelease(ctx context.Context, id pgtype.UUID) (*Ipv6Allocation, error)
+	IPv6AllocationReserve(ctx context.Context, id pgtype.UUID) (*Ipv6Allocation, error)
 	ImageCreate(ctx context.Context, arg *ImageCreateParams) (*Image, error)
 	ImageDelete(ctx context.Context, id pgtype.UUID) error
 	ImageDequeuePending(ctx context.Context) (*Image, error)
@@ -103,6 +124,8 @@ type Querier interface {
 	ProjectEnvironmentFindByProject(ctx context.Context, projectID pgtype.UUID) ([]*ProjectEnvironment, error)
 	ProjectEnvironmentUpdate(ctx context.Context, arg *ProjectEnvironmentUpdateParams) (*ProjectEnvironment, error)
 	ProjectFind(ctx context.Context) ([]*Project, error)
+	// TODO: For now, return empty set. Need to add github_repo field to projects table
+	ProjectFindByGitHubRepo(ctx context.Context) ([]*Project, error)
 	ProjectFindById(ctx context.Context, id pgtype.UUID) (*Project, error)
 	ProjectFindByOrganisation(ctx context.Context, organisationID pgtype.UUID) ([]*Project, error)
 	ProjectFindBySlug(ctx context.Context, slug string) (*Project, error)
@@ -120,6 +143,13 @@ type Querier interface {
 	RegionFindByCountry(ctx context.Context, country string) ([]*Region, error)
 	RegionFindById(ctx context.Context, id pgtype.UUID) (*Region, error)
 	RegionUpdate(ctx context.Context, arg *RegionUpdateParams) (*Region, error)
+	RoutingCacheCreate(ctx context.Context, arg *RoutingCacheCreateParams) (*RoutingCache, error)
+	RoutingCacheDelete(ctx context.Context, domain string) error
+	RoutingCacheFind(ctx context.Context) ([]*RoutingCache, error)
+	RoutingCacheFindByDeployment(ctx context.Context, deploymentID pgtype.UUID) ([]*RoutingCache, error)
+	RoutingCacheFindByDomain(ctx context.Context, domain string) (*RoutingCache, error)
+	RoutingCacheUpdate(ctx context.Context, arg *RoutingCacheUpdateParams) (*RoutingCache, error)
+	RoutingCacheUpsert(ctx context.Context, arg *RoutingCacheUpsertParams) (*RoutingCache, error)
 	SessionCreate(ctx context.Context, arg *SessionCreateParams) (*Session, error)
 	SessionDelete(ctx context.Context, id pgtype.UUID) error
 	SessionDeleteByToken(ctx context.Context, token string) error
@@ -128,7 +158,16 @@ type Querier interface {
 	SessionFindById(ctx context.Context, id pgtype.UUID) (*Session, error)
 	SessionFindByToken(ctx context.Context, token string) (*Session, error)
 	SessionFindByUser(ctx context.Context, userID pgtype.UUID) ([]*Session, error)
+	SessionFindByUserAndNotExpired(ctx context.Context, userID pgtype.UUID) (*Session, error)
 	SessionUpdate(ctx context.Context, arg *SessionUpdateParams) (*Session, error)
+	TLSCertificateCreate(ctx context.Context, arg *TLSCertificateCreateParams) (*TlsCertificate, error)
+	TLSCertificateDelete(ctx context.Context, id pgtype.UUID) error
+	TLSCertificateFind(ctx context.Context) ([]*TlsCertificate, error)
+	TLSCertificateFindByDomain(ctx context.Context, domain string) (*TlsCertificate, error)
+	TLSCertificateFindById(ctx context.Context, id pgtype.UUID) (*TlsCertificate, error)
+	TLSCertificateFindExpiring(ctx context.Context) ([]*TlsCertificate, error)
+	TLSCertificateToggleAutoRenew(ctx context.Context, arg *TLSCertificateToggleAutoRenewParams) (*TlsCertificate, error)
+	TLSCertificateUpdate(ctx context.Context, arg *TLSCertificateUpdateParams) (*TlsCertificate, error)
 	UserCreate(ctx context.Context, arg *UserCreateParams) (*User, error)
 	UserDelete(ctx context.Context, id pgtype.UUID) error
 	UserFind(ctx context.Context) ([]*User, error)

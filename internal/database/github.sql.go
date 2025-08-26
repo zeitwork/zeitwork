@@ -12,26 +12,17 @@ import (
 )
 
 const githubInstallationCreate = `-- name: GithubInstallationCreate :one
-INSERT INTO github_installations (id, github_installation_id, github_org_id, organisation_id, user_id) 
-VALUES ($1, $2, $3, $4, $5) RETURNING id, github_installation_id, github_org_id, organisation_id, user_id, created_at, updated_at, deleted_at
+INSERT INTO github_installations (github_installation_id, github_org_id) 
+VALUES ($1, $2) RETURNING id, github_installation_id, github_org_id, organisation_id, user_id, created_at, updated_at, deleted_at
 `
 
 type GithubInstallationCreateParams struct {
-	ID                   int32       `json:"id"`
-	GithubInstallationID int32       `json:"github_installation_id"`
-	GithubOrgID          int32       `json:"github_org_id"`
-	OrganisationID       pgtype.UUID `json:"organisation_id"`
-	UserID               pgtype.UUID `json:"user_id"`
+	GithubInstallationID int32 `json:"github_installation_id"`
+	GithubOrgID          int32 `json:"github_org_id"`
 }
 
 func (q *Queries) GithubInstallationCreate(ctx context.Context, arg *GithubInstallationCreateParams) (*GithubInstallation, error) {
-	row := q.db.QueryRow(ctx, githubInstallationCreate,
-		arg.ID,
-		arg.GithubInstallationID,
-		arg.GithubOrgID,
-		arg.OrganisationID,
-		arg.UserID,
-	)
+	row := q.db.QueryRow(ctx, githubInstallationCreate, arg.GithubInstallationID, arg.GithubOrgID)
 	var i GithubInstallation
 	err := row.Scan(
 		&i.ID,

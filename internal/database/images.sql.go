@@ -17,7 +17,7 @@ INSERT INTO images (
     name, status, repository, image_size, image_hash
 ) VALUES (
     $1, $2, $3, $4, $5
-) RETURNING id, name, status, repository, image_size, image_hash, created_at, updated_at, deleted_at
+) RETURNING id, name, status, repository, image_size, image_hash, created_at, updated_at, deleted_at, s3_bucket, s3_key, builder_node_id
 `
 
 type ImageCreateParams struct {
@@ -47,6 +47,9 @@ func (q *Queries) ImageCreate(ctx context.Context, arg *ImageCreateParams) (*Ima
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.S3Bucket,
+		&i.S3Key,
+		&i.BuilderNodeID,
 	)
 	return &i, err
 }
@@ -61,7 +64,7 @@ func (q *Queries) ImageDelete(ctx context.Context, id pgtype.UUID) error {
 }
 
 const imageDequeuePending = `-- name: ImageDequeuePending :one
-SELECT id, name, status, repository, image_size, image_hash, created_at, updated_at, deleted_at FROM images WHERE status = 'pending' ORDER BY created_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED
+SELECT id, name, status, repository, image_size, image_hash, created_at, updated_at, deleted_at, s3_bucket, s3_key, builder_node_id FROM images WHERE status = 'pending' ORDER BY created_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED
 `
 
 func (q *Queries) ImageDequeuePending(ctx context.Context) (*Image, error) {
@@ -77,12 +80,15 @@ func (q *Queries) ImageDequeuePending(ctx context.Context) (*Image, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.S3Bucket,
+		&i.S3Key,
+		&i.BuilderNodeID,
 	)
 	return &i, err
 }
 
 const imageFind = `-- name: ImageFind :many
-SELECT id, name, status, repository, image_size, image_hash, created_at, updated_at, deleted_at FROM images ORDER BY created_at DESC
+SELECT id, name, status, repository, image_size, image_hash, created_at, updated_at, deleted_at, s3_bucket, s3_key, builder_node_id FROM images ORDER BY created_at DESC
 `
 
 func (q *Queries) ImageFind(ctx context.Context) ([]*Image, error) {
@@ -104,6 +110,9 @@ func (q *Queries) ImageFind(ctx context.Context) ([]*Image, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.S3Bucket,
+			&i.S3Key,
+			&i.BuilderNodeID,
 		); err != nil {
 			return nil, err
 		}
@@ -116,7 +125,7 @@ func (q *Queries) ImageFind(ctx context.Context) ([]*Image, error) {
 }
 
 const imageFindById = `-- name: ImageFindById :one
-SELECT id, name, status, repository, image_size, image_hash, created_at, updated_at, deleted_at FROM images WHERE id = $1
+SELECT id, name, status, repository, image_size, image_hash, created_at, updated_at, deleted_at, s3_bucket, s3_key, builder_node_id FROM images WHERE id = $1
 `
 
 func (q *Queries) ImageFindById(ctx context.Context, id pgtype.UUID) (*Image, error) {
@@ -132,12 +141,15 @@ func (q *Queries) ImageFindById(ctx context.Context, id pgtype.UUID) (*Image, er
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.S3Bucket,
+		&i.S3Key,
+		&i.BuilderNodeID,
 	)
 	return &i, err
 }
 
 const imageFindByName = `-- name: ImageFindByName :one
-SELECT id, name, status, repository, image_size, image_hash, created_at, updated_at, deleted_at FROM images WHERE name = $1
+SELECT id, name, status, repository, image_size, image_hash, created_at, updated_at, deleted_at, s3_bucket, s3_key, builder_node_id FROM images WHERE name = $1
 `
 
 func (q *Queries) ImageFindByName(ctx context.Context, name string) (*Image, error) {
@@ -153,12 +165,15 @@ func (q *Queries) ImageFindByName(ctx context.Context, name string) (*Image, err
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.S3Bucket,
+		&i.S3Key,
+		&i.BuilderNodeID,
 	)
 	return &i, err
 }
 
 const imageFindByStatus = `-- name: ImageFindByStatus :many
-SELECT id, name, status, repository, image_size, image_hash, created_at, updated_at, deleted_at FROM images WHERE status = $1
+SELECT id, name, status, repository, image_size, image_hash, created_at, updated_at, deleted_at, s3_bucket, s3_key, builder_node_id FROM images WHERE status = $1
 `
 
 func (q *Queries) ImageFindByStatus(ctx context.Context, status string) ([]*Image, error) {
@@ -180,6 +195,9 @@ func (q *Queries) ImageFindByStatus(ctx context.Context, status string) ([]*Imag
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.S3Bucket,
+			&i.S3Key,
+			&i.BuilderNodeID,
 		); err != nil {
 			return nil, err
 		}
@@ -192,7 +210,7 @@ func (q *Queries) ImageFindByStatus(ctx context.Context, status string) ([]*Imag
 }
 
 const imageUpdateHash = `-- name: ImageUpdateHash :one
-UPDATE images SET image_hash = $2, updated_at = NOW() WHERE id = $1 RETURNING id, name, status, repository, image_size, image_hash, created_at, updated_at, deleted_at
+UPDATE images SET image_hash = $2, updated_at = NOW() WHERE id = $1 RETURNING id, name, status, repository, image_size, image_hash, created_at, updated_at, deleted_at, s3_bucket, s3_key, builder_node_id
 `
 
 type ImageUpdateHashParams struct {
@@ -213,12 +231,15 @@ func (q *Queries) ImageUpdateHash(ctx context.Context, arg *ImageUpdateHashParam
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.S3Bucket,
+		&i.S3Key,
+		&i.BuilderNodeID,
 	)
 	return &i, err
 }
 
 const imageUpdateStatus = `-- name: ImageUpdateStatus :one
-UPDATE images SET status = $2, image_size = $3, updated_at = NOW() WHERE id = $1 RETURNING id, name, status, repository, image_size, image_hash, created_at, updated_at, deleted_at
+UPDATE images SET status = $2, image_size = $3, updated_at = NOW() WHERE id = $1 RETURNING id, name, status, repository, image_size, image_hash, created_at, updated_at, deleted_at, s3_bucket, s3_key, builder_node_id
 `
 
 type ImageUpdateStatusParams struct {
@@ -240,6 +261,9 @@ func (q *Queries) ImageUpdateStatus(ctx context.Context, arg *ImageUpdateStatusP
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.S3Bucket,
+		&i.S3Key,
+		&i.BuilderNodeID,
 	)
 	return &i, err
 }

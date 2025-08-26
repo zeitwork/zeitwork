@@ -108,10 +108,16 @@ export const deployments = pgTable("deployments", {
   id: uuid().primaryKey().$defaultFn(uuidv7),
   projectId: uuid().references(() => projects.id),
   projectEnvironmentId: uuid().references(() => projectEnvironments.id),
-  status: text().notNull(),
+  status: text().notNull(), // pending, building, deploying, active, inactive, failed
   commitHash: text().notNull(),
   imageId: uuid().references(() => images.id),
   organisationId: uuid().references(() => organisations.id),
+  deploymentUrl: text(), // project-nanoid-org.zeitwork.app
+  nanoid: text().unique(), // Unique deployment identifier
+  rolloutStrategy: text().notNull().default("blue-green"), // blue-green, canary, rolling
+  minInstances: integer().notNull().default(3), // Minimum instances per region
+  activatedAt: timestamp({ withTimezone: true }),
+  deactivatedAt: timestamp({ withTimezone: true }),
   ...timestamps,
 });
 

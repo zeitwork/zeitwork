@@ -17,7 +17,7 @@ SELECT * FROM users ORDER BY created_at DESC;
 INSERT INTO users (name, email, username, github_user_id) VALUES ($1, $2, $3, $4) RETURNING *;
 
 -- name: UserUpdate :one
-UPDATE users SET name = $2, email = $3, username = $4, updated_at = NOW() WHERE id = $1 RETURNING *;
+UPDATE users SET name = $2, username = $3, github_user_id = $4, updated_at = NOW() WHERE id = $1 RETURNING *;
 
 -- name: UserDelete :exec
 DELETE FROM users WHERE id = $1;

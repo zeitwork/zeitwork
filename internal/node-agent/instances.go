@@ -1,12 +1,14 @@
 package nodeagent
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 )
 
 // CreateInstanceRequest represents a request to create a new instance
@@ -198,7 +200,44 @@ func (s *Service) startInstance(instance *Instance) {
 		return
 	}
 
-	// Download/prepare image (assume rootfs exists at /var/lib/zeitwork/images/[imageID].ext4)
+	// Download/prepare image
+	rootfsPath := fmt.Sprintf("/var/lib/zeitwork/images/%s.ext4", instance.ImageID)
+
+	// Check if image exists locally
+	if _, err := os.Stat(rootfsPath); os.IsNotExist(err) {
+		// Download from S3 if available
+		if s.s3Client != nil {
+			s.logger.Info("Downloading image from S3", "imageID", instance.ImageID)
+
+			// Create directory if needed
+			os.MkdirAll(filepath.Dir(rootfsPath), 0755)
+
+			// Download image
+			file, err := os.Create(rootfsPath)
+			if err != nil {
+				s.logger.Error("Failed to create image file", "error", err)
+				instance.State = "failed"
+				return
+			}
+			defer file.Close()
+
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+			defer cancel()
+
+			if err := s.s3Client.DownloadImage(ctx, instance.ImageID, file); err != nil {
+				s.logger.Error("Failed to download image from S3", "error", err)
+				os.Remove(rootfsPath) // Clean up partial download
+				instance.State = "failed"
+				return
+			}
+
+			s.logger.Info("Downloaded image from S3", "imageID", instance.ImageID)
+		} else {
+			s.logger.Error("Image not found and S3 not configured", "imageID", instance.ImageID)
+			instance.State = "failed"
+			return
+		}
+	}
 
 	// Generate config
 	config := map[string]interface{}{
@@ -209,7 +248,7 @@ func (s *Service) startInstance(instance *Instance) {
 		"drives": []map[string]interface{}{
 			{
 				"drive_id":       "rootfs",
-				"path_on_host":   fmt.Sprintf("/var/lib/zeitwork/images/%s.ext4", instance.ImageID),
+				"path_on_host":   rootfsPath,
 				"is_root_device": true,
 				"is_read_only":   false,
 			},
