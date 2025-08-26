@@ -48,11 +48,12 @@ type Config struct {
 	VMWorkDir         string
 	KernelImagePath   string
 	BuilderRootfsPath string
+	Region            string // Current deployment region (e.g., eu-central-1)
 	S3Endpoint        string
 	S3Bucket          string
 	S3AccessKey       string
 	S3SecretKey       string
-	S3Region          string
+	S3Region          string // S3 region for API calls
 }
 
 // Instance represents a running VM instance
@@ -507,6 +508,7 @@ func (s *Service) buildInVM(imageID string, githubRepo string) {
 	}
 
 	// Upload to S3 if configured
+	var s3Bucket, s3Key string
 	if s.s3Client != nil {
 		file, err := os.Open(rootfsPath)
 		if err != nil {
@@ -524,6 +526,11 @@ func (s *Service) buildInVM(imageID string, githubRepo string) {
 			// Continue anyway - local copy is available
 		} else {
 			s.logger.Info("Uploaded image to S3", "imageID", imageID)
+			s3Bucket = s.config.S3Bucket
+			s3Key = fmt.Sprintf("images/%s.ext4", imageID)
+
+			// Schedule replication to other regions
+			go s.scheduleImageReplication(imageID, s3Bucket, s3Key)
 		}
 	}
 
@@ -540,16 +547,19 @@ func (s *Service) buildInVM(imageID string, githubRepo string) {
 	io.Copy(h, f)
 	hash := hex.EncodeToString(h.Sum(nil))
 
-	// Notify operator
+	// Notify operator with S3 details
 	notify := map[string]interface{}{
-		"status": "ready",
-		"hash":   hash,
-		"size":   sizeMB,
+		"status":    "ready",
+		"hash":      hash,
+		"size":      sizeMB,
+		"s3_bucket": s3Bucket,
+		"s3_key":    s3Key,
+		"region":    s.config.Region,
 	}
 	body, _ := json.Marshal(notify)
 	url := fmt.Sprintf("%s/api/v1/images/%s/status", s.config.OperatorURL, imageID)
 	_, _ = s.httpClient.Post(url, "application/json", bytes.NewReader(body))
-	s.logger.Info("Build completed in VM", "image_id", imageID)
+	s.logger.Info("Build completed in VM", "image_id", imageID, "s3_bucket", s3Bucket, "s3_key", s3Key)
 }
 
 func (s *Service) notifyBuildFailed(imageID string, reason string) {
@@ -787,4 +797,52 @@ func (s *Service) updateHealthInDatabase(ctx context.Context, resources map[stri
 		Resources: resourcesJSON,
 	})
 	return err
+}
+
+// scheduleImageReplication schedules image replication to other regions
+func (s *Service) scheduleImageReplication(imageID, s3Bucket, s3Key string) {
+	// Get list of target regions from environment or database
+	targetRegions := s.getTargetRegions()
+	currentRegion := s.config.Region
+	if currentRegion == "" {
+		currentRegion = os.Getenv("REGION")
+	}
+
+	for _, region := range targetRegions {
+		if region == currentRegion {
+			continue // Skip current region
+		}
+
+		// Notify operator to replicate image to target region
+		replicateReq := map[string]interface{}{
+			"image_id":      imageID,
+			"source_bucket": s3Bucket,
+			"source_key":    s3Key,
+			"source_region": currentRegion,
+			"target_region": region,
+		}
+
+		body, _ := json.Marshal(replicateReq)
+		reqURL := fmt.Sprintf("%s/api/v1/images/%s/replicate", s.config.OperatorURL, imageID)
+		resp, err := s.httpClient.Post(reqURL, "application/json", bytes.NewReader(body))
+		if err != nil {
+			s.logger.Error("Failed to schedule replication",
+				"imageID", imageID,
+				"targetRegion", region,
+				"error", err)
+			continue
+		}
+		resp.Body.Close()
+
+		s.logger.Info("Scheduled image replication",
+			"imageID", imageID,
+			"targetRegion", region)
+	}
+}
+
+// getTargetRegions returns the list of regions to replicate to
+func (s *Service) getTargetRegions() []string {
+	// In production, this would come from database or configuration
+	// For now, return the standard three regions
+	return []string{"eu-central-1", "us-east-1", "asia-southeast-1"}
 }

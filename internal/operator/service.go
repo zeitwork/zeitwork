@@ -24,6 +24,9 @@ type Service struct {
 
 	// HTTP client for communicating with node agents
 	httpClient *http.Client
+
+	// Deployment manager for handling deployments
+	deploymentManager *DeploymentManager
 }
 
 // Config holds the configuration for the operator service
@@ -41,12 +44,17 @@ func NewService(config *Config, logger *slog.Logger) (*Service, error) {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	return &Service{
+	s := &Service{
 		db:         db,
 		logger:     logger,
 		config:     config,
 		httpClient: &http.Client{},
-	}, nil
+	}
+
+	// Initialize deployment manager
+	s.deploymentManager = NewDeploymentManager(s)
+
+	return s, nil
 }
 
 // Start starts the operator service
@@ -111,6 +119,7 @@ func (s *Service) setupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/deployments", s.createDeployment)
 	mux.HandleFunc("GET /api/v1/deployments/{id}", s.getDeployment)
 	mux.HandleFunc("PUT /api/v1/deployments/{id}/status", s.updateDeploymentStatus)
+	mux.HandleFunc("POST /api/v1/deployments/{id}/deploy", s.startDeployment)
 }
 
 // handleHealth handles health check requests
@@ -259,4 +268,182 @@ func (s *Service) Close() error {
 		s.db.Close()
 	}
 	return nil
+}
+
+// listDeployments handles GET /api/v1/deployments
+func (s *Service) listDeployments(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	// Get query parameters for filtering
+	projectID := r.URL.Query().Get("project_id")
+	status := r.URL.Query().Get("status")
+
+	var deployments []*database.Deployment
+	var err error
+
+	if projectID != "" {
+		// Filter by project
+		projectUUID, _ := uuid.Parse(projectID)
+		deployments, err = s.db.Queries().DeploymentFindByProject(ctx, pgtype.UUID{
+			Bytes: projectUUID,
+			Valid: true,
+		})
+	} else {
+		// Get all deployments
+		deployments, err = s.db.Queries().DeploymentList(ctx)
+	}
+
+	if err != nil {
+		http.Error(w, "Failed to list deployments", http.StatusInternalServerError)
+		return
+	}
+
+	// Filter by status if provided
+	if status != "" {
+		var filtered []*database.Deployment
+		for _, d := range deployments {
+			if d.Status == status {
+				filtered = append(filtered, d)
+			}
+		}
+		deployments = filtered
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(deployments)
+}
+
+// createDeployment handles POST /api/v1/deployments
+func (s *Service) createDeployment(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	var req struct {
+		ProjectID    string `json:"project_id"`
+		CommitHash   string `json:"commit_hash"`
+		ImageID      string `json:"image_id"`
+		MinInstances int    `json:"min_instances"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Create deployment in database
+	projectUUID, _ := uuid.Parse(req.ProjectID)
+	imageUUID, _ := uuid.Parse(req.ImageID)
+
+	deployment, err := s.db.Queries().DeploymentCreate(ctx, &database.DeploymentCreateParams{
+		ProjectID:    pgtype.UUID{Bytes: projectUUID, Valid: true},
+		CommitHash:   req.CommitHash,
+		ImageID:      pgtype.UUID{Bytes: imageUUID, Valid: true},
+		Status:       "pending",
+		MinInstances: int32(req.MinInstances),
+	})
+
+	if err != nil {
+		http.Error(w, "Failed to create deployment", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	json.NewEncoder(w).Encode(deployment)
+}
+
+// getDeployment handles GET /api/v1/deployments/{id}
+func (s *Service) getDeployment(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	deploymentID := r.PathValue("id")
+
+	deploymentUUID, err := uuid.Parse(deploymentID)
+	if err != nil {
+		http.Error(w, "Invalid deployment ID", http.StatusBadRequest)
+		return
+	}
+
+	deployment, err := s.db.Queries().DeploymentFindById(ctx, pgtype.UUID{
+		Bytes: deploymentUUID,
+		Valid: true,
+	})
+
+	if err != nil {
+		http.Error(w, "Deployment not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(deployment)
+}
+
+// updateDeploymentStatus handles PUT /api/v1/deployments/{id}/status
+func (s *Service) updateDeploymentStatus(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	deploymentID := r.PathValue("id")
+
+	var req struct {
+		Status string `json:"status"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	deploymentUUID, err := uuid.Parse(deploymentID)
+	if err != nil {
+		http.Error(w, "Invalid deployment ID", http.StatusBadRequest)
+		return
+	}
+
+	// Update deployment status
+	deployment, err := s.db.Queries().DeploymentUpdateStatus(ctx, &database.DeploymentUpdateStatusParams{
+		ID:          pgtype.UUID{Bytes: deploymentUUID, Valid: true},
+		Status:      req.Status,
+		ActivatedAt: pgtype.Timestamptz{},
+	})
+
+	if err != nil {
+		http.Error(w, "Failed to update deployment status", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(deployment)
+}
+
+// startDeployment handles POST /api/v1/deployments/{id}/deploy
+func (s *Service) startDeployment(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	deploymentID := r.PathValue("id")
+
+	deploymentUUID, err := uuid.Parse(deploymentID)
+	if err != nil {
+		http.Error(w, "Invalid deployment ID", http.StatusBadRequest)
+		return
+	}
+
+	// Get deployment details
+	deployment, err := s.db.Queries().DeploymentFindById(ctx, pgtype.UUID{
+		Bytes: deploymentUUID,
+		Valid: true,
+	})
+
+	if err != nil {
+		http.Error(w, "Deployment not found", http.StatusNotFound)
+		return
+	}
+
+	// Start deployment workflow
+	err = s.deploymentManager.StartDeploymentWorkflow(ctx, deploymentID, uuid.UUID(deployment.ImageID.Bytes).String())
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to start deployment: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusAccepted)
+	json.NewEncoder(w).Encode(map[string]string{
+		"message":       "Deployment started",
+		"deployment_id": deploymentID,
+	})
 }

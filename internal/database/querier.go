@@ -36,6 +36,7 @@ type Querier interface {
 	DeploymentInstanceFindByDeployment(ctx context.Context, deploymentID pgtype.UUID) ([]*DeploymentInstance, error)
 	DeploymentInstanceFindById(ctx context.Context, id pgtype.UUID) (*DeploymentInstance, error)
 	DeploymentInstanceFindByInstance(ctx context.Context, instanceID pgtype.UUID) ([]*DeploymentInstance, error)
+	DeploymentList(ctx context.Context) ([]*Deployment, error)
 	DeploymentUpdateImage(ctx context.Context, arg *DeploymentUpdateImageParams) (*Deployment, error)
 	DeploymentUpdateStatus(ctx context.Context, arg *DeploymentUpdateStatusParams) (*Deployment, error)
 	DomainCreate(ctx context.Context, arg *DomainCreateParams) (*Domain, error)

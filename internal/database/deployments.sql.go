@@ -496,6 +496,47 @@ func (q *Queries) DeploymentInstanceFindByInstance(ctx context.Context, instance
 	return items, nil
 }
 
+const deploymentList = `-- name: DeploymentList :many
+SELECT id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at, deployment_url, nanoid, rollout_strategy, min_instances, activated_at, deactivated_at FROM deployments ORDER BY created_at DESC
+`
+
+func (q *Queries) DeploymentList(ctx context.Context) ([]*Deployment, error) {
+	rows, err := q.db.Query(ctx, deploymentList)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*Deployment
+	for rows.Next() {
+		var i Deployment
+		if err := rows.Scan(
+			&i.ID,
+			&i.ProjectID,
+			&i.ProjectEnvironmentID,
+			&i.Status,
+			&i.CommitHash,
+			&i.ImageID,
+			&i.OrganisationID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.DeploymentUrl,
+			&i.Nanoid,
+			&i.RolloutStrategy,
+			&i.MinInstances,
+			&i.ActivatedAt,
+			&i.DeactivatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deploymentUpdateImage = `-- name: DeploymentUpdateImage :one
 UPDATE deployments SET image_id = $2, updated_at = NOW() WHERE id = $1 RETURNING id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at, deployment_url, nanoid, rollout_strategy, min_instances, activated_at, deactivated_at
 `
