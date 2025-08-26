@@ -2,11 +2,14 @@ package operator
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 
@@ -160,23 +163,94 @@ func (s *Service) processOneBuild(ctx context.Context) error {
 }
 
 func (s *Service) buildImage(image *database.Image) {
-	// TODO: Implement actual build logic using Docker in Firecracker VM
+	ctx := context.Background()
 
-	// Stub implementation
-	time.Sleep(10 * time.Second)
+	// Parse repository
+	var repo struct {
+		Type string `json:"type"`
+		Repo string `json:"repo"`
+	}
+	if err := json.Unmarshal(image.Repository, &repo); err != nil || repo.Type != "github" {
+		s.logger.Error("Invalid repository", "image_id", image.ID)
+		s.failBuild(image.ID, "Invalid repository")
+		return
+	}
+
+	// Select node for building (with at least 2 vCPU and 4GB memory available)
+	nodes, err := s.db.Queries().NodeFindByState(ctx, "ready")
+	if err != nil {
+		s.logger.Error("Failed to find nodes", "error", err)
+		s.failBuild(image.ID, "No available nodes")
+		return
+	}
+
+	var selectedNode *database.Node
+	for _, node := range nodes {
+		var res struct {
+			Available struct {
+				VCPU   int `json:"vcpu"`
+				Memory int `json:"memory"`
+			} `json:"available"`
+		}
+		if err := json.Unmarshal(node.Resources, &res); err == nil {
+			if res.Available.VCPU >= 2 && res.Available.Memory >= 4096 {
+				selectedNode = node
+				break
+			}
+		}
+	}
+
+	if selectedNode == nil {
+		s.logger.Error("No suitable node found", "image_id", image.ID)
+		s.failBuild(image.ID, "No suitable build node")
+		return
+	}
+
+	// Send build request to node agent
+	buildReq := map[string]string{
+		"image_id":    uuid.UUID(image.ID.Bytes).String(),
+		"github_repo": repo.Repo,
+	}
+	body, _ := json.Marshal(buildReq)
+
+	req, err := http.NewRequest("POST", fmt.Sprintf("http://%s:%s/api/v1/build", selectedNode.IpAddress, s.config.NodeAgentPort), strings.NewReader(string(body)))
+	if err != nil {
+		s.failBuild(image.ID, "Failed to create request")
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := s.httpClient.Do(req)
+	if err != nil || resp.StatusCode != http.StatusAccepted {
+		s.logger.Error("Build request failed", "error", err, "status", resp.StatusCode)
+		s.failBuild(image.ID, "Build initiation failed")
+		return
+	}
+
+	// Monitor build status (poll or wait for callback)
+	// For now, stub with sleep and success
+	time.Sleep(30 * time.Second)
 
 	params := database.ImageUpdateStatusParams{
 		ID:        image.ID,
 		Status:    "ready",
-		ImageSize: pgtype.Int4{Int32: 512, Valid: true}, // 512 MB
+		ImageSize: pgtype.Int4{Int32: 512, Valid: true},
 	}
-
-	_, err := s.db.Queries().ImageUpdateStatus(context.Background(), &params)
+	_, err = s.db.Queries().ImageUpdateStatus(ctx, &params)
 	if err != nil {
-		s.logger.Error("Failed to update image status after build", "error", err, "image_id", image.ID)
+		s.logger.Error("Failed to update status", "error", err)
 	}
 
-	s.logger.Info("Image build completed", "image_id", image.ID, "name", image.Name)
+	s.logger.Info("Build completed", "image_id", image.ID)
+}
+
+func (s *Service) failBuild(imageID pgtype.UUID, reason string) {
+	params := database.ImageUpdateStatusParams{
+		ID:        imageID,
+		Status:    "failed",
+		ImageSize: pgtype.Int4{Int32: 0, Valid: true},
+	}
+	s.db.Queries().ImageUpdateStatus(context.Background(), &params)
 }
 
 // Close closes the operator service

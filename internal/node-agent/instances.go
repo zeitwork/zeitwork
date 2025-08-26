@@ -2,8 +2,10 @@ package nodeagent
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 )
 
@@ -189,27 +191,63 @@ func (s *Service) handleNodeResources(w http.ResponseWriter, r *http.Request) {
 func (s *Service) startInstance(instance *Instance) {
 	s.logger.Info("Starting instance", "instance_id", instance.ID)
 
-	// Create instance directory
 	instanceDir := filepath.Join(s.config.VMWorkDir, instance.ID)
 	if err := os.MkdirAll(instanceDir, 0755); err != nil {
-		s.logger.Error("Failed to create instance directory", "error", err)
+		s.logger.Error("Failed to create dir", "error", err)
 		instance.State = "failed"
 		return
 	}
 
-	// TODO: Download and prepare the image
-	// TODO: Create Firecracker configuration
-	// TODO: Start Firecracker process
+	// Download/prepare image (assume rootfs exists at /var/lib/zeitwork/images/[imageID].ext4)
 
-	// For now, just mark as running
-	instance.State = "running"
-	instance.Process = &FirecrackerProcess{
-		PID:        12345, // TODO: Get actual PID
-		SocketPath: filepath.Join(instanceDir, "firecracker.sock"),
-		LogFile:    filepath.Join(instanceDir, "firecracker.log"),
+	// Generate config
+	config := map[string]interface{}{
+		"boot-source": map[string]string{
+			"kernel_image_path": "/path/to/vmlinux",
+			"boot_args":         "console=ttyS0 reboot=k panic=1 pci=off",
+		},
+		"drives": []map[string]interface{}{
+			{
+				"drive_id":       "rootfs",
+				"path_on_host":   fmt.Sprintf("/var/lib/zeitwork/images/%s.ext4", instance.ImageID),
+				"is_root_device": true,
+				"is_read_only":   false,
+			},
+		},
+		"machine-config": map[string]int{
+			"vcpu_count":   instance.Resources.VCPU,
+			"mem_size_mib": instance.Resources.Memory,
+		},
+		"network-interfaces": []map[string]string{
+			{
+				"guest_mac":     "AA:FC:00:00:00:01",
+				"host_dev_name": "tap0",
+			},
+		},
 	}
 
-	s.logger.Info("Instance started", "instance_id", instance.ID)
+	configPath := filepath.Join(instanceDir, "config.json")
+	jsonData, _ := json.Marshal(config)
+	os.WriteFile(configPath, jsonData, 0644)
+
+	socketPath := filepath.Join(instanceDir, "firecracker.sock")
+	logPath := filepath.Join(instanceDir, "firecracker.log")
+
+	cmd := exec.Command(s.config.FirecrackerBin, "--api-sock", socketPath, "--config-file", configPath, "--log-path", logPath)
+	if err := cmd.Start(); err != nil {
+		s.logger.Error("Failed to start Firecracker", "error", err)
+		instance.State = "failed"
+		return
+	}
+
+	instance.Process = &FirecrackerProcess{
+		PID:        cmd.Process.Pid,
+		SocketPath: socketPath,
+		LogFile:    logPath,
+	}
+	instance.State = "running"
+
+	s.logger.Info("Instance started", "pid", cmd.Process.Pid)
 }
 
 // stopInstance stops a VM instance

@@ -29,6 +29,8 @@ type NodeAgentConfig struct {
 	FirecrackerBin    string
 	FirecrackerSocket string
 	VMWorkDir         string
+	KernelImagePath   string
+	BuilderRootfsPath string
 }
 
 // LoadBalancerConfig contains configuration for the load balancer service
@@ -72,6 +74,8 @@ func LoadNodeAgentConfig() (*NodeAgentConfig, error) {
 		FirecrackerBin:    getEnvOrDefault("FIRECRACKER_BIN", "/usr/bin/firecracker"),
 		FirecrackerSocket: getEnvOrDefault("FIRECRACKER_SOCKET", "/tmp/firecracker.socket"),
 		VMWorkDir:         getEnvOrDefault("VM_WORK_DIR", "/var/lib/firecracker/vms"),
+		KernelImagePath:   getEnvOrDefault("KERNEL_IMAGE_PATH", "/var/lib/zeitwork/kernel/vmlinux.bin"),
+		BuilderRootfsPath: getEnvOrDefault("BUILDER_ROOTFS_PATH", "/var/lib/zeitwork/builder/rootfs.ext4"),
 	}
 
 	return config, nil
@@ -91,10 +95,10 @@ func LoadLoadBalancerConfig() (*LoadBalancerConfig, error) {
 
 // LoadEdgeProxyConfig loads configuration for the edge proxy service
 func LoadEdgeProxyConfig() (*EdgeProxyConfig, error) {
-	rateLimitStr := getEnvOrDefault("RATE_LIMIT_RPS", "100")
-	rateLimit, err := strconv.Atoi(rateLimitStr)
+	ratelimitStr := getEnvOrDefault("RATE_LIMIT_RPS", "100")
+	ratelimit, err := strconv.Atoi(ratelimitStr)
 	if err != nil {
-		rateLimit = 100
+		ratelimit = 100
 	}
 
 	config := &EdgeProxyConfig{
@@ -102,7 +106,7 @@ func LoadEdgeProxyConfig() (*EdgeProxyConfig, error) {
 		LoadBalancerURL: getEnvOrDefault("LOAD_BALANCER_URL", "http://localhost:8082"),
 		SSLCertPath:     os.Getenv("SSL_CERT_PATH"),
 		SSLKeyPath:      os.Getenv("SSL_KEY_PATH"),
-		RateLimitRPS:    rateLimit,
+		RateLimitRPS:    ratelimit,
 	}
 
 	return config, nil
