@@ -8,9 +8,14 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/zeitwork/zeitwork/internal/database"
 )
 
 // Service represents the L4 load balancer service
@@ -330,26 +335,39 @@ func (s *Service) discoverBackendsPeriodically(ctx context.Context) {
 	}
 }
 
-// discoverBackends discovers backends from the operator
+// discoverBackends discovers backends from the operator or database
 func (s *Service) discoverBackends(ctx context.Context) {
+	// Try operator API first
+	if s.config.OperatorURL != "" {
+		if err := s.discoverFromOperator(ctx); err != nil {
+			s.logger.Error("Failed to discover from operator, trying database", "error", err)
+			// Fall back to database
+			s.discoverFromDatabase(ctx)
+		}
+		return
+	}
+
+	// Use database directly if no operator URL
+	s.discoverFromDatabase(ctx)
+}
+
+// discoverFromOperator queries the operator API for backends
+func (s *Service) discoverFromOperator(ctx context.Context) error {
 	// Query operator for running instances
 	req, err := http.NewRequestWithContext(ctx, "GET",
 		s.config.OperatorURL+"/api/v1/instances?state=running", nil)
 	if err != nil {
-		s.logger.Error("Failed to create discovery request", "error", err)
-		return
+		return fmt.Errorf("failed to create request: %w", err)
 	}
 
 	resp, err := s.httpClient.Do(req)
 	if err != nil {
-		s.logger.Error("Failed to discover backends", "error", err)
-		return
+		return fmt.Errorf("failed to query operator: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		s.logger.Error("Discovery failed", "status", resp.StatusCode)
-		return
+		return fmt.Errorf("operator returned status %d", resp.StatusCode)
 	}
 
 	// Parse instances
@@ -360,8 +378,7 @@ func (s *Service) discoverBackends(ctx context.Context) {
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&instances); err != nil {
-		s.logger.Error("Failed to parse instances", "error", err)
-		return
+		return fmt.Errorf("failed to decode response: %w", err)
 	}
 
 	// Update backends
@@ -383,7 +400,76 @@ func (s *Service) discoverBackends(ctx context.Context) {
 	s.backends = newBackends
 	s.backendsMu.Unlock()
 
-	s.logger.Info("Discovered backends", "count", len(newBackends))
+	s.logger.Info("Discovered backends from operator", "count", len(newBackends))
+	return nil
+}
+
+// discoverFromDatabase queries the database directly for backends
+func (s *Service) discoverFromDatabase(ctx context.Context) {
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		s.logger.Warn("No database URL configured, using default backend")
+		// Use a default backend for testing
+		s.backendsMu.Lock()
+		if len(s.backends) == 0 {
+			s.backends = []*Backend{
+				{ID: "default", Address: "127.0.0.1:8081", Healthy: true},
+			}
+		}
+		s.backendsMu.Unlock()
+		return
+	}
+
+	db, err := database.NewDB(dbURL)
+	if err != nil {
+		s.logger.Error("Failed to connect to database", "error", err)
+		return
+	}
+	defer db.Close()
+
+	// Query for running instances
+	instances, err := db.Queries().InstanceFindByState(ctx, "running")
+	if err != nil {
+		s.logger.Error("Failed to query instances", "error", err)
+		return
+	}
+
+	// Convert to backends
+	newBackends := make([]*Backend, 0, len(instances))
+	for _, inst := range instances {
+		if inst.IpAddress != "" {
+			port := 8080 // Default application port
+
+			// Try to get port from environment variables
+			if inst.EnvironmentVariables != "" {
+				var env map[string]interface{}
+				if err := json.Unmarshal([]byte(inst.EnvironmentVariables), &env); err == nil {
+					if p, ok := env["PORT"]; ok {
+						switch v := p.(type) {
+						case float64:
+							port = int(v)
+						case string:
+							if parsed, err := strconv.Atoi(v); err == nil {
+								port = parsed
+							}
+						}
+					}
+				}
+			}
+
+			newBackends = append(newBackends, &Backend{
+				ID:      uuid.UUID(inst.ID.Bytes).String(),
+				Address: fmt.Sprintf("%s:%d", inst.IpAddress, port),
+				Healthy: false, // Will be checked by health checker
+			})
+		}
+	}
+
+	s.backendsMu.Lock()
+	s.backends = newBackends
+	s.backendsMu.Unlock()
+
+	s.logger.Info("Discovered backends from database", "count", len(newBackends))
 }
 
 // checkHealthPeriodically checks backend health periodically

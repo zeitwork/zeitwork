@@ -228,6 +228,34 @@ func (q *Queries) DeploymentFindByImage(ctx context.Context, imageID pgtype.UUID
 	return items, nil
 }
 
+const deploymentFindByNanoID = `-- name: DeploymentFindByNanoID :one
+SELECT id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at, deployment_url, nanoid, rollout_strategy, min_instances, activated_at, deactivated_at FROM deployments WHERE nanoid = $1
+`
+
+func (q *Queries) DeploymentFindByNanoID(ctx context.Context, nanoid pgtype.Text) (*Deployment, error) {
+	row := q.db.QueryRow(ctx, deploymentFindByNanoID, nanoid)
+	var i Deployment
+	err := row.Scan(
+		&i.ID,
+		&i.ProjectID,
+		&i.ProjectEnvironmentID,
+		&i.Status,
+		&i.CommitHash,
+		&i.ImageID,
+		&i.OrganisationID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.DeploymentUrl,
+		&i.Nanoid,
+		&i.RolloutStrategy,
+		&i.MinInstances,
+		&i.ActivatedAt,
+		&i.DeactivatedAt,
+	)
+	return &i, err
+}
+
 const deploymentFindByOrganisation = `-- name: DeploymentFindByOrganisation :many
 SELECT id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at, deployment_url, nanoid, rollout_strategy, min_instances, activated_at, deactivated_at FROM deployments WHERE organisation_id = $1 ORDER BY created_at DESC
 `

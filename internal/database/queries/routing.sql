@@ -1,8 +1,11 @@
+-- name: RoutingCacheFind :many
+SELECT * FROM routing_cache ORDER BY domain;
+
 -- name: RoutingCacheFindByDomain :one
 SELECT * FROM routing_cache WHERE domain = $1;
 
--- name: RoutingCacheFind :many
-SELECT * FROM routing_cache ORDER BY domain;
+-- name: RoutingCacheFindByDeployment :many
+SELECT * FROM routing_cache WHERE deployment_id = $1;
 
 -- name: RoutingCacheCreate :one
 INSERT INTO routing_cache (domain, deployment_id, instances, version) 
@@ -26,6 +29,3 @@ RETURNING *;
 
 -- name: RoutingCacheDelete :exec
 DELETE FROM routing_cache WHERE domain = $1;
-
--- name: RoutingCacheFindByDeployment :many
-SELECT * FROM routing_cache WHERE deployment_id = $1;

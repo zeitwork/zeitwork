@@ -13,10 +13,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/zeitwork/zeitwork/internal/database"
 	"github.com/zeitwork/zeitwork/internal/shared/s3"
 )
 
@@ -27,6 +31,8 @@ type Service struct {
 	httpClient *http.Client
 	nodeID     uuid.UUID
 	s3Client   *s3.Client
+	operator   interface{}  // Operator client (placeholder)
+	mu         sync.RWMutex // Add mutex for thread safety
 
 	// Firecracker VM management
 	instances map[string]*Instance // instance_id -> instance
@@ -195,17 +201,35 @@ func (s *Service) handleHealth(w http.ResponseWriter, r *http.Request) {
 // registerWithOperator registers this node with the operator
 func (s *Service) registerWithOperator(ctx context.Context) error {
 	// Get system information
-	hostname := "node-" + s.nodeID.String()[:8]
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = "node-" + s.nodeID.String()[:8]
+	}
 	ipAddress := s.getNodeIPAddress()
 
-	// Prepare registration request
+	// Get system resources
+	resources := s.getSystemResources()
+
+	// Determine region from environment
+	region := os.Getenv("REGION")
+	if region == "" {
+		region = "eu-central-1" // Default region
+	}
+
+	// Register with database directly if DATABASE_URL is set
+	if dbURL := os.Getenv("DATABASE_URL"); dbURL != "" {
+		if err := s.registerInDatabase(ctx, hostname, ipAddress, region, resources); err != nil {
+			s.logger.Error("Failed to register in database", "error", err)
+			// Continue with operator registration
+		}
+	}
+
+	// Prepare registration request for operator
 	registration := map[string]interface{}{
 		"hostname":   hostname,
 		"ip_address": ipAddress,
-		"resources": map[string]int{
-			"vcpu":   4,    // TODO: Get actual CPU count
-			"memory": 8192, // TODO: Get actual memory
-		},
+		"region":     region,
+		"resources":  resources,
 	}
 
 	body, err := json.Marshal(registration)
@@ -232,7 +256,10 @@ func (s *Service) registerWithOperator(ctx context.Context) error {
 		return fmt.Errorf("registration failed with status %d", resp.StatusCode)
 	}
 
-	s.logger.Info("Successfully registered with operator")
+	s.logger.Info("Successfully registered with operator",
+		"hostname", hostname,
+		"region", region,
+		"ip", ipAddress)
 	return nil
 }
 
@@ -253,13 +280,27 @@ func (s *Service) reportHealthPeriodically(ctx context.Context) {
 
 // reportHealth sends a health report to the operator
 func (s *Service) reportHealth(ctx context.Context) {
+	// Get current resource usage
+	resources := s.getSystemResources()
+
+	// Count active instances
+	s.mu.RLock()
+	activeInstances := len(s.instances)
+	s.mu.RUnlock()
+
+	// Update database if connected
+	if dbURL := os.Getenv("DATABASE_URL"); dbURL != "" {
+		if err := s.updateHealthInDatabase(ctx, resources, activeInstances); err != nil {
+			s.logger.Error("Failed to update health in database", "error", err)
+		}
+	}
+
 	// Prepare health report
 	health := map[string]interface{}{
-		"state": "ready",
-		"resources": map[string]interface{}{
-			"vcpu_available":   4,    // TODO: Calculate available resources
-			"memory_available": 4096, // TODO: Calculate available memory
-		},
+		"state":            "ready",
+		"resources":        resources,
+		"active_instances": activeInstances,
+		"timestamp":        time.Now().Format(time.RFC3339),
 	}
 
 	body, err := json.Marshal(health)
@@ -640,4 +681,110 @@ func (s *Service) writeJSON(path string, v interface{}) error {
 func (s *Service) Close() error {
 	s.stopAllInstances()
 	return nil
+}
+
+// getSystemResources returns the current system resources
+func (s *Service) getSystemResources() map[string]interface{} {
+	// Get CPU count
+	vcpu := runtime.NumCPU()
+
+	// Get memory info (simplified - in production use proper system calls)
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+	totalMemoryMB := m.Sys / 1024 / 1024
+	availableMemoryMB := (m.Sys - m.Alloc) / 1024 / 1024
+
+	return map[string]interface{}{
+		"vcpu":             vcpu,
+		"memory":           int(totalMemoryMB),
+		"vcpu_available":   vcpu, // TODO: Calculate based on running VMs
+		"memory_available": int(availableMemoryMB),
+		"disk_gb":          100, // TODO: Get actual disk space
+	}
+}
+
+// registerInDatabase registers the node directly in the database
+func (s *Service) registerInDatabase(ctx context.Context, hostname, ipAddress, region string, resources map[string]interface{}) error {
+	db, err := database.NewDB(os.Getenv("DATABASE_URL"))
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+	defer db.Close()
+
+	// Get region ID
+	regionRow, err := db.Queries().RegionFindByCode(ctx, region)
+	if err != nil {
+		return fmt.Errorf("failed to find region %s: %w", region, err)
+	}
+
+	// Determine node type
+	nodeType := "worker"
+	if strings.Contains(hostname, "operator") {
+		nodeType = "operator"
+	}
+	_ = nodeType // Suppress unused warning
+
+	// Convert resources to JSON
+	resourcesJSON, err := json.Marshal(resources)
+	if err != nil {
+		return fmt.Errorf("failed to marshal resources: %w", err)
+	}
+
+	// Create or update node
+	node, err := db.Queries().NodeCreate(ctx, &database.NodeCreateParams{
+		Hostname:  hostname,
+		RegionID:  regionRow.ID,
+		IpAddress: ipAddress,
+		State:     "ready",
+		Resources: resourcesJSON,
+	})
+	if err != nil {
+		// Try to update if already exists
+		existingNode, findErr := db.Queries().NodeFindByHostname(ctx, hostname)
+		if findErr == nil {
+			_, updateErr := db.Queries().NodeUpdate(ctx, &database.NodeUpdateParams{
+				ID:        existingNode.ID,
+				IpAddress: ipAddress,
+				State:     "ready",
+				Resources: resourcesJSON,
+			})
+			if updateErr != nil {
+				return fmt.Errorf("failed to update node: %w", updateErr)
+			}
+			s.nodeID = uuid.UUID(existingNode.ID.Bytes)
+			return nil
+		}
+		return fmt.Errorf("failed to create node: %w", err)
+	}
+
+	s.nodeID = uuid.UUID(node.ID.Bytes)
+	return nil
+}
+
+// updateHealthInDatabase updates the node's health status in the database
+func (s *Service) updateHealthInDatabase(ctx context.Context, resources map[string]interface{}, activeInstances int) error {
+	if s.nodeID == uuid.Nil {
+		return fmt.Errorf("node not registered")
+	}
+
+	db, err := database.NewDB(os.Getenv("DATABASE_URL"))
+	if err != nil {
+		return fmt.Errorf("failed to connect to database: %w", err)
+	}
+	defer db.Close()
+
+	// Add instance count to resources
+	resources["active_instances"] = activeInstances
+	resources["last_health"] = time.Now().Format(time.RFC3339)
+
+	resourcesJSON, err := json.Marshal(resources)
+	if err != nil {
+		return fmt.Errorf("failed to marshal resources: %w", err)
+	}
+
+	_, err = db.Queries().NodeUpdate(ctx, &database.NodeUpdateParams{
+		ID:        pgtype.UUID{Bytes: [16]byte(s.nodeID), Valid: true},
+		Resources: resourcesJSON,
+	})
+	return err
 }

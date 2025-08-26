@@ -32,3 +32,8 @@ UPDATE instances SET node_id = $2, updated_at = NOW() WHERE id = $1 RETURNING *;
 
 -- name: InstanceDelete :exec
 DELETE FROM instances WHERE id = $1;
+
+-- name: InstanceFindByDeployment :many
+SELECT i.* FROM instances i
+JOIN deployment_instances di ON i.id = di.instance_id
+WHERE di.deployment_id = $1 AND i.state = 'running';
