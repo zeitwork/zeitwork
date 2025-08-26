@@ -5,6 +5,10 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/zeitwork/zeitwork/internal/database"
 )
@@ -62,6 +66,9 @@ func (s *Service) Start(ctx context.Context) error {
 		}
 	}()
 
+	// Start build queue processor
+	go s.processBuildQueue(ctx)
+
 	// Wait for context cancellation
 	<-ctx.Done()
 
@@ -107,6 +114,69 @@ func (s *Service) setupRoutes(mux *http.ServeMux) {
 func (s *Service) handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte(`{"status":"healthy"}`))
+}
+
+func (s *Service) processBuildQueue(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			s.logger.Info("Stopping build queue processor")
+			return
+		default:
+			err := s.processOneBuild(ctx)
+			if err != nil {
+				s.logger.Error("Failed to process build", "error", err)
+			}
+			time.Sleep(5 * time.Second)
+		}
+	}
+}
+
+func (s *Service) processOneBuild(ctx context.Context) error {
+	return s.db.WithTx(ctx, func(q *database.Queries) error {
+		image, err := q.ImageDequeuePending(ctx)
+		if err != nil {
+			if err == pgx.ErrNoRows {
+				return nil
+			}
+			return err
+		}
+
+		params := database.ImageUpdateStatusParams{
+			ID:        image.ID,
+			Status:    "building",
+			ImageSize: image.ImageSize,
+		}
+		_, err = q.ImageUpdateStatus(ctx, &params)
+		if err != nil {
+			return err
+		}
+
+		// Process the build in background
+		go s.buildImage(image)
+
+		return nil
+	})
+}
+
+func (s *Service) buildImage(image *database.Image) {
+	// TODO: Implement actual build logic using Docker in Firecracker VM
+
+	// Stub implementation
+	time.Sleep(10 * time.Second)
+
+	params := database.ImageUpdateStatusParams{
+		ID:        image.ID,
+		Status:    "ready",
+		ImageSize: pgtype.Int4{Int32: 512, Valid: true}, // 512 MB
+	}
+
+	_, err := s.db.Queries().ImageUpdateStatus(context.Background(), &params)
+	if err != nil {
+		s.logger.Error("Failed to update image status after build", "error", err, "image_id", image.ID)
+	}
+
+	s.logger.Info("Image build completed", "image_id", image.ID, "name", image.Name)
 }
 
 // Close closes the operator service

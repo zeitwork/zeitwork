@@ -51,6 +51,7 @@ type Querier interface {
 	GithubInstallationUpdate(ctx context.Context, arg *GithubInstallationUpdateParams) (*GithubInstallation, error)
 	ImageCreate(ctx context.Context, arg *ImageCreateParams) (*Image, error)
 	ImageDelete(ctx context.Context, id pgtype.UUID) error
+	ImageDequeuePending(ctx context.Context) (*Image, error)
 	ImageFind(ctx context.Context) ([]*Image, error)
 	ImageFindById(ctx context.Context, id pgtype.UUID) (*Image, error)
 	ImageFindByName(ctx context.Context, name string) (*Image, error)

@@ -60,6 +60,27 @@ func (q *Queries) ImageDelete(ctx context.Context, id pgtype.UUID) error {
 	return err
 }
 
+const imageDequeuePending = `-- name: ImageDequeuePending :one
+SELECT id, name, status, repository, image_size, image_hash, created_at, updated_at, deleted_at FROM images WHERE status = 'pending' ORDER BY created_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED
+`
+
+func (q *Queries) ImageDequeuePending(ctx context.Context) (*Image, error) {
+	row := q.db.QueryRow(ctx, imageDequeuePending)
+	var i Image
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Status,
+		&i.Repository,
+		&i.ImageSize,
+		&i.ImageHash,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return &i, err
+}
+
 const imageFind = `-- name: ImageFind :many
 SELECT id, name, status, repository, image_size, image_hash, created_at, updated_at, deleted_at FROM images ORDER BY created_at DESC
 `
