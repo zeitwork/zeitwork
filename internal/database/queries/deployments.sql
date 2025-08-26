@@ -1,6 +1,9 @@
 -- name: DeploymentFindById :one
 SELECT * FROM deployments WHERE id = $1;
 
+-- name: DeploymentList :many
+SELECT * FROM deployments ORDER BY created_at DESC;
+
 -- name: DeploymentFindByProject :many
 SELECT * FROM deployments WHERE project_id = $1 ORDER BY created_at DESC;
 
