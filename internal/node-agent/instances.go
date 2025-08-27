@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -239,11 +240,51 @@ func (s *Service) startInstance(instance *Instance) {
 		}
 	}
 
+	// Allocate IPv6 address if not already assigned
+	var vmIPv6 net.IP
+	if instance.IPAddress != "" {
+		// Use provided IPv6 address
+		vmIPv6 = net.ParseIP(instance.IPAddress)
+	} else if s.ipv6Allocator != nil {
+		// Allocate a new IPv6 address
+		var err error
+		vmIPv6, err = s.ipv6Allocator.AllocateAddress()
+		if err != nil {
+			s.logger.Error("Failed to allocate IPv6 address", "error", err)
+			instance.State = "failed"
+			return
+		}
+		instance.IPAddress = vmIPv6.String()
+	} else {
+		// Fallback to IPv4 or link-local
+		instance.IPAddress = "10.0.0.2"
+	}
+
+	// Create TAP interface
+	var tapName string
+	if vmIPv6 != nil && s.networkManager != nil {
+		var err error
+		tapName, err = s.networkManager.CreateTAPInterface(instance.ID, vmIPv6)
+		if err != nil {
+			s.logger.Error("Failed to create TAP interface", "error", err)
+			instance.State = "failed"
+			return
+		}
+	} else {
+		tapName = "tap0" // Fallback
+	}
+
+	// Generate MAC address
+	macAddr := GenerateMAC(instance.ID)
+
 	// Generate config
 	config := map[string]interface{}{
 		"boot-source": map[string]string{
-			"kernel_image_path": "/path/to/vmlinux",
-			"boot_args":         "console=ttyS0 reboot=k panic=1 pci=off",
+			"kernel_image_path": s.config.KernelImagePath,
+			"boot_args": fmt.Sprintf(
+				"console=ttyS0 reboot=k panic=1 pci=off init=/init ip=%s:::64::eth0:off",
+				instance.IPAddress,
+			),
 		},
 		"drives": []map[string]interface{}{
 			{
@@ -259,8 +300,8 @@ func (s *Service) startInstance(instance *Instance) {
 		},
 		"network-interfaces": []map[string]string{
 			{
-				"guest_mac":     "AA:FC:00:00:00:01",
-				"host_dev_name": "tap0",
+				"guest_mac":     macAddr,
+				"host_dev_name": tapName,
 			},
 		},
 	}
@@ -294,9 +335,31 @@ func (s *Service) stopInstance(instance *Instance) {
 	s.logger.Info("Stopping instance", "instance_id", instance.ID)
 
 	if instance.Process != nil {
-		// TODO: Send shutdown command to Firecracker
-		// TODO: Wait for graceful shutdown
-		// TODO: Force kill if necessary
+		// Try graceful shutdown first
+		// TODO: Send shutdown command via Firecracker API
+
+		// Force kill after timeout
+		if process, err := os.FindProcess(instance.Process.PID); err == nil {
+			process.Kill()
+		}
+	}
+
+	// Clean up network resources
+	if s.networkManager != nil && instance.IPAddress != "" {
+		vmIPv6 := net.ParseIP(instance.IPAddress)
+		if vmIPv6 != nil {
+			if err := s.networkManager.CleanupInstance(instance.ID, vmIPv6); err != nil {
+				s.logger.Error("Failed to cleanup network", "error", err)
+			}
+		}
+	}
+
+	// Release IPv6 address
+	if s.ipv6Allocator != nil && instance.IPAddress != "" {
+		vmIPv6 := net.ParseIP(instance.IPAddress)
+		if vmIPv6 != nil {
+			s.ipv6Allocator.ReleaseAddress(vmIPv6)
+		}
 	}
 
 	instance.State = "stopped"

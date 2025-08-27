@@ -21,6 +21,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/zeitwork/zeitwork/internal/database"
+	"github.com/zeitwork/zeitwork/internal/shared/ipv6"
 	"github.com/zeitwork/zeitwork/internal/shared/s3"
 )
 
@@ -36,6 +37,10 @@ type Service struct {
 
 	// Firecracker VM management
 	instances map[string]*Instance // instance_id -> instance
+
+	// Network management
+	networkManager *NetworkManager
+	ipv6Allocator  *ipv6.Allocator
 }
 
 // Config holds the configuration for the node agent service
@@ -111,13 +116,37 @@ func NewService(config *Config, logger *slog.Logger) (*Service, error) {
 		}
 	}
 
+	// Initialize network manager
+	networkManager := NewNetworkManager()
+
+	// Initialize IPv6 allocator
+	var ipv6Allocator *ipv6.Allocator
+	if config.Region != "" {
+		regionPrefixes := ipv6.GetRegionPrefixes()
+		if prefix, ok := regionPrefixes[config.Region]; ok {
+			allocator, err := ipv6.NewAllocator(prefix, nodeID.String())
+			if err != nil {
+				logger.Error("Failed to create IPv6 allocator", "error", err)
+			} else {
+				ipv6Allocator = allocator
+
+				// Configure node IPv6
+				if err := ConfigureNodeIPv6(allocator.GetNodePrefix().String()); err != nil {
+					logger.Error("Failed to configure node IPv6", "error", err)
+				}
+			}
+		}
+	}
+
 	return &Service{
-		logger:     logger,
-		config:     config,
-		httpClient: &http.Client{Timeout: 30 * time.Second},
-		nodeID:     nodeID,
-		s3Client:   s3Client,
-		instances:  make(map[string]*Instance),
+		logger:         logger,
+		config:         config,
+		httpClient:     &http.Client{Timeout: 30 * time.Second},
+		nodeID:         nodeID,
+		s3Client:       s3Client,
+		instances:      make(map[string]*Instance),
+		networkManager: networkManager,
+		ipv6Allocator:  ipv6Allocator,
 	}, nil
 }
 
