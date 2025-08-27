@@ -24,11 +24,12 @@ func main() {
 
 	// Create edge proxy service
 	svc, err := edgeproxy.NewService(&edgeproxy.Config{
-		Port:            cfg.Port,
-		LoadBalancerURL: cfg.LoadBalancerURL,
-		SSLCertPath:     cfg.SSLCertPath,
-		SSLKeyPath:      cfg.SSLKeyPath,
-		RateLimitRPS:    cfg.RateLimitRPS,
+		Port:         cfg.Port,
+		OperatorURL:  cfg.OperatorURL,
+		SSLCertPath:  cfg.SSLCertPath,
+		SSLKeyPath:   cfg.SSLKeyPath,
+		RateLimitRPS: cfg.RateLimitRPS,
+		DatabaseURL:  cfg.DatabaseURL,
 	}, logger)
 	if err != nil {
 		logger.Error("Failed to create edge proxy service", "error", err)

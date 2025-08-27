@@ -13,11 +13,13 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/zeitwork/zeitwork/internal/database"
 	"github.com/zeitwork/zeitwork/internal/shared/ssl"
+	internaltls "github.com/zeitwork/zeitwork/internal/shared/tls"
 	"golang.org/x/time/rate"
 )
 
@@ -27,21 +29,35 @@ type Service struct {
 	config     *Config
 	httpClient *http.Client
 
-	// Reverse proxy to load balancer
-	proxy           *httputil.ReverseProxy
-	loadBalancerURL *url.URL
+	// Backend worker nodes (no longer proxying to load balancer)
+	backends   []*WorkerBackend
+	backendsMu sync.RWMutex
+	currentIdx atomic.Uint32 // For round-robin
 
 	// Rate limiting
 	rateLimiters  map[string]*rate.Limiter
 	rateLimiterMu sync.RWMutex
 
-	// SSL/TLS
+	// SSL/TLS for external traffic
 	tlsConfig  *tls.Config
 	sslManager *ssl.Manager
+
+	// mTLS for internal traffic to workers
+	internalCA     *internaltls.InternalCA
+	internalClient *http.Client
 
 	// Domain-based routing
 	routingCache map[string]*RouteTarget // domain -> backend
 	routingMu    sync.RWMutex
+}
+
+// WorkerBackend represents a worker node backend
+type WorkerBackend struct {
+	ID          string
+	Address     string // IP:Port for connection
+	Healthy     bool
+	Connections int32
+	LastCheck   time.Time
 }
 
 // RouteTarget represents a routing target
@@ -53,32 +69,30 @@ type RouteTarget struct {
 
 // Config holds the configuration for the edge proxy service
 type Config struct {
-	Port            string
-	LoadBalancerURL string
-	SSLCertPath     string
-	SSLKeyPath      string
-	RateLimitRPS    int
+	Port         string
+	OperatorURL  string // For discovering worker nodes (no longer LoadBalancerURL)
+	SSLCertPath  string
+	SSLKeyPath   string
+	RateLimitRPS int
+	DatabaseURL  string // For routing lookups
+
+	// mTLS configuration for internal communication
+	EnableMTLS      bool
+	InternalCAPath  string
+	InternalKeyPath string
+	InternalCertDir string
 }
 
 // NewService creates a new edge proxy service
 func NewService(config *Config, logger *slog.Logger) (*Service, error) {
-	// Parse load balancer URL
-	lbURL, err := url.Parse(config.LoadBalancerURL)
-	if err != nil {
-		return nil, fmt.Errorf("invalid load balancer URL: %w", err)
-	}
-
 	s := &Service{
-		logger:          logger,
-		config:          config,
-		httpClient:      &http.Client{Timeout: 30 * time.Second},
-		loadBalancerURL: lbURL,
-		rateLimiters:    make(map[string]*rate.Limiter),
+		logger:       logger,
+		config:       config,
+		httpClient:   &http.Client{Timeout: 30 * time.Second},
+		backends:     make([]*WorkerBackend, 0),
+		rateLimiters: make(map[string]*rate.Limiter),
+		routingCache: make(map[string]*RouteTarget),
 	}
-
-	// Create reverse proxy
-	s.proxy = httputil.NewSingleHostReverseProxy(lbURL)
-	s.proxy.ErrorHandler = s.errorHandler
 
 	// Initialize SSL manager for automatic certificate management
 	if os.Getenv("DATABASE_URL") != "" && os.Getenv("ENABLE_SSL_AUTOMATION") == "true" {
@@ -123,6 +137,51 @@ func NewService(config *Config, logger *slog.Logger) (*Service, error) {
 		}
 	}
 
+	// Initialize internal CA for mTLS with worker nodes
+	if config.EnableMTLS {
+		caConfig := &internaltls.InternalCAConfig{
+			CertDir:        config.InternalCertDir,
+			CAKeyPath:      config.InternalKeyPath,
+			CACertPath:     config.InternalCAPath,
+			RotationPeriod: 30 * 24 * time.Hour, // 30 days
+			ValidityPeriod: 90 * 24 * time.Hour, // 90 days
+			Organization:   "Zeitwork",
+			Country:        "US",
+		}
+
+		// Set defaults if not provided
+		if caConfig.CertDir == "" {
+			caConfig.CertDir = "/var/lib/zeitwork/certs"
+		}
+		if caConfig.CAKeyPath == "" {
+			caConfig.CAKeyPath = "/var/lib/zeitwork/ca/ca.key"
+		}
+		if caConfig.CACertPath == "" {
+			caConfig.CACertPath = "/var/lib/zeitwork/ca/ca.crt"
+		}
+
+		internalCA, err := internaltls.NewInternalCA(caConfig, logger)
+		if err != nil {
+			logger.Warn("Failed to initialize internal CA, falling back to plain HTTP", "error", err)
+		} else {
+			s.internalCA = internalCA
+
+			// Create mTLS client for internal communication
+			clientTLSConfig, err := internalCA.GetClientTLSConfig("edge-proxy")
+			if err != nil {
+				logger.Warn("Failed to create mTLS client config", "error", err)
+			} else {
+				s.internalClient = internaltls.NewMTLSClient(clientTLSConfig)
+				logger.Info("mTLS enabled for internal communication")
+			}
+		}
+	}
+
+	// If no internal client created, use regular HTTP client
+	if s.internalClient == nil {
+		s.internalClient = s.httpClient
+	}
+
 	return s, nil
 }
 
@@ -130,10 +189,16 @@ func NewService(config *Config, logger *slog.Logger) (*Service, error) {
 func (s *Service) Start(ctx context.Context) error {
 	s.logger.Info("Starting edge proxy service",
 		"port", s.config.Port,
-		"load_balancer", s.config.LoadBalancerURL,
+		"operator", s.config.OperatorURL,
 		"rate_limit", s.config.RateLimitRPS,
 		"ssl", s.tlsConfig != nil,
 	)
+
+	// Start backend discovery
+	go s.discoverBackendsPeriodically(ctx)
+
+	// Start health checking for backends
+	go s.checkBackendHealthPeriodically(ctx)
 
 	// Start cleanup goroutine for rate limiters
 	go s.cleanupRateLimiters(ctx)
@@ -220,19 +285,30 @@ func (s *Service) withMiddleware(next http.HandlerFunc) http.HandlerFunc {
 
 // handleHealth handles health check requests
 func (s *Service) handleHealth(w http.ResponseWriter, r *http.Request) {
-	// Check load balancer health
-	lbHealthy := s.checkLoadBalancerHealth()
+	// Check if we have healthy backends
+	s.backendsMu.RLock()
+	healthyCount := 0
+	totalCount := len(s.backends)
+	for _, backend := range s.backends {
+		if backend.Healthy {
+			healthyCount++
+		}
+	}
+	s.backendsMu.RUnlock()
 
 	status := "healthy"
-	if !lbHealthy {
+	if healthyCount == 0 && totalCount > 0 {
+		status = "unhealthy"
+	} else if healthyCount < totalCount {
 		status = "degraded"
 	}
 
 	response := map[string]interface{}{
-		"status":                status,
-		"load_balancer_healthy": lbHealthy,
-		"rate_limit_rps":        s.config.RateLimitRPS,
-		"ssl_enabled":           s.tlsConfig != nil,
+		"status":           status,
+		"healthy_backends": healthyCount,
+		"total_backends":   totalCount,
+		"rate_limit_rps":   s.config.RateLimitRPS,
+		"ssl_enabled":      s.tlsConfig != nil,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -274,7 +350,7 @@ func (s *Service) handleProxy(w http.ResponseWriter, r *http.Request) {
 
 	r.Header.Set("X-Forwarded-Host", r.Host)
 
-	// Route based on domain
+	// Route based on domain to specific instance
 	if backend := s.routeByDomain(r.Host); backend != nil {
 		// Create a custom proxy for this specific backend
 		proxy := httputil.NewSingleHostReverseProxy(backend)
@@ -283,8 +359,25 @@ func (s *Service) handleProxy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Fall back to default load balancer
-	s.proxy.ServeHTTP(w, r)
+	// Otherwise, select a worker backend using round-robin
+	backend := s.selectBackend()
+	if backend == nil {
+		s.logger.Error("No healthy backends available")
+		http.Error(w, "Service Unavailable", http.StatusServiceUnavailable)
+		return
+	}
+
+	// Create proxy to worker node
+	targetURL, _ := url.Parse(fmt.Sprintf("http://%s", backend.Address))
+	proxy := httputil.NewSingleHostReverseProxy(targetURL)
+	proxy.ErrorHandler = s.errorHandler
+
+	// Use mTLS client if configured
+	if s.internalClient != nil {
+		proxy.Transport = s.internalClient.Transport
+	}
+
+	proxy.ServeHTTP(w, r)
 }
 
 // errorHandler handles errors from the reverse proxy
@@ -342,25 +435,155 @@ func (s *Service) cleanupRateLimiters(ctx context.Context) {
 	}
 }
 
-// checkLoadBalancerHealth checks if the load balancer is healthy
-func (s *Service) checkLoadBalancerHealth() bool {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
+// selectBackend selects a healthy worker backend using round-robin
+func (s *Service) selectBackend() *WorkerBackend {
+	s.backendsMu.RLock()
+	defer s.backendsMu.RUnlock()
 
-	healthURL := fmt.Sprintf("%s/health", s.loadBalancerURL.String())
-	req, err := http.NewRequestWithContext(ctx, "GET", healthURL, nil)
-	if err != nil {
-		return false
+	// Get healthy backends
+	var healthyBackends []*WorkerBackend
+	for _, backend := range s.backends {
+		if backend.Healthy {
+			healthyBackends = append(healthyBackends, backend)
+		}
 	}
 
-	resp, err := s.httpClient.Do(req)
-	if err != nil {
-		s.logger.Warn("Load balancer health check failed", "error", err)
-		return false
+	if len(healthyBackends) == 0 {
+		return nil
 	}
-	defer resp.Body.Close()
 
-	return resp.StatusCode == http.StatusOK
+	// Round-robin selection
+	idx := s.currentIdx.Add(1) - 1
+	return healthyBackends[idx%uint32(len(healthyBackends))]
+}
+
+// discoverBackendsPeriodically discovers worker node backends
+func (s *Service) discoverBackendsPeriodically(ctx context.Context) {
+	// Initial discovery
+	s.discoverBackends(ctx)
+
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.discoverBackends(ctx)
+		}
+	}
+}
+
+// discoverBackends discovers worker node backends from operator or database
+func (s *Service) discoverBackends(ctx context.Context) {
+	if s.config.OperatorURL != "" {
+		// Query operator for worker nodes
+		req, err := http.NewRequestWithContext(ctx, "GET",
+			s.config.OperatorURL+"/api/v1/nodes?type=worker&state=ready", nil)
+		if err != nil {
+			s.logger.Error("Failed to create request", "error", err)
+			return
+		}
+
+		resp, err := s.httpClient.Do(req)
+		if err != nil {
+			s.logger.Error("Failed to query operator", "error", err)
+			return
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			s.logger.Error("Operator returned error", "status", resp.StatusCode)
+			return
+		}
+
+		var nodes []struct {
+			ID        string `json:"id"`
+			Hostname  string `json:"hostname"`
+			IPAddress string `json:"ip_address"`
+			Port      int    `json:"port"`
+		}
+
+		if err := json.NewDecoder(resp.Body).Decode(&nodes); err != nil {
+			s.logger.Error("Failed to decode response", "error", err)
+			return
+		}
+
+		// Update backends
+		newBackends := make([]*WorkerBackend, 0, len(nodes))
+		for _, node := range nodes {
+			port := node.Port
+			if port == 0 {
+				port = 8081 // Default node agent port
+			}
+
+			address := node.IPAddress
+			if address == "" {
+				address = node.Hostname
+			}
+
+			newBackends = append(newBackends, &WorkerBackend{
+				ID:      node.ID,
+				Address: fmt.Sprintf("%s:%d", address, port),
+				Healthy: true, // Will be checked by health checker
+			})
+		}
+
+		s.backendsMu.Lock()
+		s.backends = newBackends
+		s.backendsMu.Unlock()
+
+		s.logger.Info("Discovered worker backends", "count", len(newBackends))
+	}
+}
+
+// checkBackendHealthPeriodically checks health of worker backends
+func (s *Service) checkBackendHealthPeriodically(ctx context.Context) {
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.checkBackendHealth()
+		}
+	}
+}
+
+// checkBackendHealth checks health of all backends
+func (s *Service) checkBackendHealth() {
+	s.backendsMu.RLock()
+	backends := make([]*WorkerBackend, len(s.backends))
+	copy(backends, s.backends)
+	s.backendsMu.RUnlock()
+
+	for _, backend := range backends {
+		// Check health via HTTP
+		client := s.httpClient
+		if s.internalClient != nil {
+			client = s.internalClient
+		}
+
+		url := fmt.Sprintf("http://%s/health", backend.Address)
+		resp, err := client.Get(url)
+		if err != nil {
+			backend.Healthy = false
+			backend.LastCheck = time.Now()
+			s.logger.Debug("Backend unhealthy", "id", backend.ID, "error", err)
+			continue
+		}
+		resp.Body.Close()
+
+		backend.Healthy = resp.StatusCode == http.StatusOK
+		backend.LastCheck = time.Now()
+
+		if !backend.Healthy {
+			s.logger.Warn("Backend unhealthy", "id", backend.ID, "status", resp.StatusCode)
+		}
+	}
 }
 
 // Close closes the edge proxy service
