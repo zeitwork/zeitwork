@@ -55,7 +55,9 @@ SELECT * FROM deployment_instances WHERE deployment_id = $1 ORDER BY created_at 
 SELECT * FROM deployment_instances WHERE instance_id = $1 ORDER BY created_at DESC;
 
 -- name: DeploymentInstanceCreate :one
-INSERT INTO deployment_instances (deployment_id, instance_id, organisation_id) VALUES ($1, $2, $3) RETURNING *;
+INSERT INTO deployment_instances (deployment_id, instance_id)
+VALUES ($1, $2)
+RETURNING *;
 
 -- name: DeploymentInstanceDelete :exec
 DELETE FROM deployment_instances WHERE id = $1;

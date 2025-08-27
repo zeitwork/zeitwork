@@ -380,17 +380,18 @@ func (q *Queries) DeploymentFindByStatus(ctx context.Context, status string) ([]
 }
 
 const deploymentInstanceCreate = `-- name: DeploymentInstanceCreate :one
-INSERT INTO deployment_instances (deployment_id, instance_id, organisation_id) VALUES ($1, $2, $3) RETURNING id, deployment_id, instance_id, organisation_id, created_at, updated_at, deleted_at
+INSERT INTO deployment_instances (deployment_id, instance_id)
+VALUES ($1, $2)
+RETURNING id, deployment_id, instance_id, organisation_id, created_at, updated_at, deleted_at
 `
 
 type DeploymentInstanceCreateParams struct {
-	DeploymentID   pgtype.UUID `json:"deployment_id"`
-	InstanceID     pgtype.UUID `json:"instance_id"`
-	OrganisationID pgtype.UUID `json:"organisation_id"`
+	DeploymentID pgtype.UUID `json:"deployment_id"`
+	InstanceID   pgtype.UUID `json:"instance_id"`
 }
 
 func (q *Queries) DeploymentInstanceCreate(ctx context.Context, arg *DeploymentInstanceCreateParams) (*DeploymentInstance, error) {
-	row := q.db.QueryRow(ctx, deploymentInstanceCreate, arg.DeploymentID, arg.InstanceID, arg.OrganisationID)
+	row := q.db.QueryRow(ctx, deploymentInstanceCreate, arg.DeploymentID, arg.InstanceID)
 	var i DeploymentInstance
 	err := row.Scan(
 		&i.ID,
