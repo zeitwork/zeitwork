@@ -49,10 +49,11 @@ type LoadBalancerConfig struct {
 // EdgeProxyConfig contains configuration for the edge proxy service
 type EdgeProxyConfig struct {
 	BaseConfig
-	LoadBalancerURL string
-	SSLCertPath     string
-	SSLKeyPath      string
-	RateLimitRPS    int
+	OperatorURL  string
+	DatabaseURL  string
+	SSLCertPath  string
+	SSLKeyPath   string
+	RateLimitRPS int
 }
 
 // APIConfig contains configuration for the public API service
@@ -122,11 +123,12 @@ func LoadEdgeProxyConfig() (*EdgeProxyConfig, error) {
 	}
 
 	config := &EdgeProxyConfig{
-		BaseConfig:      loadBaseConfig("edge-proxy"),
-		LoadBalancerURL: getEnvOrDefault("LOAD_BALANCER_URL", "http://localhost:8082"),
-		SSLCertPath:     os.Getenv("SSL_CERT_PATH"),
-		SSLKeyPath:      os.Getenv("SSL_KEY_PATH"),
-		RateLimitRPS:    ratelimit,
+		BaseConfig:   loadBaseConfig("edge-proxy"),
+		OperatorURL:  getEnvOrDefault("OPERATOR_URL", "http://localhost:8080"),
+		DatabaseURL:  os.Getenv("DATABASE_URL"),
+		SSLCertPath:  os.Getenv("SSL_CERT_PATH"),
+		SSLKeyPath:   os.Getenv("SSL_KEY_PATH"),
+		RateLimitRPS: ratelimit,
 	}
 
 	return config, nil

@@ -2,6 +2,7 @@ package loadbalancer
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/zeitwork/zeitwork/internal/database"
+	internaltls "github.com/zeitwork/zeitwork/internal/shared/tls"
 )
 
 // Service represents the L4 load balancer service
@@ -34,6 +36,11 @@ type Service struct {
 
 	// Connection tracking
 	activeConnections sync.WaitGroup
+
+	// mTLS for secure internal communication
+	internalCA     *internaltls.InternalCA
+	tlsConfig      *tls.Config
+	internalClient *http.Client
 }
 
 // Config holds the configuration for the load balancer service
@@ -42,12 +49,19 @@ type Config struct {
 	OperatorURL string
 	Algorithm   string // round-robin, least-connections, ip-hash
 	HealthPort  string // Port for health check HTTP endpoint
+
+	// mTLS configuration for secure internal communication
+	EnableMTLS      bool
+	InternalCAPath  string
+	InternalKeyPath string
+	InternalCertDir string
 }
 
 // Backend represents a backend server
 type Backend struct {
 	ID          string
 	Address     string // IP:Port for TCP connection
+	Type        string // "edge-proxy" or "worker-node"
 	Healthy     bool
 	Connections int32
 	LastCheck   time.Time
@@ -65,6 +79,74 @@ func NewService(config *Config, logger *slog.Logger) (*Service, error) {
 		config:     config,
 		httpClient: &http.Client{Timeout: 10 * time.Second},
 		backends:   make([]*Backend, 0),
+	}
+
+	// Initialize internal CA for mTLS with edge proxy
+	if config.EnableMTLS {
+		caConfig := &internaltls.InternalCAConfig{
+			CertDir:        config.InternalCertDir,
+			CAKeyPath:      config.InternalKeyPath,
+			CACertPath:     config.InternalCAPath,
+			RotationPeriod: 30 * 24 * time.Hour, // 30 days
+			ValidityPeriod: 90 * 24 * time.Hour, // 90 days
+			Organization:   "Zeitwork",
+			Country:        "US",
+		}
+
+		// Set defaults if not provided
+		if caConfig.CertDir == "" {
+			caConfig.CertDir = "/var/lib/zeitwork/certs"
+		}
+		if caConfig.CAKeyPath == "" {
+			caConfig.CAKeyPath = "/var/lib/zeitwork/ca/ca.key"
+		}
+		if caConfig.CACertPath == "" {
+			caConfig.CACertPath = "/var/lib/zeitwork/ca/ca.crt"
+		}
+
+		internalCA, err := internaltls.NewInternalCA(caConfig, logger)
+		if err != nil {
+			logger.Warn("Failed to initialize internal CA, falling back to plain HTTP", "error", err)
+		} else {
+			s.internalCA = internalCA
+
+			// Get server TLS configuration for accepting mTLS connections
+			hostname, _ := os.Hostname()
+			ips := []net.IP{}
+
+			// Try to get local IPs
+			addrs, err := net.InterfaceAddrs()
+			if err == nil {
+				for _, addr := range addrs {
+					if ipnet, ok := addr.(*net.IPNet); ok && !ipnet.IP.IsLoopback() {
+						if ipnet.IP.To4() != nil || ipnet.IP.To16() != nil {
+							ips = append(ips, ipnet.IP)
+						}
+					}
+				}
+			}
+
+			tlsConfig, err := internalCA.GetServerTLSConfig(hostname, ips)
+			if err != nil {
+				logger.Warn("Failed to create mTLS server config", "error", err)
+			} else {
+				s.tlsConfig = tlsConfig
+
+				// Create mTLS client for outgoing connections to worker nodes
+				clientTLSConfig, err := internalCA.GetClientTLSConfig("load-balancer")
+				if err != nil {
+					logger.Warn("Failed to create mTLS client config", "error", err)
+				} else {
+					s.internalClient = internaltls.NewMTLSClient(clientTLSConfig)
+					logger.Info("mTLS enabled for internal communication")
+				}
+			}
+		}
+	}
+
+	// If no internal client created, use regular HTTP client
+	if s.internalClient == nil {
+		s.internalClient = s.httpClient
 	}
 
 	return s, nil
@@ -88,10 +170,20 @@ func (s *Service) Start(ctx context.Context) error {
 	// Start health check HTTP endpoint (for monitoring the LB itself)
 	go s.startHealthEndpoint(ctx)
 
-	// Create TCP listener
-	listener, err := net.Listen("tcp", ":"+s.config.Port)
-	if err != nil {
-		return fmt.Errorf("failed to create TCP listener: %w", err)
+	// Create TCP listener (with TLS if configured)
+	var listener net.Listener
+	var err error
+	if s.tlsConfig != nil {
+		listener, err = internaltls.CreateTLSListener(":"+s.config.Port, s.tlsConfig)
+		if err != nil {
+			return fmt.Errorf("failed to create TLS listener: %w", err)
+		}
+		s.logger.Info("Created mTLS listener for secure internal communication")
+	} else {
+		listener, err = net.Listen("tcp", ":"+s.config.Port)
+		if err != nil {
+			return fmt.Errorf("failed to create TCP listener: %w", err)
+		}
 	}
 	s.listener = listener
 
@@ -351,11 +443,12 @@ func (s *Service) discoverBackends(ctx context.Context) {
 	s.discoverFromDatabase(ctx)
 }
 
-// discoverFromOperator queries the operator API for backends
+// discoverFromOperator queries the operator API for edge proxy backends
 func (s *Service) discoverFromOperator(ctx context.Context) error {
-	// Query operator for running instances
+	// Query operator for edge proxy instances
+	// The L4 load balancer should discover Edge Proxies, not worker nodes
 	req, err := http.NewRequestWithContext(ctx, "GET",
-		s.config.OperatorURL+"/api/v1/instances?state=running", nil)
+		s.config.OperatorURL+"/api/v1/edge-proxies", nil)
 	if err != nil {
 		return fmt.Errorf("failed to create request: %w", err)
 	}
@@ -370,28 +463,35 @@ func (s *Service) discoverFromOperator(ctx context.Context) error {
 		return fmt.Errorf("operator returned status %d", resp.StatusCode)
 	}
 
-	// Parse instances
-	var instances []struct {
-		ID          string `json:"id"`
-		IPAddress   string `json:"ip_address"`
-		DefaultPort int    `json:"default_port"`
+	// Parse edge proxy endpoints
+	var edgeProxies []struct {
+		ID       string `json:"id"`
+		Address  string `json:"address"`
+		Port     int    `json:"port"`
+		Hostname string `json:"hostname"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&instances); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&edgeProxies); err != nil {
 		return fmt.Errorf("failed to decode response: %w", err)
 	}
 
-	// Update backends
-	newBackends := make([]*Backend, 0, len(instances))
-	for _, inst := range instances {
-		port := inst.DefaultPort
+	// Update backends with edge proxy instances
+	newBackends := make([]*Backend, 0, len(edgeProxies))
+	for _, proxy := range edgeProxies {
+		port := proxy.Port
 		if port == 0 {
-			port = 8080
+			port = 8083 // Default edge proxy port
+		}
+
+		address := proxy.Address
+		if address == "" && proxy.Hostname != "" {
+			address = proxy.Hostname
 		}
 
 		newBackends = append(newBackends, &Backend{
-			ID:      inst.ID,
-			Address: fmt.Sprintf("%s:%d", inst.IPAddress, port),
+			ID:      proxy.ID,
+			Address: fmt.Sprintf("%s:%d", address, port),
+			Type:    "edge-proxy",
 			Healthy: true, // Will be checked by health checker
 		})
 	}
