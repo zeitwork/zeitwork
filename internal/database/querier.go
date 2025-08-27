@@ -128,8 +128,7 @@ type Querier interface {
 	ProjectEnvironmentFindByProject(ctx context.Context, projectID pgtype.UUID) ([]*ProjectEnvironment, error)
 	ProjectEnvironmentUpdate(ctx context.Context, arg *ProjectEnvironmentUpdateParams) (*ProjectEnvironment, error)
 	ProjectFind(ctx context.Context) ([]*Project, error)
-	// TODO: For now, return empty set. Need to add github_repo field to projects table
-	ProjectFindByGitHubRepo(ctx context.Context) ([]*Project, error)
+	ProjectFindByGitHubRepo(ctx context.Context, arg *ProjectFindByGitHubRepoParams) ([]*Project, error)
 	ProjectFindById(ctx context.Context, id pgtype.UUID) (*Project, error)
 	ProjectFindByOrganisation(ctx context.Context, organisationID pgtype.UUID) ([]*Project, error)
 	ProjectFindBySlug(ctx context.Context, slug string) (*Project, error)
@@ -147,12 +146,12 @@ type Querier interface {
 	RegionFindByCountry(ctx context.Context, country string) ([]*Region, error)
 	RegionFindById(ctx context.Context, id pgtype.UUID) (*Region, error)
 	RegionUpdate(ctx context.Context, arg *RegionUpdateParams) (*Region, error)
-	RoutingCacheCreate(ctx context.Context, arg *RoutingCacheCreateParams) (*RoutingCache, error)
-	RoutingCacheDelete(ctx context.Context, domain string) error
-	RoutingCacheFind(ctx context.Context) ([]*RoutingCache, error)
+	// Remove entries older than 24 hours
+	RoutingCacheCleanup(ctx context.Context) error
+	RoutingCacheDeleteByDeployment(ctx context.Context, deploymentID pgtype.UUID) error
+	RoutingCacheDeleteByDomain(ctx context.Context, domain string) error
 	RoutingCacheFindByDeployment(ctx context.Context, deploymentID pgtype.UUID) ([]*RoutingCache, error)
 	RoutingCacheFindByDomain(ctx context.Context, domain string) (*RoutingCache, error)
-	RoutingCacheUpdate(ctx context.Context, arg *RoutingCacheUpdateParams) (*RoutingCache, error)
 	RoutingCacheUpsert(ctx context.Context, arg *RoutingCacheUpsertParams) (*RoutingCache, error)
 	SessionCreate(ctx context.Context, arg *SessionCreateParams) (*Session, error)
 	SessionDelete(ctx context.Context, id pgtype.UUID) error

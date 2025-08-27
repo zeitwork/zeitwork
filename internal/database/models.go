@@ -165,13 +165,16 @@ type OrganisationMember struct {
 }
 
 type Project struct {
-	ID             pgtype.UUID        `json:"id"`
-	Name           string             `json:"name"`
-	Slug           string             `json:"slug"`
-	OrganisationID pgtype.UUID        `json:"organisation_id"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
+	ID                   pgtype.UUID        `json:"id"`
+	Name                 string             `json:"name"`
+	Slug                 string             `json:"slug"`
+	OrganisationID       pgtype.UUID        `json:"organisation_id"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt            pgtype.Timestamptz `json:"deleted_at"`
+	GithubRepo           pgtype.Text        `json:"github_repo"`
+	GithubInstallationID pgtype.Int4        `json:"github_installation_id"`
+	GithubDefaultBranch  pgtype.Text        `json:"github_default_branch"`
 }
 
 type ProjectDomain struct {

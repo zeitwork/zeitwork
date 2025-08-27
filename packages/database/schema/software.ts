@@ -56,6 +56,9 @@ export const projects = pgTable("projects", {
   name: text().notNull(),
   slug: text().notNull().unique(),
   organisationId: uuid().references(() => organisations.id),
+  githubRepo: text(), // Format: "owner/repo"
+  githubInstallationId: integer().references(() => githubInstallations.id),
+  githubDefaultBranch: text().default("main"),
   ...timestamps,
 });
 
