@@ -11,27 +11,28 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const tLSCertificateCreate = `-- name: TLSCertificateCreate :one
-INSERT INTO tls_certificates (domain, certificate, private_key, issuer, expires_at, auto_renew) 
-VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, domain, certificate, private_key, issuer, expires_at, auto_renew, created_at, updated_at, deleted_at
+const tlsCertificateCreate = `-- name: TlsCertificateCreate :one
+INSERT INTO tls_certificates (domain, certificate, private_key, expires_at, issuer, auto_renew)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, domain, certificate, private_key, issuer, expires_at, auto_renew, created_at, updated_at, deleted_at
 `
 
-type TLSCertificateCreateParams struct {
+type TlsCertificateCreateParams struct {
 	Domain      string             `json:"domain"`
 	Certificate string             `json:"certificate"`
 	PrivateKey  string             `json:"private_key"`
-	Issuer      string             `json:"issuer"`
 	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
+	Issuer      string             `json:"issuer"`
 	AutoRenew   bool               `json:"auto_renew"`
 }
 
-func (q *Queries) TLSCertificateCreate(ctx context.Context, arg *TLSCertificateCreateParams) (*TlsCertificate, error) {
-	row := q.db.QueryRow(ctx, tLSCertificateCreate,
+func (q *Queries) TlsCertificateCreate(ctx context.Context, arg *TlsCertificateCreateParams) (*TlsCertificate, error) {
+	row := q.db.QueryRow(ctx, tlsCertificateCreate,
 		arg.Domain,
 		arg.Certificate,
 		arg.PrivateKey,
-		arg.Issuer,
 		arg.ExpiresAt,
+		arg.Issuer,
 		arg.AutoRenew,
 	)
 	var i TlsCertificate
@@ -50,56 +51,21 @@ func (q *Queries) TLSCertificateCreate(ctx context.Context, arg *TLSCertificateC
 	return &i, err
 }
 
-const tLSCertificateDelete = `-- name: TLSCertificateDelete :exec
-DELETE FROM tls_certificates WHERE id = $1
+const tlsCertificateDelete = `-- name: TlsCertificateDelete :exec
+DELETE FROM tls_certificates WHERE domain = $1
 `
 
-func (q *Queries) TLSCertificateDelete(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, tLSCertificateDelete, id)
+func (q *Queries) TlsCertificateDelete(ctx context.Context, domain string) error {
+	_, err := q.db.Exec(ctx, tlsCertificateDelete, domain)
 	return err
 }
 
-const tLSCertificateFind = `-- name: TLSCertificateFind :many
-SELECT id, domain, certificate, private_key, issuer, expires_at, auto_renew, created_at, updated_at, deleted_at FROM tls_certificates ORDER BY domain
-`
-
-func (q *Queries) TLSCertificateFind(ctx context.Context) ([]*TlsCertificate, error) {
-	rows, err := q.db.Query(ctx, tLSCertificateFind)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []*TlsCertificate
-	for rows.Next() {
-		var i TlsCertificate
-		if err := rows.Scan(
-			&i.ID,
-			&i.Domain,
-			&i.Certificate,
-			&i.PrivateKey,
-			&i.Issuer,
-			&i.ExpiresAt,
-			&i.AutoRenew,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, &i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const tLSCertificateFindByDomain = `-- name: TLSCertificateFindByDomain :one
+const tlsCertificateFindByDomain = `-- name: TlsCertificateFindByDomain :one
 SELECT id, domain, certificate, private_key, issuer, expires_at, auto_renew, created_at, updated_at, deleted_at FROM tls_certificates WHERE domain = $1
 `
 
-func (q *Queries) TLSCertificateFindByDomain(ctx context.Context, domain string) (*TlsCertificate, error) {
-	row := q.db.QueryRow(ctx, tLSCertificateFindByDomain, domain)
+func (q *Queries) TlsCertificateFindByDomain(ctx context.Context, domain string) (*TlsCertificate, error) {
+	row := q.db.QueryRow(ctx, tlsCertificateFindByDomain, domain)
 	var i TlsCertificate
 	err := row.Scan(
 		&i.ID,
@@ -116,36 +82,12 @@ func (q *Queries) TLSCertificateFindByDomain(ctx context.Context, domain string)
 	return &i, err
 }
 
-const tLSCertificateFindById = `-- name: TLSCertificateFindById :one
-SELECT id, domain, certificate, private_key, issuer, expires_at, auto_renew, created_at, updated_at, deleted_at FROM tls_certificates WHERE id = $1
+const tlsCertificateList = `-- name: TlsCertificateList :many
+SELECT id, domain, certificate, private_key, issuer, expires_at, auto_renew, created_at, updated_at, deleted_at FROM tls_certificates ORDER BY domain
 `
 
-func (q *Queries) TLSCertificateFindById(ctx context.Context, id pgtype.UUID) (*TlsCertificate, error) {
-	row := q.db.QueryRow(ctx, tLSCertificateFindById, id)
-	var i TlsCertificate
-	err := row.Scan(
-		&i.ID,
-		&i.Domain,
-		&i.Certificate,
-		&i.PrivateKey,
-		&i.Issuer,
-		&i.ExpiresAt,
-		&i.AutoRenew,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-	)
-	return &i, err
-}
-
-const tLSCertificateFindExpiring = `-- name: TLSCertificateFindExpiring :many
-SELECT id, domain, certificate, private_key, issuer, expires_at, auto_renew, created_at, updated_at, deleted_at FROM tls_certificates 
-WHERE expires_at < (NOW() + INTERVAL '30 days') AND auto_renew = true
-ORDER BY expires_at
-`
-
-func (q *Queries) TLSCertificateFindExpiring(ctx context.Context) ([]*TlsCertificate, error) {
-	rows, err := q.db.Query(ctx, tLSCertificateFindExpiring)
+func (q *Queries) TlsCertificateList(ctx context.Context) ([]*TlsCertificate, error) {
+	rows, err := q.db.Query(ctx, tlsCertificateList)
 	if err != nil {
 		return nil, err
 	}
@@ -175,55 +117,25 @@ func (q *Queries) TLSCertificateFindExpiring(ctx context.Context) ([]*TlsCertifi
 	return items, nil
 }
 
-const tLSCertificateToggleAutoRenew = `-- name: TLSCertificateToggleAutoRenew :one
+const tlsCertificateUpdate = `-- name: TlsCertificateUpdate :one
 UPDATE tls_certificates 
-SET auto_renew = $2, updated_at = NOW() 
-WHERE id = $1 RETURNING id, domain, certificate, private_key, issuer, expires_at, auto_renew, created_at, updated_at, deleted_at
+SET certificate = $2, private_key = $3, expires_at = $4, updated_at = NOW()
+WHERE domain = $1
+RETURNING id, domain, certificate, private_key, issuer, expires_at, auto_renew, created_at, updated_at, deleted_at
 `
 
-type TLSCertificateToggleAutoRenewParams struct {
-	ID        pgtype.UUID `json:"id"`
-	AutoRenew bool        `json:"auto_renew"`
-}
-
-func (q *Queries) TLSCertificateToggleAutoRenew(ctx context.Context, arg *TLSCertificateToggleAutoRenewParams) (*TlsCertificate, error) {
-	row := q.db.QueryRow(ctx, tLSCertificateToggleAutoRenew, arg.ID, arg.AutoRenew)
-	var i TlsCertificate
-	err := row.Scan(
-		&i.ID,
-		&i.Domain,
-		&i.Certificate,
-		&i.PrivateKey,
-		&i.Issuer,
-		&i.ExpiresAt,
-		&i.AutoRenew,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-	)
-	return &i, err
-}
-
-const tLSCertificateUpdate = `-- name: TLSCertificateUpdate :one
-UPDATE tls_certificates 
-SET certificate = $2, private_key = $3, issuer = $4, expires_at = $5, updated_at = NOW() 
-WHERE id = $1 RETURNING id, domain, certificate, private_key, issuer, expires_at, auto_renew, created_at, updated_at, deleted_at
-`
-
-type TLSCertificateUpdateParams struct {
-	ID          pgtype.UUID        `json:"id"`
+type TlsCertificateUpdateParams struct {
+	Domain      string             `json:"domain"`
 	Certificate string             `json:"certificate"`
 	PrivateKey  string             `json:"private_key"`
-	Issuer      string             `json:"issuer"`
 	ExpiresAt   pgtype.Timestamptz `json:"expires_at"`
 }
 
-func (q *Queries) TLSCertificateUpdate(ctx context.Context, arg *TLSCertificateUpdateParams) (*TlsCertificate, error) {
-	row := q.db.QueryRow(ctx, tLSCertificateUpdate,
-		arg.ID,
+func (q *Queries) TlsCertificateUpdate(ctx context.Context, arg *TlsCertificateUpdateParams) (*TlsCertificate, error) {
+	row := q.db.QueryRow(ctx, tlsCertificateUpdate,
+		arg.Domain,
 		arg.Certificate,
 		arg.PrivateKey,
-		arg.Issuer,
 		arg.ExpiresAt,
 	)
 	var i TlsCertificate

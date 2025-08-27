@@ -164,14 +164,11 @@ type Querier interface {
 	SessionFindByUser(ctx context.Context, userID pgtype.UUID) ([]*Session, error)
 	SessionFindByUserAndNotExpired(ctx context.Context, userID pgtype.UUID) (*Session, error)
 	SessionUpdate(ctx context.Context, arg *SessionUpdateParams) (*Session, error)
-	TLSCertificateCreate(ctx context.Context, arg *TLSCertificateCreateParams) (*TlsCertificate, error)
-	TLSCertificateDelete(ctx context.Context, id pgtype.UUID) error
-	TLSCertificateFind(ctx context.Context) ([]*TlsCertificate, error)
-	TLSCertificateFindByDomain(ctx context.Context, domain string) (*TlsCertificate, error)
-	TLSCertificateFindById(ctx context.Context, id pgtype.UUID) (*TlsCertificate, error)
-	TLSCertificateFindExpiring(ctx context.Context) ([]*TlsCertificate, error)
-	TLSCertificateToggleAutoRenew(ctx context.Context, arg *TLSCertificateToggleAutoRenewParams) (*TlsCertificate, error)
-	TLSCertificateUpdate(ctx context.Context, arg *TLSCertificateUpdateParams) (*TlsCertificate, error)
+	TlsCertificateCreate(ctx context.Context, arg *TlsCertificateCreateParams) (*TlsCertificate, error)
+	TlsCertificateDelete(ctx context.Context, domain string) error
+	TlsCertificateFindByDomain(ctx context.Context, domain string) (*TlsCertificate, error)
+	TlsCertificateList(ctx context.Context) ([]*TlsCertificate, error)
+	TlsCertificateUpdate(ctx context.Context, arg *TlsCertificateUpdateParams) (*TlsCertificate, error)
 	UserCreate(ctx context.Context, arg *UserCreateParams) (*User, error)
 	UserDelete(ctx context.Context, id pgtype.UUID) error
 	UserFind(ctx context.Context) ([]*User, error)
