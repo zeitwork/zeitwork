@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/zeitwork/zeitwork/internal/database"
+	"github.com/zeitwork/zeitwork/internal/shared/health"
 )
 
 // Service represents the operator service that orchestrates the cluster
@@ -30,6 +31,10 @@ type Service struct {
 
 	// Scaling manager for auto-scaling
 	scalingManager *ScalingManager
+
+	// Health monitoring
+	healthHandler *health.Handler
+	healthMonitor *health.Monitor
 }
 
 // Config holds the configuration for the operator service
@@ -60,6 +65,47 @@ func NewService(config *Config, logger *slog.Logger) (*Service, error) {
 	// Initialize scaling manager
 	s.scalingManager = NewScalingManager(s, logger)
 
+	// Initialize health monitoring
+	s.healthHandler = health.NewHandler()
+
+	// Add health checks
+	s.healthHandler.AddCheck("database", health.DatabaseCheck(db))
+	s.healthHandler.AddCheck("scaling", func(ctx context.Context) error {
+		// Check if scaling manager is running
+		if s.scalingManager == nil {
+			return fmt.Errorf("scaling manager not initialized")
+		}
+		return nil
+	})
+
+	// Add readiness check
+	s.healthHandler.AddReadinessCheck(func(ctx context.Context) error {
+		// Service is ready when database is available
+		return db.Ping(ctx)
+	})
+
+	// Add liveness check
+	s.healthHandler.AddLivenessCheck(func(ctx context.Context) error {
+		// Service is alive if it can respond
+		return nil
+	})
+
+	// Initialize health monitor
+	if config.DatabaseURL != "" {
+		monitorConfig := &health.Config{
+			DatabaseURL:        config.DatabaseURL,
+			CheckInterval:      30 * time.Second,
+			UnhealthyThreshold: 3,
+		}
+		monitor, err := health.NewMonitor(monitorConfig, logger)
+		if err != nil {
+			logger.Warn("Failed to create health monitor", "error", err)
+		} else {
+			s.healthMonitor = monitor
+			s.healthHandler.SetMonitor(monitor)
+		}
+	}
+
 	return s, nil
 }
 
@@ -69,6 +115,11 @@ func (s *Service) Start(ctx context.Context) error {
 
 	// Start scaling manager
 	go s.scalingManager.Start(ctx)
+
+	// Start health monitor
+	if s.healthMonitor != nil {
+		go s.healthMonitor.Start(ctx)
+	}
 
 	// Create HTTP server
 	mux := http.NewServeMux()
@@ -99,8 +150,17 @@ func (s *Service) Start(ctx context.Context) error {
 
 // setupRoutes sets up the HTTP routes for the operator using Go 1.22 enhanced routing
 func (s *Service) setupRoutes(mux *http.ServeMux) {
-	// Health check
-	mux.HandleFunc("GET /health", s.handleHealth)
+	// Health monitoring endpoints
+	if s.healthHandler != nil {
+		mux.HandleFunc("GET /health", s.healthHandler.HandleHealth)
+		mux.HandleFunc("GET /ready", s.healthHandler.HandleReady)
+		mux.HandleFunc("GET /live", s.healthHandler.HandleLive)
+		mux.HandleFunc("GET /metrics", s.healthHandler.HandleMetrics)
+		mux.HandleFunc("GET /status", s.healthHandler.HandleStatus)
+	} else {
+		// Fallback simple health check
+		mux.HandleFunc("GET /health", s.handleHealth)
+	}
 
 	// Node management - using Go 1.22 pattern matching
 	mux.HandleFunc("GET /api/v1/nodes", s.listNodes)
