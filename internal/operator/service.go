@@ -27,6 +27,9 @@ type Service struct {
 
 	// Deployment manager for handling deployments
 	deploymentManager *DeploymentManager
+
+	// Scaling manager for auto-scaling
+	scalingManager *ScalingManager
 }
 
 // Config holds the configuration for the operator service
@@ -54,12 +57,18 @@ func NewService(config *Config, logger *slog.Logger) (*Service, error) {
 	// Initialize deployment manager
 	s.deploymentManager = NewDeploymentManager(s)
 
+	// Initialize scaling manager
+	s.scalingManager = NewScalingManager(s, logger)
+
 	return s, nil
 }
 
 // Start starts the operator service
 func (s *Service) Start(ctx context.Context) error {
 	s.logger.Info("Starting operator service", "port", s.config.Port)
+
+	// Start scaling manager
+	go s.scalingManager.Start(ctx)
 
 	// Create HTTP server
 	mux := http.NewServeMux()
