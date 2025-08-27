@@ -87,6 +87,19 @@ lint:
 	@echo "Linting code..."
 	golangci-lint run
 
+# Build Firecracker Builder VM
+builder-vm:
+	@echo "Building Firecracker Builder VM..."
+	@chmod +x scripts/build-builder-vm.sh
+	@sudo scripts/build-builder-vm.sh
+	@echo "Builder VM created successfully!"
+
+# Test Firecracker Builder VM
+test-builder-vm:
+	@echo "Testing Firecracker Builder VM..."
+	@chmod +x scripts/test-builder-vm.sh
+	@scripts/test-builder-vm.sh
+
 # Help target
 help:
 	@echo "Zeitwork Platform - Build and Deployment"
@@ -105,4 +118,6 @@ help:
 	@echo "  make sqlc           - Generate SQL code with sqlc"
 	@echo "  make fmt            - Format Go code"
 	@echo "  make lint           - Lint Go code"
+	@echo "  make builder-vm     - Build Firecracker Builder VM (requires sudo)"
+	@echo "  make test-builder-vm - Test Firecracker Builder VM"
 	@echo "  make help           - Show this help message"
