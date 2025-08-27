@@ -37,6 +37,7 @@ type Service struct {
 
 	// Firecracker VM management
 	instances map[string]*Instance // instance_id -> instance
+	vmManager *VMManager           // VM lifecycle manager
 
 	// Network management
 	networkManager *NetworkManager
@@ -53,6 +54,7 @@ type Config struct {
 	VMWorkDir         string
 	KernelImagePath   string
 	BuilderRootfsPath string
+	DatabaseURL       string // Database connection string
 	Region            string // Current deployment region (e.g., eu-central-1)
 	S3Endpoint        string
 	S3Bucket          string
@@ -138,6 +140,31 @@ func NewService(config *Config, logger *slog.Logger) (*Service, error) {
 		}
 	}
 
+	// Initialize VM manager
+	vmManagerConfig := &VMManagerConfig{
+		VMDir:                 "/var/lib/zeitwork/vms",
+		FirecrackerBin:        "/usr/bin/firecracker",
+		JailerBin:             "/usr/bin/jailer",
+		KernelPath:            "/var/lib/zeitwork/kernel/vmlinux",
+		MaxVMs:                50,
+		MaxVCPUs:              runtime.NumCPU() * 2, // Allow overcommit
+		MaxMemoryMB:           32768,                // 32GB default
+		HealthCheckInterval:   30 * time.Second,
+		ResourceCheckInterval: 60 * time.Second,
+	}
+
+	// Create database connection for VM manager
+	var db *database.DB
+	if config.DatabaseURL != "" {
+		var err error
+		db, err = database.NewDB(config.DatabaseURL)
+		if err != nil {
+			logger.Warn("Failed to connect to database for VM manager", "error", err)
+		}
+	}
+
+	vmManager := NewVMManager(vmManagerConfig, logger, db)
+
 	return &Service{
 		logger:         logger,
 		config:         config,
@@ -145,6 +172,7 @@ func NewService(config *Config, logger *slog.Logger) (*Service, error) {
 		nodeID:         nodeID,
 		s3Client:       s3Client,
 		instances:      make(map[string]*Instance),
+		vmManager:      vmManager,
 		networkManager: networkManager,
 		ipv6Allocator:  ipv6Allocator,
 	}, nil
@@ -157,6 +185,14 @@ func (s *Service) Start(ctx context.Context) error {
 		"node_id", s.nodeID,
 		"operator_url", s.config.OperatorURL,
 	)
+
+	// Start VM manager
+	if s.vmManager != nil {
+		if err := s.vmManager.Start(ctx); err != nil {
+			return fmt.Errorf("failed to start VM manager: %w", err)
+		}
+		s.logger.Info("VM manager started")
+	}
 
 	// Register with operator
 	if err := s.registerWithOperator(ctx); err != nil {
@@ -214,6 +250,9 @@ func (s *Service) setupRoutes(mux *http.ServeMux) {
 
 	// Build management
 	mux.HandleFunc("POST /api/v1/build", s.handleBuildImage)
+
+	// VM lifecycle management routes
+	s.setupVMRoutes(mux)
 }
 
 // handleHealth handles health check requests
