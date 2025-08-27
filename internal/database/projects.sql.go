@@ -12,17 +12,28 @@ import (
 )
 
 const projectCreate = `-- name: ProjectCreate :one
-INSERT INTO projects (name, slug, organisation_id) VALUES ($1, $2, $3) RETURNING id, name, slug, organisation_id, created_at, updated_at, deleted_at
+INSERT INTO projects (name, slug, organisation_id, github_repo, github_installation_id, github_default_branch) 
+VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, name, slug, organisation_id, created_at, updated_at, deleted_at, github_repo, github_installation_id, github_default_branch
 `
 
 type ProjectCreateParams struct {
-	Name           string      `json:"name"`
-	Slug           string      `json:"slug"`
-	OrganisationID pgtype.UUID `json:"organisation_id"`
+	Name                 string      `json:"name"`
+	Slug                 string      `json:"slug"`
+	OrganisationID       pgtype.UUID `json:"organisation_id"`
+	GithubRepo           pgtype.Text `json:"github_repo"`
+	GithubInstallationID pgtype.Int4 `json:"github_installation_id"`
+	GithubDefaultBranch  pgtype.Text `json:"github_default_branch"`
 }
 
 func (q *Queries) ProjectCreate(ctx context.Context, arg *ProjectCreateParams) (*Project, error) {
-	row := q.db.QueryRow(ctx, projectCreate, arg.Name, arg.Slug, arg.OrganisationID)
+	row := q.db.QueryRow(ctx, projectCreate,
+		arg.Name,
+		arg.Slug,
+		arg.OrganisationID,
+		arg.GithubRepo,
+		arg.GithubInstallationID,
+		arg.GithubDefaultBranch,
+	)
 	var i Project
 	err := row.Scan(
 		&i.ID,
@@ -32,6 +43,9 @@ func (q *Queries) ProjectCreate(ctx context.Context, arg *ProjectCreateParams) (
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.GithubRepo,
+		&i.GithubInstallationID,
+		&i.GithubDefaultBranch,
 	)
 	return &i, err
 }
@@ -179,7 +193,7 @@ func (q *Queries) ProjectEnvironmentUpdate(ctx context.Context, arg *ProjectEnvi
 }
 
 const projectFind = `-- name: ProjectFind :many
-SELECT id, name, slug, organisation_id, created_at, updated_at, deleted_at FROM projects ORDER BY created_at DESC
+SELECT id, name, slug, organisation_id, created_at, updated_at, deleted_at, github_repo, github_installation_id, github_default_branch FROM projects ORDER BY created_at DESC
 `
 
 func (q *Queries) ProjectFind(ctx context.Context) ([]*Project, error) {
@@ -199,6 +213,9 @@ func (q *Queries) ProjectFind(ctx context.Context) ([]*Project, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.GithubRepo,
+			&i.GithubInstallationID,
+			&i.GithubDefaultBranch,
 		); err != nil {
 			return nil, err
 		}
@@ -211,12 +228,19 @@ func (q *Queries) ProjectFind(ctx context.Context) ([]*Project, error) {
 }
 
 const projectFindByGitHubRepo = `-- name: ProjectFindByGitHubRepo :many
-SELECT id, name, slug, organisation_id, created_at, updated_at, deleted_at FROM projects WHERE FALSE
+SELECT id, name, slug, organisation_id, created_at, updated_at, deleted_at, github_repo, github_installation_id, github_default_branch FROM projects 
+WHERE github_repo = $1 
+    AND github_installation_id = $2
+ORDER BY created_at DESC
 `
 
-// TODO: For now, return empty set. Need to add github_repo field to projects table
-func (q *Queries) ProjectFindByGitHubRepo(ctx context.Context) ([]*Project, error) {
-	rows, err := q.db.Query(ctx, projectFindByGitHubRepo)
+type ProjectFindByGitHubRepoParams struct {
+	GithubRepo           pgtype.Text `json:"github_repo"`
+	GithubInstallationID pgtype.Int4 `json:"github_installation_id"`
+}
+
+func (q *Queries) ProjectFindByGitHubRepo(ctx context.Context, arg *ProjectFindByGitHubRepoParams) ([]*Project, error) {
+	rows, err := q.db.Query(ctx, projectFindByGitHubRepo, arg.GithubRepo, arg.GithubInstallationID)
 	if err != nil {
 		return nil, err
 	}
@@ -232,6 +256,9 @@ func (q *Queries) ProjectFindByGitHubRepo(ctx context.Context) ([]*Project, erro
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.GithubRepo,
+			&i.GithubInstallationID,
+			&i.GithubDefaultBranch,
 		); err != nil {
 			return nil, err
 		}
@@ -244,7 +271,7 @@ func (q *Queries) ProjectFindByGitHubRepo(ctx context.Context) ([]*Project, erro
 }
 
 const projectFindById = `-- name: ProjectFindById :one
-SELECT id, name, slug, organisation_id, created_at, updated_at, deleted_at FROM projects WHERE id = $1
+SELECT id, name, slug, organisation_id, created_at, updated_at, deleted_at, github_repo, github_installation_id, github_default_branch FROM projects WHERE id = $1
 `
 
 func (q *Queries) ProjectFindById(ctx context.Context, id pgtype.UUID) (*Project, error) {
@@ -258,12 +285,15 @@ func (q *Queries) ProjectFindById(ctx context.Context, id pgtype.UUID) (*Project
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.GithubRepo,
+		&i.GithubInstallationID,
+		&i.GithubDefaultBranch,
 	)
 	return &i, err
 }
 
 const projectFindByOrganisation = `-- name: ProjectFindByOrganisation :many
-SELECT id, name, slug, organisation_id, created_at, updated_at, deleted_at FROM projects WHERE organisation_id = $1 ORDER BY created_at DESC
+SELECT id, name, slug, organisation_id, created_at, updated_at, deleted_at, github_repo, github_installation_id, github_default_branch FROM projects WHERE organisation_id = $1 ORDER BY created_at DESC
 `
 
 func (q *Queries) ProjectFindByOrganisation(ctx context.Context, organisationID pgtype.UUID) ([]*Project, error) {
@@ -283,6 +313,9 @@ func (q *Queries) ProjectFindByOrganisation(ctx context.Context, organisationID 
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.GithubRepo,
+			&i.GithubInstallationID,
+			&i.GithubDefaultBranch,
 		); err != nil {
 			return nil, err
 		}
@@ -295,7 +328,7 @@ func (q *Queries) ProjectFindByOrganisation(ctx context.Context, organisationID 
 }
 
 const projectFindBySlug = `-- name: ProjectFindBySlug :one
-SELECT id, name, slug, organisation_id, created_at, updated_at, deleted_at FROM projects WHERE slug = $1
+SELECT id, name, slug, organisation_id, created_at, updated_at, deleted_at, github_repo, github_installation_id, github_default_branch FROM projects WHERE slug = $1
 `
 
 func (q *Queries) ProjectFindBySlug(ctx context.Context, slug string) (*Project, error) {
@@ -309,6 +342,9 @@ func (q *Queries) ProjectFindBySlug(ctx context.Context, slug string) (*Project,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.GithubRepo,
+		&i.GithubInstallationID,
+		&i.GithubDefaultBranch,
 	)
 	return &i, err
 }
@@ -458,17 +494,34 @@ func (q *Queries) ProjectSecretUpdate(ctx context.Context, arg *ProjectSecretUpd
 }
 
 const projectUpdate = `-- name: ProjectUpdate :one
-UPDATE projects SET name = $2, slug = $3, updated_at = NOW() WHERE id = $1 RETURNING id, name, slug, organisation_id, created_at, updated_at, deleted_at
+UPDATE projects SET 
+    name = $2, 
+    slug = $3,
+    github_repo = $4,
+    github_installation_id = $5,
+    github_default_branch = $6,
+    updated_at = NOW() 
+WHERE id = $1 RETURNING id, name, slug, organisation_id, created_at, updated_at, deleted_at, github_repo, github_installation_id, github_default_branch
 `
 
 type ProjectUpdateParams struct {
-	ID   pgtype.UUID `json:"id"`
-	Name string      `json:"name"`
-	Slug string      `json:"slug"`
+	ID                   pgtype.UUID `json:"id"`
+	Name                 string      `json:"name"`
+	Slug                 string      `json:"slug"`
+	GithubRepo           pgtype.Text `json:"github_repo"`
+	GithubInstallationID pgtype.Int4 `json:"github_installation_id"`
+	GithubDefaultBranch  pgtype.Text `json:"github_default_branch"`
 }
 
 func (q *Queries) ProjectUpdate(ctx context.Context, arg *ProjectUpdateParams) (*Project, error) {
-	row := q.db.QueryRow(ctx, projectUpdate, arg.ID, arg.Name, arg.Slug)
+	row := q.db.QueryRow(ctx, projectUpdate,
+		arg.ID,
+		arg.Name,
+		arg.Slug,
+		arg.GithubRepo,
+		arg.GithubInstallationID,
+		arg.GithubDefaultBranch,
+	)
 	var i Project
 	err := row.Scan(
 		&i.ID,
@@ -478,6 +531,9 @@ func (q *Queries) ProjectUpdate(ctx context.Context, arg *ProjectUpdateParams) (
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.GithubRepo,
+		&i.GithubInstallationID,
+		&i.GithubDefaultBranch,
 	)
 	return &i, err
 }

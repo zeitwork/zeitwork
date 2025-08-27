@@ -10,23 +10,32 @@ import (
 )
 
 type Project struct {
-	ID             string `json:"id"`
-	Name           string `json:"name"`
-	Slug           string `json:"slug"`
-	OrganizationID string `json:"organization_id"`
-	CreatedAt      string `json:"created_at"`
-	UpdatedAt      string `json:"updated_at"`
+	ID                   string  `json:"id"`
+	Name                 string  `json:"name"`
+	Slug                 string  `json:"slug"`
+	OrganizationID       string  `json:"organization_id"`
+	GitHubRepo           *string `json:"github_repo,omitempty"`
+	GitHubInstallationID *int32  `json:"github_installation_id,omitempty"`
+	GitHubDefaultBranch  *string `json:"github_default_branch,omitempty"`
+	CreatedAt            string  `json:"created_at"`
+	UpdatedAt            string  `json:"updated_at"`
 }
 
 type CreateProjectRequest struct {
-	Name           string `json:"name"`
-	Slug           string `json:"slug"`
-	OrganizationID string `json:"organization_id"`
+	Name                 string  `json:"name"`
+	Slug                 string  `json:"slug"`
+	OrganizationID       string  `json:"organization_id"`
+	GitHubRepo           *string `json:"github_repo,omitempty"`
+	GitHubInstallationID *int32  `json:"github_installation_id,omitempty"`
+	GitHubDefaultBranch  *string `json:"github_default_branch,omitempty"`
 }
 
 type UpdateProjectRequest struct {
-	Name string `json:"name"`
-	Slug string `json:"slug"`
+	Name                 string  `json:"name"`
+	Slug                 string  `json:"slug"`
+	GitHubRepo           *string `json:"github_repo,omitempty"`
+	GitHubInstallationID *int32  `json:"github_installation_id,omitempty"`
+	GitHubDefaultBranch  *string `json:"github_default_branch,omitempty"`
 }
 
 // handleListProjects lists all projects for the authenticated user
@@ -104,11 +113,33 @@ func (s *Service) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Prepare GitHub fields
+	var githubRepo pgtype.Text
+	if req.GitHubRepo != nil && *req.GitHubRepo != "" {
+		githubRepo = pgtype.Text{String: *req.GitHubRepo, Valid: true}
+	}
+
+	var githubInstallationID pgtype.Int4
+	if req.GitHubInstallationID != nil {
+		githubInstallationID = pgtype.Int4{Int32: *req.GitHubInstallationID, Valid: true}
+	}
+
+	var githubDefaultBranch pgtype.Text
+	if req.GitHubDefaultBranch != nil && *req.GitHubDefaultBranch != "" {
+		githubDefaultBranch = pgtype.Text{String: *req.GitHubDefaultBranch, Valid: true}
+	} else {
+		// Default to "main" if not specified
+		githubDefaultBranch = pgtype.Text{String: "main", Valid: true}
+	}
+
 	// Create project
 	params := database.ProjectCreateParams{
-		Name:           req.Name,
-		Slug:           req.Slug,
-		OrganisationID: pgOrgID,
+		Name:                 req.Name,
+		Slug:                 req.Slug,
+		OrganisationID:       pgOrgID,
+		GithubRepo:           githubRepo,
+		GithubInstallationID: githubInstallationID,
+		GithubDefaultBranch:  githubDefaultBranch,
 	}
 
 	project, err := s.db.Queries().ProjectCreate(ctx, &params)
@@ -126,6 +157,17 @@ func (s *Service) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 		OrganizationID: uuid.UUID(project.OrganisationID.Bytes).String(),
 		CreatedAt:      project.CreatedAt.Time.Format("2006-01-02T15:04:05Z"),
 		UpdatedAt:      project.UpdatedAt.Time.Format("2006-01-02T15:04:05Z"),
+	}
+
+	// Include GitHub fields if present
+	if project.GithubRepo.Valid {
+		response.GitHubRepo = &project.GithubRepo.String
+	}
+	if project.GithubInstallationID.Valid {
+		response.GitHubInstallationID = &project.GithubInstallationID.Int32
+	}
+	if project.GithubDefaultBranch.Valid {
+		response.GitHubDefaultBranch = &project.GithubDefaultBranch.String
 	}
 
 	w.Header().Set("Content-Type", "application/json")

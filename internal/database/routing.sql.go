@@ -12,73 +12,33 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const routingCacheCreate = `-- name: RoutingCacheCreate :one
-INSERT INTO routing_cache (domain, deployment_id, instances, version) 
-VALUES ($1, $2, $3, 1) RETURNING id, domain, deployment_id, instances, version, created_at, updated_at, deleted_at
+const routingCacheCleanup = `-- name: RoutingCacheCleanup :exec
+DELETE FROM routing_cache 
+WHERE updated_at < NOW() - INTERVAL '24 hours'
 `
 
-type RoutingCacheCreateParams struct {
-	Domain       string          `json:"domain"`
-	DeploymentID pgtype.UUID     `json:"deployment_id"`
-	Instances    json.RawMessage `json:"instances"`
-}
-
-func (q *Queries) RoutingCacheCreate(ctx context.Context, arg *RoutingCacheCreateParams) (*RoutingCache, error) {
-	row := q.db.QueryRow(ctx, routingCacheCreate, arg.Domain, arg.DeploymentID, arg.Instances)
-	var i RoutingCache
-	err := row.Scan(
-		&i.ID,
-		&i.Domain,
-		&i.DeploymentID,
-		&i.Instances,
-		&i.Version,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-	)
-	return &i, err
-}
-
-const routingCacheDelete = `-- name: RoutingCacheDelete :exec
-DELETE FROM routing_cache WHERE domain = $1
-`
-
-func (q *Queries) RoutingCacheDelete(ctx context.Context, domain string) error {
-	_, err := q.db.Exec(ctx, routingCacheDelete, domain)
+// Remove entries older than 24 hours
+func (q *Queries) RoutingCacheCleanup(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, routingCacheCleanup)
 	return err
 }
 
-const routingCacheFind = `-- name: RoutingCacheFind :many
-SELECT id, domain, deployment_id, instances, version, created_at, updated_at, deleted_at FROM routing_cache ORDER BY domain
+const routingCacheDeleteByDeployment = `-- name: RoutingCacheDeleteByDeployment :exec
+DELETE FROM routing_cache WHERE deployment_id = $1
 `
 
-func (q *Queries) RoutingCacheFind(ctx context.Context) ([]*RoutingCache, error) {
-	rows, err := q.db.Query(ctx, routingCacheFind)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []*RoutingCache
-	for rows.Next() {
-		var i RoutingCache
-		if err := rows.Scan(
-			&i.ID,
-			&i.Domain,
-			&i.DeploymentID,
-			&i.Instances,
-			&i.Version,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, &i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+func (q *Queries) RoutingCacheDeleteByDeployment(ctx context.Context, deploymentID pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, routingCacheDeleteByDeployment, deploymentID)
+	return err
+}
+
+const routingCacheDeleteByDomain = `-- name: RoutingCacheDeleteByDomain :exec
+DELETE FROM routing_cache WHERE domain = $1
+`
+
+func (q *Queries) RoutingCacheDeleteByDomain(ctx context.Context, domain string) error {
+	_, err := q.db.Exec(ctx, routingCacheDeleteByDomain, domain)
+	return err
 }
 
 const routingCacheFindByDeployment = `-- name: RoutingCacheFindByDeployment :many
@@ -134,42 +94,20 @@ func (q *Queries) RoutingCacheFindByDomain(ctx context.Context, domain string) (
 	return &i, err
 }
 
-const routingCacheUpdate = `-- name: RoutingCacheUpdate :one
-UPDATE routing_cache 
-SET deployment_id = $2, instances = $3, version = version + 1, updated_at = NOW() 
-WHERE domain = $1 RETURNING id, domain, deployment_id, instances, version, created_at, updated_at, deleted_at
-`
-
-type RoutingCacheUpdateParams struct {
-	Domain       string          `json:"domain"`
-	DeploymentID pgtype.UUID     `json:"deployment_id"`
-	Instances    json.RawMessage `json:"instances"`
-}
-
-func (q *Queries) RoutingCacheUpdate(ctx context.Context, arg *RoutingCacheUpdateParams) (*RoutingCache, error) {
-	row := q.db.QueryRow(ctx, routingCacheUpdate, arg.Domain, arg.DeploymentID, arg.Instances)
-	var i RoutingCache
-	err := row.Scan(
-		&i.ID,
-		&i.Domain,
-		&i.DeploymentID,
-		&i.Instances,
-		&i.Version,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-	)
-	return &i, err
-}
-
 const routingCacheUpsert = `-- name: RoutingCacheUpsert :one
-INSERT INTO routing_cache (domain, deployment_id, instances, version) 
-VALUES ($1, $2, $3, 1) 
+INSERT INTO routing_cache (
+    domain, 
+    deployment_id, 
+    instances,
+    version
+) VALUES (
+    $1, $2, $3, $4
+)
 ON CONFLICT (domain) 
 DO UPDATE SET 
     deployment_id = EXCLUDED.deployment_id,
     instances = EXCLUDED.instances,
-    version = routing_cache.version + 1,
+    version = EXCLUDED.version,
     updated_at = NOW()
 RETURNING id, domain, deployment_id, instances, version, created_at, updated_at, deleted_at
 `
@@ -178,10 +116,16 @@ type RoutingCacheUpsertParams struct {
 	Domain       string          `json:"domain"`
 	DeploymentID pgtype.UUID     `json:"deployment_id"`
 	Instances    json.RawMessage `json:"instances"`
+	Version      int32           `json:"version"`
 }
 
 func (q *Queries) RoutingCacheUpsert(ctx context.Context, arg *RoutingCacheUpsertParams) (*RoutingCache, error) {
-	row := q.db.QueryRow(ctx, routingCacheUpsert, arg.Domain, arg.DeploymentID, arg.Instances)
+	row := q.db.QueryRow(ctx, routingCacheUpsert,
+		arg.Domain,
+		arg.DeploymentID,
+		arg.Instances,
+		arg.Version,
+	)
 	var i RoutingCache
 	err := row.Scan(
 		&i.ID,

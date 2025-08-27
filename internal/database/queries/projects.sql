@@ -11,17 +11,27 @@ SELECT * FROM projects WHERE organisation_id = $1 ORDER BY created_at DESC;
 SELECT * FROM projects ORDER BY created_at DESC;
 
 -- name: ProjectCreate :one
-INSERT INTO projects (name, slug, organisation_id) VALUES ($1, $2, $3) RETURNING *;
+INSERT INTO projects (name, slug, organisation_id, github_repo, github_installation_id, github_default_branch) 
+VALUES ($1, $2, $3, $4, $5, $6) RETURNING *;
 
 -- name: ProjectUpdate :one
-UPDATE projects SET name = $2, slug = $3, updated_at = NOW() WHERE id = $1 RETURNING *;
+UPDATE projects SET 
+    name = $2, 
+    slug = $3,
+    github_repo = $4,
+    github_installation_id = $5,
+    github_default_branch = $6,
+    updated_at = NOW() 
+WHERE id = $1 RETURNING *;
 
 -- name: ProjectDelete :exec
 DELETE FROM projects WHERE id = $1;
 
 -- name: ProjectFindByGitHubRepo :many
--- TODO: For now, return empty set. Need to add github_repo field to projects table
-SELECT * FROM projects WHERE FALSE;
+SELECT * FROM projects 
+WHERE github_repo = $1 
+    AND github_installation_id = $2
+ORDER BY created_at DESC;
 
 -- name: ProjectEnvironmentFindById :one
 SELECT * FROM project_environments WHERE id = $1;

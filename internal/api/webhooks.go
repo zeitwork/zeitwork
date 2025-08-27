@@ -155,10 +155,20 @@ func (s *Service) handlePushEvent(ctx context.Context, payload *GitHubWebhookPay
 
 	// Find projects connected to this repository
 	repoFullName := payload.Repository.FullName
-	// TODO: Fix this when github_repo field is added to projects table
-	// For now, return empty set
-	projects, err := s.db.Queries().ProjectFindByGitHubRepo(ctx)
-	_ = repoFullName // Suppress unused variable warning
+
+	// Convert installation ID to pgtype
+	var installationID pgtype.Int4
+	if payload.Installation != nil && payload.Installation.ID != 0 {
+		installationID = pgtype.Int4{Int32: int32(payload.Installation.ID), Valid: true}
+	}
+
+	// Query projects by GitHub repo and installation ID
+	params := database.ProjectFindByGitHubRepoParams{
+		GithubRepo:           pgtype.Text{String: repoFullName, Valid: true},
+		GithubInstallationID: installationID,
+	}
+
+	projects, err := s.db.Queries().ProjectFindByGitHubRepo(ctx, &params)
 	if err != nil {
 		return fmt.Errorf("failed to find projects: %w", err)
 	}
@@ -285,10 +295,20 @@ func (s *Service) handlePullRequestEvent(ctx context.Context, payload *GitHubWeb
 
 	// Find projects connected to this repository
 	repoFullName := payload.Repository.FullName
-	// TODO: Fix this when github_repo field is added to projects table
-	// For now, return empty set
-	projects, err := s.db.Queries().ProjectFindByGitHubRepo(ctx)
-	_ = repoFullName // Suppress unused variable warning
+
+	// Convert installation ID to pgtype
+	var installationID pgtype.Int4
+	if payload.Installation != nil && payload.Installation.ID != 0 {
+		installationID = pgtype.Int4{Int32: int32(payload.Installation.ID), Valid: true}
+	}
+
+	// Query projects by GitHub repo and installation ID
+	params := database.ProjectFindByGitHubRepoParams{
+		GithubRepo:           pgtype.Text{String: repoFullName, Valid: true},
+		GithubInstallationID: installationID,
+	}
+
+	projects, err := s.db.Queries().ProjectFindByGitHubRepo(ctx, &params)
 	if err != nil {
 		return fmt.Errorf("failed to find projects: %w", err)
 	}
