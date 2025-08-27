@@ -17,6 +17,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/zeitwork/zeitwork/internal/database"
+	"github.com/zeitwork/zeitwork/internal/shared/ssl"
 	"golang.org/x/time/rate"
 )
 
@@ -35,7 +36,8 @@ type Service struct {
 	rateLimiterMu sync.RWMutex
 
 	// SSL/TLS
-	tlsConfig *tls.Config
+	tlsConfig  *tls.Config
+	sslManager *ssl.Manager
 
 	// Domain-based routing
 	routingCache map[string]*RouteTarget // domain -> backend
@@ -78,8 +80,32 @@ func NewService(config *Config, logger *slog.Logger) (*Service, error) {
 	s.proxy = httputil.NewSingleHostReverseProxy(lbURL)
 	s.proxy.ErrorHandler = s.errorHandler
 
-	// Configure TLS if certificates are provided
-	if config.SSLCertPath != "" && config.SSLKeyPath != "" {
+	// Initialize SSL manager for automatic certificate management
+	if os.Getenv("DATABASE_URL") != "" && os.Getenv("ENABLE_SSL_AUTOMATION") == "true" {
+		sslConfig := &ssl.Config{
+			DatabaseURL: os.Getenv("DATABASE_URL"),
+			Email:       os.Getenv("ACME_EMAIL"),
+			StagingMode: os.Getenv("ACME_STAGING") == "true",
+			DNSProvider: os.Getenv("DNS_PROVIDER"),
+		}
+
+		manager, err := ssl.NewManager(sslConfig, logger)
+		if err != nil {
+			logger.Warn("Failed to initialize SSL manager", "error", err)
+		} else {
+			s.sslManager = manager
+			// Start SSL manager
+			go func() {
+				if err := manager.Start(context.Background()); err != nil {
+					logger.Error("Failed to start SSL manager", "error", err)
+				}
+			}()
+			// Use dynamic TLS configuration
+			s.tlsConfig = manager.GetTLSConfig()
+			s.logger.Info("SSL automation enabled with Let's Encrypt")
+		}
+	} else if config.SSLCertPath != "" && config.SSLKeyPath != "" {
+		// Fall back to static certificates if provided
 		cert, err := tls.LoadX509KeyPair(config.SSLCertPath, config.SSLKeyPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load TLS certificates: %w", err)
