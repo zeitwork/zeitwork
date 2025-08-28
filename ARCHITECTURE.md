@@ -86,6 +86,7 @@ POST   /v1/webhook/github
 GET    /v1/deployments
 POST   /v1/deployments
 GET    /v1/deployments/{id}
+GET    /v1/deployments/{id}/logs
 PUT    /v1/deployments/{id}/status
 ```
 
