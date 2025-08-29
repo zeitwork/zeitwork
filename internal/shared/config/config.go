@@ -3,7 +3,6 @@ package config
 import (
 	"fmt"
 	"os"
-	"strconv"
 )
 
 // BaseConfig contains common configuration for all services
@@ -24,46 +23,20 @@ type OperatorConfig struct {
 // NodeAgentConfig contains configuration for the node agent service
 type NodeAgentConfig struct {
 	BaseConfig
-	OperatorURL       string
-	NodeID            string
-	FirecrackerBin    string
-	FirecrackerSocket string
-	VMWorkDir         string
-	KernelImagePath   string
-	BuilderRootfsPath string
-	S3Endpoint        string
-	S3Bucket          string
-	S3AccessKey       string
-	S3SecretKey       string
-	S3Region          string
-}
-
-// LoadBalancerConfig contains configuration for the load balancer service
-type LoadBalancerConfig struct {
-	BaseConfig
 	OperatorURL string
-	Algorithm   string // round-robin, least-connections, ip-hash
-	HealthPort  string // Port for health check HTTP endpoint
+	NodeID      string
 }
 
 // EdgeProxyConfig contains configuration for the edge proxy service
 type EdgeProxyConfig struct {
 	BaseConfig
-	OperatorURL  string
-	DatabaseURL  string
-	SSLCertPath  string
-	SSLKeyPath   string
-	RateLimitRPS int
+	OperatorURL string
 }
 
 // APIConfig contains configuration for the public API service
 type APIConfig struct {
 	BaseConfig
-	DatabaseURL    string
-	GitHubClientID string
-	GitHubSecret   string
-	JWTSecret      string
-	BaseURL        string
+	DatabaseURL string
 }
 
 // LoadOperatorConfig loads configuration for the operator service
@@ -84,31 +57,9 @@ func LoadOperatorConfig() (*OperatorConfig, error) {
 // LoadNodeAgentConfig loads configuration for the node agent service
 func LoadNodeAgentConfig() (*NodeAgentConfig, error) {
 	config := &NodeAgentConfig{
-		BaseConfig:        loadBaseConfig("node-agent"),
-		OperatorURL:       getEnvOrDefault("OPERATOR_URL", "http://localhost:8080"),
-		NodeID:            os.Getenv("NODE_ID"),
-		FirecrackerBin:    getEnvOrDefault("FIRECRACKER_BIN", "/usr/bin/firecracker"),
-		FirecrackerSocket: getEnvOrDefault("FIRECRACKER_SOCKET", "/tmp/firecracker.socket"),
-		VMWorkDir:         getEnvOrDefault("VM_WORK_DIR", "/var/lib/firecracker/vms"),
-		KernelImagePath:   getEnvOrDefault("KERNEL_IMAGE_PATH", "/var/lib/zeitwork/kernel/vmlinux.bin"),
-		BuilderRootfsPath: getEnvOrDefault("BUILDER_ROOTFS_PATH", "/var/lib/zeitwork/builder/rootfs.ext4"),
-		S3Endpoint:        os.Getenv("S3_ENDPOINT"), // Empty for AWS S3
-		S3Bucket:          os.Getenv("S3_BUCKET"),
-		S3AccessKey:       os.Getenv("S3_ACCESS_KEY_ID"),
-		S3SecretKey:       os.Getenv("S3_SECRET_ACCESS_KEY"),
-		S3Region:          getEnvOrDefault("S3_REGION", "us-east-1"),
-	}
-
-	return config, nil
-}
-
-// LoadLoadBalancerConfig loads configuration for the load balancer service
-func LoadLoadBalancerConfig() (*LoadBalancerConfig, error) {
-	config := &LoadBalancerConfig{
-		BaseConfig:  loadBaseConfig("load-balancer"),
+		BaseConfig:  loadBaseConfig("node-agent"),
 		OperatorURL: getEnvOrDefault("OPERATOR_URL", "http://localhost:8080"),
-		Algorithm:   getEnvOrDefault("LB_ALGORITHM", "round-robin"),
-		HealthPort:  getEnvOrDefault("HEALTH_PORT", "8083"),
+		NodeID:      os.Getenv("NODE_ID"),
 	}
 
 	return config, nil
@@ -116,19 +67,9 @@ func LoadLoadBalancerConfig() (*LoadBalancerConfig, error) {
 
 // LoadEdgeProxyConfig loads configuration for the edge proxy service
 func LoadEdgeProxyConfig() (*EdgeProxyConfig, error) {
-	ratelimitStr := getEnvOrDefault("RATE_LIMIT_RPS", "100")
-	ratelimit, err := strconv.Atoi(ratelimitStr)
-	if err != nil {
-		ratelimit = 100
-	}
-
 	config := &EdgeProxyConfig{
-		BaseConfig:   loadBaseConfig("edge-proxy"),
-		OperatorURL:  getEnvOrDefault("OPERATOR_URL", "http://localhost:8080"),
-		DatabaseURL:  os.Getenv("DATABASE_URL"),
-		SSLCertPath:  os.Getenv("SSL_CERT_PATH"),
-		SSLKeyPath:   os.Getenv("SSL_KEY_PATH"),
-		RateLimitRPS: ratelimit,
+		BaseConfig:  loadBaseConfig("edge-proxy"),
+		OperatorURL: getEnvOrDefault("OPERATOR_URL", "http://localhost:8080"),
 	}
 
 	return config, nil
@@ -137,24 +78,12 @@ func LoadEdgeProxyConfig() (*EdgeProxyConfig, error) {
 // LoadAPIConfig loads configuration for the public API service
 func LoadAPIConfig() (*APIConfig, error) {
 	config := &APIConfig{
-		BaseConfig:     loadBaseConfig("api"),
-		DatabaseURL:    getEnvOrDefault("DATABASE_URL", "postgres://localhost/zeitwork"),
-		GitHubClientID: os.Getenv("GITHUB_CLIENT_ID"),
-		GitHubSecret:   os.Getenv("GITHUB_CLIENT_SECRET"),
-		JWTSecret:      getEnvOrDefault("JWT_SECRET", "change-me-in-production"),
-		BaseURL:        getEnvOrDefault("BASE_URL", "https://api.zeitwork.com"),
+		BaseConfig:  loadBaseConfig("api"),
+		DatabaseURL: getEnvOrDefault("DATABASE_URL", "postgres://localhost/zeitwork"),
 	}
 
 	if config.DatabaseURL == "" {
 		return nil, fmt.Errorf("DATABASE_URL is required")
-	}
-
-	if config.GitHubClientID == "" || config.GitHubSecret == "" {
-		return nil, fmt.Errorf("GITHUB_CLIENT_ID and GITHUB_CLIENT_SECRET are required")
-	}
-
-	if config.JWTSecret == "change-me-in-production" && config.Environment == "production" {
-		return nil, fmt.Errorf("JWT_SECRET must be changed in production")
 	}
 
 	return config, nil
@@ -177,8 +106,6 @@ func getDefaultPort(serviceName string) string {
 		return "8080"
 	case "node-agent":
 		return "8081"
-	case "load-balancer":
-		return "8082"
 	case "edge-proxy":
 		return "8083"
 	case "api":
