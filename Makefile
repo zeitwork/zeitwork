@@ -15,7 +15,6 @@ build:
 	@mkdir -p $(BUILD_DIR)
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(GO_BUILD_FLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/zeitwork-operator ./cmd/operator
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(GO_BUILD_FLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/zeitwork-node-agent ./cmd/node-agent
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(GO_BUILD_FLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/zeitwork-load-balancer ./cmd/load-balancer
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(GO_BUILD_FLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/zeitwork-edge-proxy ./cmd/edge-proxy
 	@echo "Build complete!"
 
@@ -25,7 +24,6 @@ build-local:
 	@mkdir -p $(BUILD_DIR)
 	go build -o $(BUILD_DIR)/zeitwork-operator ./cmd/operator
 	go build -o $(BUILD_DIR)/zeitwork-node-agent ./cmd/node-agent
-	go build -o $(BUILD_DIR)/zeitwork-load-balancer ./cmd/load-balancer
 	go build -o $(BUILD_DIR)/zeitwork-edge-proxy ./cmd/edge-proxy
 	@echo "Local build complete!"
 
@@ -48,8 +46,8 @@ install: build
 # Uninstall services (requires sudo)
 uninstall:
 	@echo "Uninstalling services (requires sudo)..."
-	@sudo systemctl stop zeitwork-operator zeitwork-node-agent zeitwork-load-balancer zeitwork-edge-proxy 2>/dev/null || true
-	@sudo systemctl disable zeitwork-operator zeitwork-node-agent zeitwork-load-balancer zeitwork-edge-proxy 2>/dev/null || true
+	@sudo systemctl stop zeitwork-operator zeitwork-node-agent zeitwork-edge-proxy 2>/dev/null || true
+	@sudo systemctl disable zeitwork-operator zeitwork-node-agent zeitwork-edge-proxy 2>/dev/null || true
 	@sudo rm -f /usr/local/bin/zeitwork-*
 	@sudo rm -f /etc/systemd/system/zeitwork-*.service
 	@sudo systemctl daemon-reload
@@ -64,13 +62,9 @@ run-node-agent:
 	@echo "Running node-agent locally..."
 	OPERATOR_URL=http://localhost:8080 PORT=8081 LOG_LEVEL=debug ENVIRONMENT=development go run ./cmd/node-agent
 
-run-load-balancer:
-	@echo "Running load-balancer locally..."
-	OPERATOR_URL=http://localhost:8080 PORT=8082 LOG_LEVEL=debug ENVIRONMENT=development go run ./cmd/load-balancer
-
 run-edge-proxy:
 	@echo "Running edge-proxy locally..."
-	LOAD_BALANCER_URL=http://localhost:8082 PORT=8083 LOG_LEVEL=debug ENVIRONMENT=development go run ./cmd/edge-proxy
+	OPERATOR_URL=http://localhost:8080 PORT=8083 LOG_LEVEL=debug ENVIRONMENT=development go run ./cmd/edge-proxy
 
 # Generate SQL code
 sqlc:
@@ -113,7 +107,6 @@ help:
 	@echo "  make uninstall      - Uninstall services (requires sudo)"
 	@echo "  make run-operator   - Run operator locally for development"
 	@echo "  make run-node-agent - Run node-agent locally for development"
-	@echo "  make run-load-balancer - Run load-balancer locally for development"
 	@echo "  make run-edge-proxy - Run edge-proxy locally for development"
 	@echo "  make sqlc           - Generate SQL code with sqlc"
 	@echo "  make fmt            - Format Go code"
