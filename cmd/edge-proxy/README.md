@@ -1,1 +1,0 @@
-The edge proxy is responsible for the traffic that comes in from the level 4 load balancer to proxy it properly as a level 4 balancer to the actual nodes, and most specifically the VM instances on the nodes that are running the actual applications. So, it also needs to handle TLS termination.

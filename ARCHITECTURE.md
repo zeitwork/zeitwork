@@ -30,15 +30,15 @@ user flow
 
 request flow
 
-app.dokedu.org CNAME edge.zeitwork-dns.com
+app.dokedu.org CNAME edge.zeitwork.com
 
 using geodns we route to the closest region
 
 eu-central-1
 
-requests hits operator node with L4 load balancer
+points to a hetzner L4 load balancer
 
-that load balancer sends traffic to a L7 edge proxy on the operator node
+hetzner load balancer balances to L7 edge proxy that is envoy
 
 the L7 edge proxy does tls termination
 
@@ -46,13 +46,13 @@ edge proxy load balances traffic to a node where the application is running
 
 that is determined by the domain ie app.dokedu.org
 
+we have a map of domain -> deployments -> list of vms running on nodes
+
 as applications are running on multiple nodes
 
 we route to one of the nodes to the specific microvm
 
 each microvm has a ipv6
-
-the traffic from an edge proxy to the worker-node with the firecracker vms need to be encrypted
 
 a worker node can run a node-proxy that accepts traffic and routes it to the right microvm
 
@@ -60,16 +60,7 @@ microvms shouldnt be able to see/interact with traffic from other vms
 
 ---
 
-tech considerations
-
-- we write more or less everything in go besides the web apps that are written using nuxt/typescript
-- instead of inlining bash scripts in code we store them as bash script files and embed them into the go binary
-
----
-
 public api
-
-api.zeitwork.com -> CNAME edge.zeitwork-dns.com -> eu-central-1 -> ipv4 operator node 1 -> load balancer L4 -> edge proxy L7
 
 ```
 ANY    /v1/auth/github
@@ -90,10 +81,20 @@ GET    /v1/deployments/{id}/logs
 PUT    /v1/deployments/{id}/status
 ```
 
-image builder (internal)
+management api
 
 ```
-// Image management
+## instances
+
+GET    /v1/instances
+POST   /v1/instances
+GET    /v1/instances/{id}
+PUT    /v1/instances/{id}/state
+DELETE /v1/instances/{id}
+
+
+## image builder
+
 GET    /v1/images
 POST   /v1/images
 GET    /v1/images/{id}
@@ -101,38 +102,7 @@ GET    /v1/images/{id}/download
 DELETE /v1/images/{id}
 ```
 
-operator api (internal)
-
-NODE_ID=""
-NODE_IP=""
-NODE_TYPE="operator"
-NODE_REGION="eu-central-1"
-DATABASE_URL=""
-
-```
-// Node management
-GET    /v1/nodes
-POST   /v1/nodes
-GET    /v1/nodes/{id}
-DELETE /v1/nodes/{id}
-PUT    /v1/nodes/{id}/state
-
-// Instance management
-GET    /v1/instances
-POST   /v1/instances
-GET    /v1/instances/{id}
-PUT    /v1/instances/{id}/state
-DELETE /v1/instances/{id}
-```
-
-node agent api (internal)
-
-NODE_ID=""
-NODE_IP="10.0.2.42"
-NODE_JWT=""
-NODE_TYPE="worker"
-NODE_REGION="eu-central-1"
-OPERATOR_URL="eu-central-1.zeitwork-dns.com" (for all the nodes in that datacenter)
+node agent
 
 ```
 // Health check
