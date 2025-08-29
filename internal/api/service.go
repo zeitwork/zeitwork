@@ -73,6 +73,15 @@ func (s *Service) Start(ctx context.Context) error {
 	return s.server.Shutdown(shutdownCtx)
 }
 
+func (s *Service) withCORS(handler http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		handler.ServeHTTP(w, r)
+	})
+}
+
 // setupRoutes sets up the HTTP routes for the API
 func (s *Service) setupRoutes(mux *http.ServeMux) {
 	// Health check
@@ -86,6 +95,17 @@ func (s *Service) setupRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /v1/deployments", s.handleListDeployments)
 	mux.HandleFunc("POST /v1/deployments", s.handleCreateDeployment)
 	mux.HandleFunc("GET /v1/deployments/{id}", s.handleGetDeployment)
+
+	// Github Webhook
+	mux.HandleFunc("POST /github/webhook", s.handleGithubWebhook)
+}
+
+// handleGithubWebhook handles Github webhook requests
+func (s *Service) handleGithubWebhook(w http.ResponseWriter, r *http.Request) {
+	// TODO: Implement Github webhook handling
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"status": "received"})
 }
 
 // handleHealth handles health check requests
