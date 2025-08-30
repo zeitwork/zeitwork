@@ -11,510 +11,274 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const domainCreate = `-- name: DomainCreate :one
-INSERT INTO domains (name, verification_token, organisation_id) VALUES ($1, $2, $3) RETURNING id, name, verification_token, verified_at, organisation_id, created_at, updated_at, deleted_at
+const domainsCreate = `-- name: DomainsCreate :one
+INSERT INTO domains (
+    id,
+    name,
+    verification_token,
+    deployment_id,
+    internal,
+    organisation_id
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6
+)
+RETURNING 
+    id,
+    name,
+    verification_token,
+    verified_at,
+    deployment_id,
+    internal,
+    organisation_id,
+    created_at,
+    updated_at
 `
 
-type DomainCreateParams struct {
+type DomainsCreateParams struct {
+	ID                pgtype.UUID `json:"id"`
 	Name              string      `json:"name"`
 	VerificationToken pgtype.Text `json:"verification_token"`
+	DeploymentID      pgtype.UUID `json:"deployment_id"`
+	Internal          bool        `json:"internal"`
 	OrganisationID    pgtype.UUID `json:"organisation_id"`
 }
 
-func (q *Queries) DomainCreate(ctx context.Context, arg *DomainCreateParams) (*Domain, error) {
-	row := q.db.QueryRow(ctx, domainCreate, arg.Name, arg.VerificationToken, arg.OrganisationID)
-	var i Domain
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.VerificationToken,
-		&i.VerifiedAt,
-		&i.OrganisationID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-	)
-	return &i, err
+type DomainsCreateRow struct {
+	ID                pgtype.UUID        `json:"id"`
+	Name              string             `json:"name"`
+	VerificationToken pgtype.Text        `json:"verification_token"`
+	VerifiedAt        pgtype.Timestamptz `json:"verified_at"`
+	DeploymentID      pgtype.UUID        `json:"deployment_id"`
+	Internal          bool               `json:"internal"`
+	OrganisationID    pgtype.UUID        `json:"organisation_id"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 }
 
-const domainDelete = `-- name: DomainDelete :exec
-DELETE FROM domains WHERE id = $1
-`
-
-func (q *Queries) DomainDelete(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, domainDelete, id)
-	return err
-}
-
-const domainFind = `-- name: DomainFind :many
-SELECT id, name, verification_token, verified_at, organisation_id, created_at, updated_at, deleted_at FROM domains ORDER BY name
-`
-
-func (q *Queries) DomainFind(ctx context.Context) ([]*Domain, error) {
-	rows, err := q.db.Query(ctx, domainFind)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []*Domain
-	for rows.Next() {
-		var i Domain
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.VerificationToken,
-			&i.VerifiedAt,
-			&i.OrganisationID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, &i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const domainFindById = `-- name: DomainFindById :one
-SELECT id, name, verification_token, verified_at, organisation_id, created_at, updated_at, deleted_at FROM domains WHERE id = $1
-`
-
-func (q *Queries) DomainFindById(ctx context.Context, id pgtype.UUID) (*Domain, error) {
-	row := q.db.QueryRow(ctx, domainFindById, id)
-	var i Domain
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.VerificationToken,
-		&i.VerifiedAt,
-		&i.OrganisationID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-	)
-	return &i, err
-}
-
-const domainFindByName = `-- name: DomainFindByName :one
-SELECT id, name, verification_token, verified_at, organisation_id, created_at, updated_at, deleted_at FROM domains WHERE name = $1
-`
-
-func (q *Queries) DomainFindByName(ctx context.Context, name string) (*Domain, error) {
-	row := q.db.QueryRow(ctx, domainFindByName, name)
-	var i Domain
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.VerificationToken,
-		&i.VerifiedAt,
-		&i.OrganisationID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-	)
-	return &i, err
-}
-
-const domainFindByOrganisation = `-- name: DomainFindByOrganisation :many
-SELECT id, name, verification_token, verified_at, organisation_id, created_at, updated_at, deleted_at FROM domains WHERE organisation_id = $1 ORDER BY name
-`
-
-func (q *Queries) DomainFindByOrganisation(ctx context.Context, organisationID pgtype.UUID) ([]*Domain, error) {
-	rows, err := q.db.Query(ctx, domainFindByOrganisation, organisationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []*Domain
-	for rows.Next() {
-		var i Domain
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.VerificationToken,
-			&i.VerifiedAt,
-			&i.OrganisationID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, &i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const domainFindUnverified = `-- name: DomainFindUnverified :many
-SELECT id, name, verification_token, verified_at, organisation_id, created_at, updated_at, deleted_at FROM domains WHERE verified_at IS NULL ORDER BY created_at DESC
-`
-
-func (q *Queries) DomainFindUnverified(ctx context.Context) ([]*Domain, error) {
-	rows, err := q.db.Query(ctx, domainFindUnverified)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []*Domain
-	for rows.Next() {
-		var i Domain
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.VerificationToken,
-			&i.VerifiedAt,
-			&i.OrganisationID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, &i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const domainRecordCreate = `-- name: DomainRecordCreate :one
-INSERT INTO domain_records (domain_id, type, name, content, ttl, organisation_id) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id, domain_id, type, name, content, ttl, organisation_id, created_at, updated_at, deleted_at
-`
-
-type DomainRecordCreateParams struct {
-	DomainID       pgtype.UUID `json:"domain_id"`
-	Type           string      `json:"type"`
-	Name           string      `json:"name"`
-	Content        string      `json:"content"`
-	Ttl            int32       `json:"ttl"`
-	OrganisationID pgtype.UUID `json:"organisation_id"`
-}
-
-func (q *Queries) DomainRecordCreate(ctx context.Context, arg *DomainRecordCreateParams) (*DomainRecord, error) {
-	row := q.db.QueryRow(ctx, domainRecordCreate,
-		arg.DomainID,
-		arg.Type,
+// Create a new domain
+func (q *Queries) DomainsCreate(ctx context.Context, arg *DomainsCreateParams) (*DomainsCreateRow, error) {
+	row := q.db.QueryRow(ctx, domainsCreate,
+		arg.ID,
 		arg.Name,
-		arg.Content,
-		arg.Ttl,
+		arg.VerificationToken,
+		arg.DeploymentID,
+		arg.Internal,
 		arg.OrganisationID,
 	)
-	var i DomainRecord
-	err := row.Scan(
-		&i.ID,
-		&i.DomainID,
-		&i.Type,
-		&i.Name,
-		&i.Content,
-		&i.Ttl,
-		&i.OrganisationID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-	)
-	return &i, err
-}
-
-const domainRecordDelete = `-- name: DomainRecordDelete :exec
-DELETE FROM domain_records WHERE id = $1
-`
-
-func (q *Queries) DomainRecordDelete(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, domainRecordDelete, id)
-	return err
-}
-
-const domainRecordFindByDomain = `-- name: DomainRecordFindByDomain :many
-SELECT id, domain_id, type, name, content, ttl, organisation_id, created_at, updated_at, deleted_at FROM domain_records WHERE domain_id = $1 ORDER BY type, name
-`
-
-func (q *Queries) DomainRecordFindByDomain(ctx context.Context, domainID pgtype.UUID) ([]*DomainRecord, error) {
-	rows, err := q.db.Query(ctx, domainRecordFindByDomain, domainID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []*DomainRecord
-	for rows.Next() {
-		var i DomainRecord
-		if err := rows.Scan(
-			&i.ID,
-			&i.DomainID,
-			&i.Type,
-			&i.Name,
-			&i.Content,
-			&i.Ttl,
-			&i.OrganisationID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, &i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const domainRecordFindById = `-- name: DomainRecordFindById :one
-SELECT id, domain_id, type, name, content, ttl, organisation_id, created_at, updated_at, deleted_at FROM domain_records WHERE id = $1
-`
-
-func (q *Queries) DomainRecordFindById(ctx context.Context, id pgtype.UUID) (*DomainRecord, error) {
-	row := q.db.QueryRow(ctx, domainRecordFindById, id)
-	var i DomainRecord
-	err := row.Scan(
-		&i.ID,
-		&i.DomainID,
-		&i.Type,
-		&i.Name,
-		&i.Content,
-		&i.Ttl,
-		&i.OrganisationID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-	)
-	return &i, err
-}
-
-const domainRecordFindByType = `-- name: DomainRecordFindByType :many
-SELECT id, domain_id, type, name, content, ttl, organisation_id, created_at, updated_at, deleted_at FROM domain_records WHERE domain_id = $1 AND type = $2 ORDER BY name
-`
-
-type DomainRecordFindByTypeParams struct {
-	DomainID pgtype.UUID `json:"domain_id"`
-	Type     string      `json:"type"`
-}
-
-func (q *Queries) DomainRecordFindByType(ctx context.Context, arg *DomainRecordFindByTypeParams) ([]*DomainRecord, error) {
-	rows, err := q.db.Query(ctx, domainRecordFindByType, arg.DomainID, arg.Type)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []*DomainRecord
-	for rows.Next() {
-		var i DomainRecord
-		if err := rows.Scan(
-			&i.ID,
-			&i.DomainID,
-			&i.Type,
-			&i.Name,
-			&i.Content,
-			&i.Ttl,
-			&i.OrganisationID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, &i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const domainRecordUpdate = `-- name: DomainRecordUpdate :one
-UPDATE domain_records SET content = $2, ttl = $3, updated_at = NOW() WHERE id = $1 RETURNING id, domain_id, type, name, content, ttl, organisation_id, created_at, updated_at, deleted_at
-`
-
-type DomainRecordUpdateParams struct {
-	ID      pgtype.UUID `json:"id"`
-	Content string      `json:"content"`
-	Ttl     int32       `json:"ttl"`
-}
-
-func (q *Queries) DomainRecordUpdate(ctx context.Context, arg *DomainRecordUpdateParams) (*DomainRecord, error) {
-	row := q.db.QueryRow(ctx, domainRecordUpdate, arg.ID, arg.Content, arg.Ttl)
-	var i DomainRecord
-	err := row.Scan(
-		&i.ID,
-		&i.DomainID,
-		&i.Type,
-		&i.Name,
-		&i.Content,
-		&i.Ttl,
-		&i.OrganisationID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-	)
-	return &i, err
-}
-
-const domainUpdateToken = `-- name: DomainUpdateToken :one
-UPDATE domains SET verification_token = $2, updated_at = NOW() WHERE id = $1 RETURNING id, name, verification_token, verified_at, organisation_id, created_at, updated_at, deleted_at
-`
-
-type DomainUpdateTokenParams struct {
-	ID                pgtype.UUID `json:"id"`
-	VerificationToken pgtype.Text `json:"verification_token"`
-}
-
-func (q *Queries) DomainUpdateToken(ctx context.Context, arg *DomainUpdateTokenParams) (*Domain, error) {
-	row := q.db.QueryRow(ctx, domainUpdateToken, arg.ID, arg.VerificationToken)
-	var i Domain
+	var i DomainsCreateRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
 		&i.VerificationToken,
 		&i.VerifiedAt,
+		&i.DeploymentID,
+		&i.Internal,
 		&i.OrganisationID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.DeletedAt,
 	)
 	return &i, err
 }
 
-const domainVerify = `-- name: DomainVerify :one
-UPDATE domains SET verified_at = NOW(), updated_at = NOW() WHERE id = $1 RETURNING id, name, verification_token, verified_at, organisation_id, created_at, updated_at, deleted_at
+const domainsGetByDeployment = `-- name: DomainsGetByDeployment :many
+SELECT 
+    id,
+    name,
+    verification_token,
+    verified_at,
+    deployment_id,
+    internal,
+    organisation_id,
+    created_at,
+    updated_at
+FROM domains 
+WHERE deployment_id = $1 
+    AND deleted_at IS NULL
 `
 
-func (q *Queries) DomainVerify(ctx context.Context, id pgtype.UUID) (*Domain, error) {
-	row := q.db.QueryRow(ctx, domainVerify, id)
-	var i Domain
+type DomainsGetByDeploymentRow struct {
+	ID                pgtype.UUID        `json:"id"`
+	Name              string             `json:"name"`
+	VerificationToken pgtype.Text        `json:"verification_token"`
+	VerifiedAt        pgtype.Timestamptz `json:"verified_at"`
+	DeploymentID      pgtype.UUID        `json:"deployment_id"`
+	Internal          bool               `json:"internal"`
+	OrganisationID    pgtype.UUID        `json:"organisation_id"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Get domains by deployment
+func (q *Queries) DomainsGetByDeployment(ctx context.Context, deploymentID pgtype.UUID) ([]*DomainsGetByDeploymentRow, error) {
+	rows, err := q.db.Query(ctx, domainsGetByDeployment, deploymentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*DomainsGetByDeploymentRow
+	for rows.Next() {
+		var i DomainsGetByDeploymentRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.VerificationToken,
+			&i.VerifiedAt,
+			&i.DeploymentID,
+			&i.Internal,
+			&i.OrganisationID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const domainsGetById = `-- name: DomainsGetById :one
+SELECT 
+    id,
+    name,
+    verification_token,
+    verified_at,
+    deployment_id,
+    internal,
+    organisation_id,
+    created_at,
+    updated_at
+FROM domains 
+WHERE id = $1 
+    AND deleted_at IS NULL
+`
+
+type DomainsGetByIdRow struct {
+	ID                pgtype.UUID        `json:"id"`
+	Name              string             `json:"name"`
+	VerificationToken pgtype.Text        `json:"verification_token"`
+	VerifiedAt        pgtype.Timestamptz `json:"verified_at"`
+	DeploymentID      pgtype.UUID        `json:"deployment_id"`
+	Internal          bool               `json:"internal"`
+	OrganisationID    pgtype.UUID        `json:"organisation_id"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Get domain by ID
+func (q *Queries) DomainsGetById(ctx context.Context, id pgtype.UUID) (*DomainsGetByIdRow, error) {
+	row := q.db.QueryRow(ctx, domainsGetById, id)
+	var i DomainsGetByIdRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
 		&i.VerificationToken,
 		&i.VerifiedAt,
+		&i.DeploymentID,
+		&i.Internal,
 		&i.OrganisationID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.DeletedAt,
 	)
 	return &i, err
 }
 
-const projectDomainCreate = `-- name: ProjectDomainCreate :one
-INSERT INTO project_domains (project_id, domain_id, organisation_id) VALUES ($1, $2, $3) RETURNING id, project_id, domain_id, organisation_id, created_at, updated_at, deleted_at
+const domainsGetByName = `-- name: DomainsGetByName :one
+SELECT 
+    id,
+    name,
+    verification_token,
+    verified_at,
+    deployment_id,
+    internal,
+    organisation_id,
+    created_at,
+    updated_at
+FROM domains 
+WHERE name = $1 
+    AND deleted_at IS NULL
 `
 
-type ProjectDomainCreateParams struct {
-	ProjectID      pgtype.UUID `json:"project_id"`
-	DomainID       pgtype.UUID `json:"domain_id"`
-	OrganisationID pgtype.UUID `json:"organisation_id"`
+type DomainsGetByNameRow struct {
+	ID                pgtype.UUID        `json:"id"`
+	Name              string             `json:"name"`
+	VerificationToken pgtype.Text        `json:"verification_token"`
+	VerifiedAt        pgtype.Timestamptz `json:"verified_at"`
+	DeploymentID      pgtype.UUID        `json:"deployment_id"`
+	Internal          bool               `json:"internal"`
+	OrganisationID    pgtype.UUID        `json:"organisation_id"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 }
 
-func (q *Queries) ProjectDomainCreate(ctx context.Context, arg *ProjectDomainCreateParams) (*ProjectDomain, error) {
-	row := q.db.QueryRow(ctx, projectDomainCreate, arg.ProjectID, arg.DomainID, arg.OrganisationID)
-	var i ProjectDomain
+// Get domain by name
+func (q *Queries) DomainsGetByName(ctx context.Context, name string) (*DomainsGetByNameRow, error) {
+	row := q.db.QueryRow(ctx, domainsGetByName, name)
+	var i DomainsGetByNameRow
 	err := row.Scan(
 		&i.ID,
-		&i.ProjectID,
-		&i.DomainID,
+		&i.Name,
+		&i.VerificationToken,
+		&i.VerifiedAt,
+		&i.DeploymentID,
+		&i.Internal,
 		&i.OrganisationID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.DeletedAt,
 	)
 	return &i, err
 }
 
-const projectDomainDelete = `-- name: ProjectDomainDelete :exec
-DELETE FROM project_domains WHERE id = $1
+const domainsVerify = `-- name: DomainsVerify :one
+UPDATE domains 
+SET verified_at = now(), 
+    updated_at = now()
+WHERE id = $1
+RETURNING 
+    id,
+    name,
+    verification_token,
+    verified_at,
+    deployment_id,
+    internal,
+    organisation_id,
+    created_at,
+    updated_at
 `
 
-func (q *Queries) ProjectDomainDelete(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, projectDomainDelete, id)
-	return err
+type DomainsVerifyRow struct {
+	ID                pgtype.UUID        `json:"id"`
+	Name              string             `json:"name"`
+	VerificationToken pgtype.Text        `json:"verification_token"`
+	VerifiedAt        pgtype.Timestamptz `json:"verified_at"`
+	DeploymentID      pgtype.UUID        `json:"deployment_id"`
+	Internal          bool               `json:"internal"`
+	OrganisationID    pgtype.UUID        `json:"organisation_id"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
 }
 
-const projectDomainFindByDomain = `-- name: ProjectDomainFindByDomain :many
-SELECT id, project_id, domain_id, organisation_id, created_at, updated_at, deleted_at FROM project_domains WHERE domain_id = $1 ORDER BY created_at DESC
-`
-
-func (q *Queries) ProjectDomainFindByDomain(ctx context.Context, domainID pgtype.UUID) ([]*ProjectDomain, error) {
-	rows, err := q.db.Query(ctx, projectDomainFindByDomain, domainID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []*ProjectDomain
-	for rows.Next() {
-		var i ProjectDomain
-		if err := rows.Scan(
-			&i.ID,
-			&i.ProjectID,
-			&i.DomainID,
-			&i.OrganisationID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, &i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const projectDomainFindById = `-- name: ProjectDomainFindById :one
-SELECT id, project_id, domain_id, organisation_id, created_at, updated_at, deleted_at FROM project_domains WHERE id = $1
-`
-
-func (q *Queries) ProjectDomainFindById(ctx context.Context, id pgtype.UUID) (*ProjectDomain, error) {
-	row := q.db.QueryRow(ctx, projectDomainFindById, id)
-	var i ProjectDomain
+// Mark domain as verified
+func (q *Queries) DomainsVerify(ctx context.Context, id pgtype.UUID) (*DomainsVerifyRow, error) {
+	row := q.db.QueryRow(ctx, domainsVerify, id)
+	var i DomainsVerifyRow
 	err := row.Scan(
 		&i.ID,
-		&i.ProjectID,
-		&i.DomainID,
+		&i.Name,
+		&i.VerificationToken,
+		&i.VerifiedAt,
+		&i.DeploymentID,
+		&i.Internal,
 		&i.OrganisationID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.DeletedAt,
 	)
 	return &i, err
-}
-
-const projectDomainFindByProject = `-- name: ProjectDomainFindByProject :many
-SELECT id, project_id, domain_id, organisation_id, created_at, updated_at, deleted_at FROM project_domains WHERE project_id = $1 ORDER BY created_at DESC
-`
-
-func (q *Queries) ProjectDomainFindByProject(ctx context.Context, projectID pgtype.UUID) ([]*ProjectDomain, error) {
-	rows, err := q.db.Query(ctx, projectDomainFindByProject, projectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []*ProjectDomain
-	for rows.Next() {
-		var i ProjectDomain
-		if err := rows.Scan(
-			&i.ID,
-			&i.ProjectID,
-			&i.DomainID,
-			&i.OrganisationID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, &i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }

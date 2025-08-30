@@ -1,20 +1,59 @@
--- name: RegionFindById :one
-SELECT * FROM regions WHERE id = $1;
+-- name: RegionsGetById :one
+-- Get region by ID
+SELECT 
+    id,
+    name,
+    code,
+    country,
+    created_at,
+    updated_at
+FROM regions 
+WHERE id = $1 
+    AND deleted_at IS NULL;
 
--- name: RegionFindByCode :one
-SELECT * FROM regions WHERE code = $1;
+-- name: RegionsGetByCode :one
+-- Get region by code
+SELECT 
+    id,
+    name,
+    code,
+    country,
+    created_at,
+    updated_at
+FROM regions 
+WHERE code = $1 
+    AND deleted_at IS NULL;
 
--- name: RegionFind :many
-SELECT * FROM regions ORDER BY name;
+-- name: RegionsCreate :one
+-- Create a new region
+INSERT INTO regions (
+    id,
+    name,
+    code,
+    country
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4
+)
+RETURNING 
+    id,
+    name,
+    code,
+    country,
+    created_at,
+    updated_at;
 
--- name: RegionFindByCountry :many
-SELECT * FROM regions WHERE country = $1 ORDER BY name;
-
--- name: RegionCreate :one
-INSERT INTO regions (name, code, country) VALUES ($1, $2, $3) RETURNING *;
-
--- name: RegionUpdate :one
-UPDATE regions SET name = $2, code = $3, country = $4, updated_at = NOW() WHERE id = $1 RETURNING *;
-
--- name: RegionDelete :exec
-DELETE FROM regions WHERE id = $1;
+-- name: RegionsGetAll :many
+-- Get all regions
+SELECT 
+    id,
+    name,
+    code,
+    country,
+    created_at,
+    updated_at
+FROM regions 
+WHERE deleted_at IS NULL
+ORDER BY name ASC;

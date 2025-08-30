@@ -1,30 +1,87 @@
--- name: ImageFindById :one
-SELECT * FROM images WHERE id = $1;
+-- name: ImagesGetById :one
+-- Get image by ID
+SELECT 
+    id,
+    name,
+    status,
+    image_size,
+    image_hash,
+    object_key,
+    created_at,
+    updated_at
+FROM images 
+WHERE id = $1 
+    AND deleted_at IS NULL;
 
--- name: ImageFindByStatus :many
-SELECT * FROM images WHERE status = $1;
+-- name: ImagesGetByHash :one
+-- Get image by hash
+SELECT 
+    id,
+    name,
+    status,
+    image_size,
+    image_hash,
+    object_key,
+    created_at,
+    updated_at
+FROM images 
+WHERE image_hash = $1 
+    AND deleted_at IS NULL;
 
--- name: ImageFindByName :one
-SELECT * FROM images WHERE name = $1;
-
--- name: ImageFind :many
-SELECT * FROM images ORDER BY created_at DESC;
-
--- name: ImageCreate :one
+-- name: ImagesCreate :one
+-- Create a new image
 INSERT INTO images (
-    name, status, repository, image_size, image_hash
+    id,
+    name,
+    status,
+    image_size,
+    image_hash,
+    object_key
 ) VALUES (
-    $1, $2, $3, $4, $5
-) RETURNING *;
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6
+)
+RETURNING 
+    id,
+    name,
+    status,
+    image_size,
+    image_hash,
+    object_key,
+    created_at,
+    updated_at;
 
--- name: ImageUpdateStatus :one
-UPDATE images SET status = $2, image_size = $3, updated_at = NOW() WHERE id = $1 RETURNING *;
+-- name: ImagesUpdateStatus :one
+-- Update image status
+UPDATE images 
+SET status = $2, 
+    updated_at = now()
+WHERE id = $1
+RETURNING 
+    id,
+    name,
+    status,
+    image_size,
+    image_hash,
+    object_key,
+    created_at,
+    updated_at;
 
--- name: ImageUpdateHash :one
-UPDATE images SET image_hash = $2, updated_at = NOW() WHERE id = $1 RETURNING *;
-
--- name: ImageDelete :exec
-DELETE FROM images WHERE id = $1;
-
--- name: ImageDequeuePending :one
-SELECT * FROM images WHERE status = 'pending' ORDER BY created_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED;
+-- name: ImagesGetAll :many
+-- Get all images
+SELECT 
+    id,
+    name,
+    status,
+    image_size,
+    image_hash,
+    object_key,
+    created_at,
+    updated_at
+FROM images 
+WHERE deleted_at IS NULL
+ORDER BY created_at DESC;

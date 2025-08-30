@@ -59,6 +59,7 @@ out/
 .env.development
 .env.test
 .env.production
+.env.prod
 *.env
 !deployments/config/*.env
 

@@ -1,5 +1,5 @@
 {
-  "id": "2933df04-c381-4382-aa0c-97ea580d081d",
+  "id": "6534af38-f256-480b-9480-f2329c057a1c",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -26,12 +26,6 @@
           "primaryKey": false,
           "notNull": true
         },
-        "repository": {
-          "name": "repository",
-          "type": "jsonb",
-          "primaryKey": false,
-          "notNull": true
-        },
         "image_size": {
           "name": "image_size",
           "type": "integer",
@@ -43,6 +37,12 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "object_key": {
+          "name": "object_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -107,9 +107,15 @@
           "primaryKey": false,
           "notNull": true
         },
-        "resources": {
-          "name": "resources",
-          "type": "jsonb",
+        "vcpus": {
+          "name": "vcpus",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "memory": {
+          "name": "memory",
+          "type": "integer",
           "primaryKey": false,
           "notNull": true
         },
@@ -119,8 +125,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "ip_address": {
-          "name": "ip_address",
+        "ipv6_address": {
+          "name": "ipv6_address",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -356,6 +362,130 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
+    "public.ssl_certs": {
+      "name": "ssl_certs",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "value": {
+          "name": "value",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "ssl_certs_key_unique": {
+          "name": "ssl_certs_key_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "key"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.ssl_locks": {
+      "name": "ssl_locks",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "key": {
+          "name": "key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "ssl_locks_key_unique": {
+          "name": "ssl_locks_key_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "key"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
     "public.deployment_instances": {
       "name": "deployment_instances",
       "schema": "",
@@ -463,17 +593,11 @@
           "primaryKey": true,
           "notNull": true
         },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
+        "deployment_id": {
+          "name": "deployment_id",
+          "type": "text",
           "primaryKey": false,
-          "notNull": false
-        },
-        "project_environment_id": {
-          "name": "project_environment_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "status": {
           "name": "status",
@@ -486,6 +610,18 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "environment_id": {
+          "name": "environment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
         },
         "image_id": {
           "name": "image_id",
@@ -535,12 +671,12 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
-        "deployments_project_environment_id_project_environments_id_fk": {
-          "name": "deployments_project_environment_id_project_environments_id_fk",
+        "deployments_environment_id_project_environments_id_fk": {
+          "name": "deployments_environment_id_project_environments_id_fk",
           "tableFrom": "deployments",
           "tableTo": "project_environments",
           "columnsFrom": [
-            "project_environment_id"
+            "environment_id"
           ],
           "columnsTo": [
             "id"
@@ -576,109 +712,15 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.domain_records": {
-      "name": "domain_records",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "domain_id": {
-          "name": "domain_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "type": {
-          "name": "type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "name": {
-          "name": "name",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "content": {
-          "name": "content",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "ttl": {
-          "name": "ttl",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "organisation_id": {
-          "name": "organisation_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "deleted_at": {
-          "name": "deleted_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
+      "uniqueConstraints": {
+        "deployments_deploymentId_unique": {
+          "name": "deployments_deploymentId_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "deployment_id"
+          ]
         }
       },
-      "indexes": {},
-      "foreignKeys": {
-        "domain_records_domain_id_domains_id_fk": {
-          "name": "domain_records_domain_id_domains_id_fk",
-          "tableFrom": "domain_records",
-          "tableTo": "domains",
-          "columnsFrom": [
-            "domain_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "domain_records_organisation_id_organisations_id_fk": {
-          "name": "domain_records_organisation_id_organisations_id_fk",
-          "tableFrom": "domain_records",
-          "tableTo": "organisations",
-          "columnsFrom": [
-            "organisation_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -711,6 +753,19 @@
           "primaryKey": false,
           "notNull": false
         },
+        "deployment_id": {
+          "name": "deployment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "internal": {
+          "name": "internal",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
         "organisation_id": {
           "name": "organisation_id",
           "type": "uuid",
@@ -740,6 +795,19 @@
       },
       "indexes": {},
       "foreignKeys": {
+        "domains_deployment_id_deployments_id_fk": {
+          "name": "domains_deployment_id_deployments_id_fk",
+          "tableFrom": "domains",
+          "tableTo": "deployments",
+          "columnsFrom": [
+            "deployment_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "domains_organisation_id_organisations_id_fk": {
           "name": "domains_organisation_id_organisations_id_fk",
           "tableFrom": "domains",
@@ -766,8 +834,20 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "integer",
+          "type": "uuid",
           "primaryKey": true,
+          "notNull": true
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "github_account_id": {
+          "name": "github_account_id",
+          "type": "integer",
+          "primaryKey": false,
           "notNull": true
         },
         "github_installation_id": {
@@ -776,20 +856,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "github_org_id": {
-          "name": "github_org_id",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
         "organisation_id": {
           "name": "organisation_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "user_id": {
-          "name": "user_id",
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
@@ -817,6 +885,19 @@
       },
       "indexes": {},
       "foreignKeys": {
+        "github_installations_user_id_users_id_fk": {
+          "name": "github_installations_user_id_users_id_fk",
+          "tableFrom": "github_installations",
+          "tableTo": "users",
+          "columnsFrom": [
+            "user_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "github_installations_organisation_id_organisations_id_fk": {
           "name": "github_installations_organisation_id_organisations_id_fk",
           "tableFrom": "github_installations",
@@ -829,13 +910,110 @@
           ],
           "onDelete": "no action",
           "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "github_installations_githubInstallationId_unique": {
+          "name": "github_installations_githubInstallationId_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "github_installation_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.image_builds": {
+      "name": "image_builds",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true
         },
-        "github_installations_user_id_users_id_fk": {
-          "name": "github_installations_user_id_users_id_fk",
-          "tableFrom": "github_installations",
-          "tableTo": "users",
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "deployment_id": {
+          "name": "deployment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "started_at": {
+          "name": "started_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "completed_at": {
+          "name": "completed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "failed_at": {
+          "name": "failed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "organisation_id": {
+          "name": "organisation_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "now()"
+        },
+        "deleted_at": {
+          "name": "deleted_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "image_builds_deployment_id_deployments_id_fk": {
+          "name": "image_builds_deployment_id_deployments_id_fk",
+          "tableFrom": "image_builds",
+          "tableTo": "deployments",
           "columnsFrom": [
-            "user_id"
+            "deployment_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "image_builds_organisation_id_organisations_id_fk": {
+          "name": "image_builds_organisation_id_organisations_id_fk",
+          "tableFrom": "image_builds",
+          "tableTo": "organisations",
+          "columnsFrom": [
+            "organisation_id"
           ],
           "columnsTo": [
             "id"
@@ -987,103 +1165,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.project_domains": {
-      "name": "project_domains",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true
-        },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "domain_id": {
-          "name": "domain_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "organisation_id": {
-          "name": "organisation_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "deleted_at": {
-          "name": "deleted_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "project_domains_project_id_projects_id_fk": {
-          "name": "project_domains_project_id_projects_id_fk",
-          "tableFrom": "project_domains",
-          "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "project_domains_domain_id_domains_id_fk": {
-          "name": "project_domains_domain_id_domains_id_fk",
-          "tableFrom": "project_domains",
-          "tableTo": "domains",
-          "columnsFrom": [
-            "domain_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        },
-        "project_domains_organisation_id_organisations_id_fk": {
-          "name": "project_domains_organisation_id_organisations_id_fk",
-          "tableFrom": "project_domains",
-          "tableTo": "organisations",
-          "columnsFrom": [
-            "organisation_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "no action",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.project_environments": {
       "name": "project_environments",
       "schema": "",
@@ -1094,17 +1175,17 @@
           "primaryKey": true,
           "notNull": true
         },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "name": {
           "name": "name",
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
         },
         "organisation_id": {
           "name": "organisation_id",
@@ -1163,7 +1244,17 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "project_environments_name_projectId_organisationId_unique": {
+          "name": "project_environments_name_projectId_organisationId_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "name",
+            "project_id",
+            "organisation_id"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -1178,12 +1269,6 @@
           "primaryKey": true,
           "notNull": true
         },
-        "project_id": {
-          "name": "project_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
         "name": {
           "name": "name",
           "type": "text",
@@ -1195,6 +1280,18 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "project_id": {
+          "name": "project_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "environment_id": {
+          "name": "environment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
         },
         "organisation_id": {
           "name": "organisation_id",
@@ -1238,6 +1335,19 @@
           "onDelete": "no action",
           "onUpdate": "no action"
         },
+        "project_secrets_environment_id_project_environments_id_fk": {
+          "name": "project_secrets_environment_id_project_environments_id_fk",
+          "tableFrom": "project_secrets",
+          "tableTo": "project_environments",
+          "columnsFrom": [
+            "environment_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "project_secrets_organisation_id_organisations_id_fk": {
           "name": "project_secrets_organisation_id_organisations_id_fk",
           "tableFrom": "project_secrets",
@@ -1253,7 +1363,17 @@
         }
       },
       "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
+      "uniqueConstraints": {
+        "project_secrets_name_projectId_organisationId_unique": {
+          "name": "project_secrets_name_projectId_organisationId_unique",
+          "nullsNotDistinct": false,
+          "columns": [
+            "name",
+            "project_id",
+            "organisation_id"
+          ]
+        }
+      },
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -1279,6 +1399,24 @@
           "type": "text",
           "primaryKey": false,
           "notNull": true
+        },
+        "github_repository": {
+          "name": "github_repository",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "default_branch": {
+          "name": "default_branch",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "latest_deployment_id": {
+          "name": "latest_deployment_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
         },
         "organisation_id": {
           "name": "organisation_id",
@@ -1309,6 +1447,19 @@
       },
       "indexes": {},
       "foreignKeys": {
+        "projects_latest_deployment_id_deployments_id_fk": {
+          "name": "projects_latest_deployment_id_deployments_id_fk",
+          "tableFrom": "projects",
+          "tableTo": "deployments",
+          "columnsFrom": [
+            "latest_deployment_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
         "projects_organisation_id_organisations_id_fk": {
           "name": "projects_organisation_id_organisations_id_fk",
           "tableFrom": "projects",
@@ -1325,11 +1476,12 @@
       },
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "projects_slug_unique": {
-          "name": "projects_slug_unique",
+        "projects_slug_organisationId_unique": {
+          "name": "projects_slug_organisationId_unique",
           "nullsNotDistinct": false,
           "columns": [
-            "slug"
+            "slug",
+            "organisation_id"
           ]
         }
       },
@@ -1444,8 +1596,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "github_user_id": {
-          "name": "github_user_id",
+        "github_account_id": {
+          "name": "github_account_id",
           "type": "integer",
           "primaryKey": false,
           "notNull": false

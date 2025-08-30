@@ -11,161 +11,52 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const regionCreate = `-- name: RegionCreate :one
-INSERT INTO regions (name, code, country) VALUES ($1, $2, $3) RETURNING id, name, code, country, created_at, updated_at, deleted_at
+const regionsCreate = `-- name: RegionsCreate :one
+INSERT INTO regions (
+    id,
+    name,
+    code,
+    country
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4
+)
+RETURNING 
+    id,
+    name,
+    code,
+    country,
+    created_at,
+    updated_at
 `
 
-type RegionCreateParams struct {
-	Name    string `json:"name"`
-	Code    string `json:"code"`
-	Country string `json:"country"`
-}
-
-func (q *Queries) RegionCreate(ctx context.Context, arg *RegionCreateParams) (*Region, error) {
-	row := q.db.QueryRow(ctx, regionCreate, arg.Name, arg.Code, arg.Country)
-	var i Region
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Code,
-		&i.Country,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-	)
-	return &i, err
-}
-
-const regionDelete = `-- name: RegionDelete :exec
-DELETE FROM regions WHERE id = $1
-`
-
-func (q *Queries) RegionDelete(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, regionDelete, id)
-	return err
-}
-
-const regionFind = `-- name: RegionFind :many
-SELECT id, name, code, country, created_at, updated_at, deleted_at FROM regions ORDER BY name
-`
-
-func (q *Queries) RegionFind(ctx context.Context) ([]*Region, error) {
-	rows, err := q.db.Query(ctx, regionFind)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []*Region
-	for rows.Next() {
-		var i Region
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Code,
-			&i.Country,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, &i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const regionFindByCode = `-- name: RegionFindByCode :one
-SELECT id, name, code, country, created_at, updated_at, deleted_at FROM regions WHERE code = $1
-`
-
-func (q *Queries) RegionFindByCode(ctx context.Context, code string) (*Region, error) {
-	row := q.db.QueryRow(ctx, regionFindByCode, code)
-	var i Region
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Code,
-		&i.Country,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-	)
-	return &i, err
-}
-
-const regionFindByCountry = `-- name: RegionFindByCountry :many
-SELECT id, name, code, country, created_at, updated_at, deleted_at FROM regions WHERE country = $1 ORDER BY name
-`
-
-func (q *Queries) RegionFindByCountry(ctx context.Context, country string) ([]*Region, error) {
-	rows, err := q.db.Query(ctx, regionFindByCountry, country)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []*Region
-	for rows.Next() {
-		var i Region
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Code,
-			&i.Country,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, &i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const regionFindById = `-- name: RegionFindById :one
-SELECT id, name, code, country, created_at, updated_at, deleted_at FROM regions WHERE id = $1
-`
-
-func (q *Queries) RegionFindById(ctx context.Context, id pgtype.UUID) (*Region, error) {
-	row := q.db.QueryRow(ctx, regionFindById, id)
-	var i Region
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Code,
-		&i.Country,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-	)
-	return &i, err
-}
-
-const regionUpdate = `-- name: RegionUpdate :one
-UPDATE regions SET name = $2, code = $3, country = $4, updated_at = NOW() WHERE id = $1 RETURNING id, name, code, country, created_at, updated_at, deleted_at
-`
-
-type RegionUpdateParams struct {
+type RegionsCreateParams struct {
 	ID      pgtype.UUID `json:"id"`
 	Name    string      `json:"name"`
 	Code    string      `json:"code"`
 	Country string      `json:"country"`
 }
 
-func (q *Queries) RegionUpdate(ctx context.Context, arg *RegionUpdateParams) (*Region, error) {
-	row := q.db.QueryRow(ctx, regionUpdate,
+type RegionsCreateRow struct {
+	ID        pgtype.UUID        `json:"id"`
+	Name      string             `json:"name"`
+	Code      string             `json:"code"`
+	Country   string             `json:"country"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Create a new region
+func (q *Queries) RegionsCreate(ctx context.Context, arg *RegionsCreateParams) (*RegionsCreateRow, error) {
+	row := q.db.QueryRow(ctx, regionsCreate,
 		arg.ID,
 		arg.Name,
 		arg.Code,
 		arg.Country,
 	)
-	var i Region
+	var i RegionsCreateRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
@@ -173,7 +64,130 @@ func (q *Queries) RegionUpdate(ctx context.Context, arg *RegionUpdateParams) (*R
 		&i.Country,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.DeletedAt,
+	)
+	return &i, err
+}
+
+const regionsGetAll = `-- name: RegionsGetAll :many
+SELECT 
+    id,
+    name,
+    code,
+    country,
+    created_at,
+    updated_at
+FROM regions 
+WHERE deleted_at IS NULL
+ORDER BY name ASC
+`
+
+type RegionsGetAllRow struct {
+	ID        pgtype.UUID        `json:"id"`
+	Name      string             `json:"name"`
+	Code      string             `json:"code"`
+	Country   string             `json:"country"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Get all regions
+func (q *Queries) RegionsGetAll(ctx context.Context) ([]*RegionsGetAllRow, error) {
+	rows, err := q.db.Query(ctx, regionsGetAll)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*RegionsGetAllRow
+	for rows.Next() {
+		var i RegionsGetAllRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Code,
+			&i.Country,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const regionsGetByCode = `-- name: RegionsGetByCode :one
+SELECT 
+    id,
+    name,
+    code,
+    country,
+    created_at,
+    updated_at
+FROM regions 
+WHERE code = $1 
+    AND deleted_at IS NULL
+`
+
+type RegionsGetByCodeRow struct {
+	ID        pgtype.UUID        `json:"id"`
+	Name      string             `json:"name"`
+	Code      string             `json:"code"`
+	Country   string             `json:"country"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Get region by code
+func (q *Queries) RegionsGetByCode(ctx context.Context, code string) (*RegionsGetByCodeRow, error) {
+	row := q.db.QueryRow(ctx, regionsGetByCode, code)
+	var i RegionsGetByCodeRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Code,
+		&i.Country,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return &i, err
+}
+
+const regionsGetById = `-- name: RegionsGetById :one
+SELECT 
+    id,
+    name,
+    code,
+    country,
+    created_at,
+    updated_at
+FROM regions 
+WHERE id = $1 
+    AND deleted_at IS NULL
+`
+
+type RegionsGetByIdRow struct {
+	ID        pgtype.UUID        `json:"id"`
+	Name      string             `json:"name"`
+	Code      string             `json:"code"`
+	Country   string             `json:"country"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Get region by ID
+func (q *Queries) RegionsGetById(ctx context.Context, id pgtype.UUID) (*RegionsGetByIdRow, error) {
+	row := q.db.QueryRow(ctx, regionsGetById, id)
+	var i RegionsGetByIdRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Code,
+		&i.Country,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return &i, err
 }

@@ -7,263 +7,268 @@ package database
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const imageCreate = `-- name: ImageCreate :one
+const imagesCreate = `-- name: ImagesCreate :one
 INSERT INTO images (
-    name, status, repository, image_size, image_hash
+    id,
+    name,
+    status,
+    image_size,
+    image_hash,
+    object_key
 ) VALUES (
-    $1, $2, $3, $4, $5
-) RETURNING id, name, status, repository, image_size, image_hash, created_at, updated_at, deleted_at, s3_bucket, s3_key, builder_node_id
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6
+)
+RETURNING 
+    id,
+    name,
+    status,
+    image_size,
+    image_hash,
+    object_key,
+    created_at,
+    updated_at
 `
 
-type ImageCreateParams struct {
-	Name       string          `json:"name"`
-	Status     string          `json:"status"`
-	Repository json.RawMessage `json:"repository"`
-	ImageSize  pgtype.Int4     `json:"image_size"`
-	ImageHash  string          `json:"image_hash"`
-}
-
-func (q *Queries) ImageCreate(ctx context.Context, arg *ImageCreateParams) (*Image, error) {
-	row := q.db.QueryRow(ctx, imageCreate,
-		arg.Name,
-		arg.Status,
-		arg.Repository,
-		arg.ImageSize,
-		arg.ImageHash,
-	)
-	var i Image
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Status,
-		&i.Repository,
-		&i.ImageSize,
-		&i.ImageHash,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.S3Bucket,
-		&i.S3Key,
-		&i.BuilderNodeID,
-	)
-	return &i, err
-}
-
-const imageDelete = `-- name: ImageDelete :exec
-DELETE FROM images WHERE id = $1
-`
-
-func (q *Queries) ImageDelete(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, imageDelete, id)
-	return err
-}
-
-const imageDequeuePending = `-- name: ImageDequeuePending :one
-SELECT id, name, status, repository, image_size, image_hash, created_at, updated_at, deleted_at, s3_bucket, s3_key, builder_node_id FROM images WHERE status = 'pending' ORDER BY created_at ASC LIMIT 1 FOR UPDATE SKIP LOCKED
-`
-
-func (q *Queries) ImageDequeuePending(ctx context.Context) (*Image, error) {
-	row := q.db.QueryRow(ctx, imageDequeuePending)
-	var i Image
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Status,
-		&i.Repository,
-		&i.ImageSize,
-		&i.ImageHash,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.S3Bucket,
-		&i.S3Key,
-		&i.BuilderNodeID,
-	)
-	return &i, err
-}
-
-const imageFind = `-- name: ImageFind :many
-SELECT id, name, status, repository, image_size, image_hash, created_at, updated_at, deleted_at, s3_bucket, s3_key, builder_node_id FROM images ORDER BY created_at DESC
-`
-
-func (q *Queries) ImageFind(ctx context.Context) ([]*Image, error) {
-	rows, err := q.db.Query(ctx, imageFind)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []*Image
-	for rows.Next() {
-		var i Image
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Status,
-			&i.Repository,
-			&i.ImageSize,
-			&i.ImageHash,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.S3Bucket,
-			&i.S3Key,
-			&i.BuilderNodeID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, &i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const imageFindById = `-- name: ImageFindById :one
-SELECT id, name, status, repository, image_size, image_hash, created_at, updated_at, deleted_at, s3_bucket, s3_key, builder_node_id FROM images WHERE id = $1
-`
-
-func (q *Queries) ImageFindById(ctx context.Context, id pgtype.UUID) (*Image, error) {
-	row := q.db.QueryRow(ctx, imageFindById, id)
-	var i Image
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Status,
-		&i.Repository,
-		&i.ImageSize,
-		&i.ImageHash,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.S3Bucket,
-		&i.S3Key,
-		&i.BuilderNodeID,
-	)
-	return &i, err
-}
-
-const imageFindByName = `-- name: ImageFindByName :one
-SELECT id, name, status, repository, image_size, image_hash, created_at, updated_at, deleted_at, s3_bucket, s3_key, builder_node_id FROM images WHERE name = $1
-`
-
-func (q *Queries) ImageFindByName(ctx context.Context, name string) (*Image, error) {
-	row := q.db.QueryRow(ctx, imageFindByName, name)
-	var i Image
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Status,
-		&i.Repository,
-		&i.ImageSize,
-		&i.ImageHash,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.S3Bucket,
-		&i.S3Key,
-		&i.BuilderNodeID,
-	)
-	return &i, err
-}
-
-const imageFindByStatus = `-- name: ImageFindByStatus :many
-SELECT id, name, status, repository, image_size, image_hash, created_at, updated_at, deleted_at, s3_bucket, s3_key, builder_node_id FROM images WHERE status = $1
-`
-
-func (q *Queries) ImageFindByStatus(ctx context.Context, status string) ([]*Image, error) {
-	rows, err := q.db.Query(ctx, imageFindByStatus, status)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []*Image
-	for rows.Next() {
-		var i Image
-		if err := rows.Scan(
-			&i.ID,
-			&i.Name,
-			&i.Status,
-			&i.Repository,
-			&i.ImageSize,
-			&i.ImageHash,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.S3Bucket,
-			&i.S3Key,
-			&i.BuilderNodeID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, &i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const imageUpdateHash = `-- name: ImageUpdateHash :one
-UPDATE images SET image_hash = $2, updated_at = NOW() WHERE id = $1 RETURNING id, name, status, repository, image_size, image_hash, created_at, updated_at, deleted_at, s3_bucket, s3_key, builder_node_id
-`
-
-type ImageUpdateHashParams struct {
+type ImagesCreateParams struct {
 	ID        pgtype.UUID `json:"id"`
-	ImageHash string      `json:"image_hash"`
-}
-
-func (q *Queries) ImageUpdateHash(ctx context.Context, arg *ImageUpdateHashParams) (*Image, error) {
-	row := q.db.QueryRow(ctx, imageUpdateHash, arg.ID, arg.ImageHash)
-	var i Image
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Status,
-		&i.Repository,
-		&i.ImageSize,
-		&i.ImageHash,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.S3Bucket,
-		&i.S3Key,
-		&i.BuilderNodeID,
-	)
-	return &i, err
-}
-
-const imageUpdateStatus = `-- name: ImageUpdateStatus :one
-UPDATE images SET status = $2, image_size = $3, updated_at = NOW() WHERE id = $1 RETURNING id, name, status, repository, image_size, image_hash, created_at, updated_at, deleted_at, s3_bucket, s3_key, builder_node_id
-`
-
-type ImageUpdateStatusParams struct {
-	ID        pgtype.UUID `json:"id"`
+	Name      string      `json:"name"`
 	Status    string      `json:"status"`
 	ImageSize pgtype.Int4 `json:"image_size"`
+	ImageHash string      `json:"image_hash"`
+	ObjectKey pgtype.Text `json:"object_key"`
 }
 
-func (q *Queries) ImageUpdateStatus(ctx context.Context, arg *ImageUpdateStatusParams) (*Image, error) {
-	row := q.db.QueryRow(ctx, imageUpdateStatus, arg.ID, arg.Status, arg.ImageSize)
-	var i Image
+type ImagesCreateRow struct {
+	ID        pgtype.UUID        `json:"id"`
+	Name      string             `json:"name"`
+	Status    string             `json:"status"`
+	ImageSize pgtype.Int4        `json:"image_size"`
+	ImageHash string             `json:"image_hash"`
+	ObjectKey pgtype.Text        `json:"object_key"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Create a new image
+func (q *Queries) ImagesCreate(ctx context.Context, arg *ImagesCreateParams) (*ImagesCreateRow, error) {
+	row := q.db.QueryRow(ctx, imagesCreate,
+		arg.ID,
+		arg.Name,
+		arg.Status,
+		arg.ImageSize,
+		arg.ImageHash,
+		arg.ObjectKey,
+	)
+	var i ImagesCreateRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
 		&i.Status,
-		&i.Repository,
 		&i.ImageSize,
 		&i.ImageHash,
+		&i.ObjectKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.S3Bucket,
-		&i.S3Key,
-		&i.BuilderNodeID,
+	)
+	return &i, err
+}
+
+const imagesGetAll = `-- name: ImagesGetAll :many
+SELECT 
+    id,
+    name,
+    status,
+    image_size,
+    image_hash,
+    object_key,
+    created_at,
+    updated_at
+FROM images 
+WHERE deleted_at IS NULL
+ORDER BY created_at DESC
+`
+
+type ImagesGetAllRow struct {
+	ID        pgtype.UUID        `json:"id"`
+	Name      string             `json:"name"`
+	Status    string             `json:"status"`
+	ImageSize pgtype.Int4        `json:"image_size"`
+	ImageHash string             `json:"image_hash"`
+	ObjectKey pgtype.Text        `json:"object_key"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Get all images
+func (q *Queries) ImagesGetAll(ctx context.Context) ([]*ImagesGetAllRow, error) {
+	rows, err := q.db.Query(ctx, imagesGetAll)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*ImagesGetAllRow
+	for rows.Next() {
+		var i ImagesGetAllRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Status,
+			&i.ImageSize,
+			&i.ImageHash,
+			&i.ObjectKey,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const imagesGetByHash = `-- name: ImagesGetByHash :one
+SELECT 
+    id,
+    name,
+    status,
+    image_size,
+    image_hash,
+    object_key,
+    created_at,
+    updated_at
+FROM images 
+WHERE image_hash = $1 
+    AND deleted_at IS NULL
+`
+
+type ImagesGetByHashRow struct {
+	ID        pgtype.UUID        `json:"id"`
+	Name      string             `json:"name"`
+	Status    string             `json:"status"`
+	ImageSize pgtype.Int4        `json:"image_size"`
+	ImageHash string             `json:"image_hash"`
+	ObjectKey pgtype.Text        `json:"object_key"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Get image by hash
+func (q *Queries) ImagesGetByHash(ctx context.Context, imageHash string) (*ImagesGetByHashRow, error) {
+	row := q.db.QueryRow(ctx, imagesGetByHash, imageHash)
+	var i ImagesGetByHashRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Status,
+		&i.ImageSize,
+		&i.ImageHash,
+		&i.ObjectKey,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return &i, err
+}
+
+const imagesGetById = `-- name: ImagesGetById :one
+SELECT 
+    id,
+    name,
+    status,
+    image_size,
+    image_hash,
+    object_key,
+    created_at,
+    updated_at
+FROM images 
+WHERE id = $1 
+    AND deleted_at IS NULL
+`
+
+type ImagesGetByIdRow struct {
+	ID        pgtype.UUID        `json:"id"`
+	Name      string             `json:"name"`
+	Status    string             `json:"status"`
+	ImageSize pgtype.Int4        `json:"image_size"`
+	ImageHash string             `json:"image_hash"`
+	ObjectKey pgtype.Text        `json:"object_key"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Get image by ID
+func (q *Queries) ImagesGetById(ctx context.Context, id pgtype.UUID) (*ImagesGetByIdRow, error) {
+	row := q.db.QueryRow(ctx, imagesGetById, id)
+	var i ImagesGetByIdRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Status,
+		&i.ImageSize,
+		&i.ImageHash,
+		&i.ObjectKey,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return &i, err
+}
+
+const imagesUpdateStatus = `-- name: ImagesUpdateStatus :one
+UPDATE images 
+SET status = $2, 
+    updated_at = now()
+WHERE id = $1
+RETURNING 
+    id,
+    name,
+    status,
+    image_size,
+    image_hash,
+    object_key,
+    created_at,
+    updated_at
+`
+
+type ImagesUpdateStatusParams struct {
+	ID     pgtype.UUID `json:"id"`
+	Status string      `json:"status"`
+}
+
+type ImagesUpdateStatusRow struct {
+	ID        pgtype.UUID        `json:"id"`
+	Name      string             `json:"name"`
+	Status    string             `json:"status"`
+	ImageSize pgtype.Int4        `json:"image_size"`
+	ImageHash string             `json:"image_hash"`
+	ObjectKey pgtype.Text        `json:"object_key"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Update image status
+func (q *Queries) ImagesUpdateStatus(ctx context.Context, arg *ImagesUpdateStatusParams) (*ImagesUpdateStatusRow, error) {
+	row := q.db.QueryRow(ctx, imagesUpdateStatus, arg.ID, arg.Status)
+	var i ImagesUpdateStatusRow
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Status,
+		&i.ImageSize,
+		&i.ImageHash,
+		&i.ObjectKey,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return &i, err
 }

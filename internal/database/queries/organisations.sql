@@ -1,35 +1,53 @@
--- name: OrganisationFindById :one
-SELECT * FROM organisations WHERE id = $1;
+-- name: OrganisationsGetById :one
+-- Get organisation by ID
+SELECT 
+    id,
+    name,
+    slug,
+    created_at,
+    updated_at
+FROM organisations 
+WHERE id = $1 
+    AND deleted_at IS NULL;
 
--- name: OrganisationFindBySlug :one
-SELECT * FROM organisations WHERE slug = $1;
+-- name: OrganisationsGetBySlug :one
+-- Get organisation by slug
+SELECT 
+    id,
+    name,
+    slug,
+    created_at,
+    updated_at
+FROM organisations 
+WHERE slug = $1 
+    AND deleted_at IS NULL;
 
--- name: OrganisationFind :many
-SELECT * FROM organisations ORDER BY created_at DESC;
+-- name: OrganisationsCreate :one
+-- Create a new organisation
+INSERT INTO organisations (
+    id,
+    name,
+    slug
+) VALUES (
+    $1,
+    $2,
+    $3
+)
+RETURNING 
+    id,
+    name,
+    slug,
+    created_at,
+    updated_at;
 
--- name: OrganisationCreate :one
-INSERT INTO organisations (name, slug) VALUES ($1, $2) RETURNING *;
-
--- name: OrganisationUpdate :one
-UPDATE organisations SET name = $2, slug = $3, updated_at = NOW() WHERE id = $1 RETURNING *;
-
--- name: OrganisationDelete :exec
-DELETE FROM organisations WHERE id = $1;
-
--- name: OrganisationMemberFindById :one
-SELECT * FROM organisation_members WHERE id = $1;
-
--- name: OrganisationMemberFindByOrg :many
-SELECT * FROM organisation_members WHERE organisation_id = $1 ORDER BY created_at DESC;
-
--- name: OrganisationMemberFindByUser :many
-SELECT * FROM organisation_members WHERE user_id = $1 ORDER BY created_at DESC;
-
--- name: OrganisationMemberFindByUserAndOrg :one
-SELECT * FROM organisation_members WHERE user_id = $1 AND organisation_id = $2;
-
--- name: OrganisationMemberCreate :one
-INSERT INTO organisation_members (user_id, organisation_id) VALUES ($1, $2) RETURNING *;
-
--- name: OrganisationMemberDelete :exec
-DELETE FROM organisation_members WHERE id = $1;
+-- name: OrganisationsGetAll :many
+-- Get all organisations
+SELECT 
+    id,
+    name,
+    slug,
+    created_at,
+    updated_at
+FROM organisations 
+WHERE deleted_at IS NULL
+ORDER BY created_at DESC;

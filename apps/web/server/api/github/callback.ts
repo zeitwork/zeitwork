@@ -1,169 +1,116 @@
-import { $fetch } from "ofetch"
+import { users, organisations, organisationMembers, githubInstallations } from "@zeitwork/database/schema"
+import type { H3Event } from "h3"
 import { useDrizzle, eq } from "../../utils/drizzle"
-import * as schema from "~~/packages/database/schema"
+import { useGitHub } from "../../utils/github"
+import { Octokit } from "octokit"
+import { z } from "zod"
 
-interface GitHubAccessTokenResponse {
-  access_token: string
-  token_type: string
-  scope: string
-}
-
-interface GitHubUser {
-  id: number
-  login: string
-  name: string | null
-  email: string | null
-  avatar_url: string
-}
+const querySchema = z.object({
+  installation_id: z.coerce.number(),
+  setup_action: z.enum(["install", "update"]),
+})
 
 export default defineEventHandler(async (event) => {
-  const { code, installation_id, setup_action, state } = getQuery(event)
+  const session = await requireUserSession(event)
+  const { secure } = session
 
-  if (!code) {
-    throw createError({
-      statusCode: 400,
-      statusMessage: "Missing authorization code",
-    })
+  if (!secure) throw createError({ statusCode: 401, message: "Unauthorized" })
+
+  const { installation_id: installationId, setup_action: setupAction } = await getValidatedQuery(
+    event,
+    querySchema.parse,
+  )
+
+  const [user] = await useDrizzle().select().from(users).where(eq(users.id, secure.userId)).limit(1)
+  if (!user.githubAccountId) {
+    throw createError({ statusCode: 401, message: "Unauthorized" })
   }
 
-  const config = useRuntimeConfig()
+  const [organisation] = await useDrizzle()
+    .select()
+    .from(organisations)
+    .where(eq(organisations.id, secure.organisationId))
+    .limit(1)
+  if (!organisation) {
+    throw createError({ statusCode: 401, message: "Unauthorized" })
+  }
 
-  try {
-    // Exchange code for access token
-    const tokenResponse = await $fetch<GitHubAccessTokenResponse>("https://github.com/login/oauth/access_token", {
-      method: "POST",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
-      body: {
-        client_id: config.oauth.github.clientId,
-        client_secret: config.oauth.github.clientSecret,
-        code: code as string,
-      },
-    })
+  const { data: verfiedInstallation, error: verfiedInstallationError } = await verifyInstallationForUser({
+    event,
+    installationId,
+  })
+  if (verfiedInstallationError) {
+    throw createError({ statusCode: 401, message: "Unauthorized" })
+  }
 
-    if (!tokenResponse.access_token) {
-      throw new Error("Failed to get access token")
-    }
-
-    // Get user information
-    const githubUser = await $fetch<GitHubUser>("https://api.github.com/user", {
-      headers: {
-        Authorization: `Bearer ${tokenResponse.access_token}`,
-        Accept: "application/vnd.github.v3+json",
-      },
-    })
-
-    // Get user email if not public
-    if (!githubUser.email) {
-      const emails = await $fetch<Array<{ email: string; primary: boolean; verified: boolean }>>(
-        "https://api.github.com/user/emails",
-        {
-          headers: {
-            Authorization: `Bearer ${tokenResponse.access_token}`,
-            Accept: "application/vnd.github.v3+json",
-          },
-        },
-      )
-
-      const primaryEmail = emails.find((e) => e.primary && e.verified)
-      if (primaryEmail) {
-        githubUser.email = primaryEmail.email
-      }
-    }
-
-    const db = useDrizzle()
-
-    // Check if user exists
-    let dbUser = await db
-      .select()
-      .from(schema.users)
-      .where(eq(schema.users.githubId, githubUser.id))
-      .limit(1)
-      .then((rows) => rows[0])
-
-    if (!dbUser) {
-      // Create new user
-      const [newUser] = await db
-        .insert(schema.users)
+  switch (setupAction) {
+    case "install":
+      // Create the installation record
+      await useDrizzle()
+        .insert(githubInstallations)
         .values({
-          name: githubUser.name || githubUser.login,
-          email: githubUser.email || `${githubUser.login}@users.noreply.github.com`,
-          username: githubUser.login,
-          githubId: githubUser.id,
+          userId: secure.userId,
+          githubAccountId: user.githubAccountId,
+          githubInstallationId: installationId,
+          organisationId: secure.organisationId,
         })
-        .returning()
+        .onConflictDoUpdate({
+          target: [githubInstallations.githubInstallationId],
+          set: {
+            organisationId: secure.organisationId,
+          },
+        })
 
-      dbUser = newUser
+      return sendRedirect(event, `/${organisation.slug}?installed=true`)
+    case "update":
+      // Upsert the installation record
+      await useDrizzle()
+        .insert(githubInstallations)
+        .values({
+          organisationId: secure.organisationId,
+          githubInstallationId: installationId,
+          githubAccountId: user.githubAccountId,
+          userId: secure.userId,
+        })
+        .onConflictDoUpdate({
+          target: [githubInstallations.githubInstallationId],
+          set: {
+            organisationId: secure.organisationId,
+          },
+        })
 
-      if (dbUser) {
-        // Create default organisation for the user
-        const [organisation] = await db
-          .insert(schema.organisations)
-          .values({
-            name: githubUser.login,
-            slug: githubUser.login.toLowerCase(),
-            // If installation_id is present, set it
-            installationId: installation_id ? parseInt(installation_id as string) : undefined,
-          })
-          .returning()
-
-        if (organisation) {
-          // Add user to their organisation
-          await db.insert(schema.organisationMembers).values({
-            userId: dbUser.id,
-            organisationId: organisation.id,
-          })
-        }
-      }
-    } else if (installation_id) {
-      // User exists but we have a new installation
-      // Update the organisation specified in state, or default org
-      const orgSlug = (state as string) || dbUser.username.toLowerCase()
-
-      await db
-        .update(schema.organisations)
-        .set({ installationId: parseInt(installation_id as string) })
-        .where(eq(schema.organisations.slug, orgSlug))
-    }
-
-    if (!dbUser) {
-      throw createError({
-        statusCode: 500,
-        statusMessage: "Failed to create or retrieve user",
-      })
-    }
-
-    // Set user session
-    await setUserSession(event, {
-      user: {
-        id: dbUser.id,
-        name: dbUser.name,
-        email: dbUser.email,
-        username: dbUser.username,
-        githubId: dbUser.githubId,
-        avatarUrl: githubUser.avatar_url,
-      },
-      secure: {
-        userId: dbUser.id,
-      },
-    })
-
-    // Redirect based on context
-    if (installation_id && setup_action === "install") {
-      // New installation, redirect with success message
-      const orgSlug = (state as string) || dbUser.username
-      return sendRedirect(event, `/${orgSlug}?installed=true`)
-    } else {
-      // Regular login
-      return sendRedirect(event, `/${dbUser.username}`)
-    }
-  } catch (error) {
-    console.error("GitHub callback error:", error)
-    throw createError({
-      statusCode: 500,
-      statusMessage: "Authentication failed",
-    })
+      return sendRedirect(event, `/${organisation.slug}?installed=true`)
   }
 })
+
+async function useOctokit({ accessToken, installationId }: { accessToken: string; installationId: number }) {
+  return new Octokit({ auth: accessToken })
+}
+
+async function verifyInstallationForUser({
+  event,
+  installationId,
+}: {
+  event: H3Event
+  installationId: number
+}): Promise<{ data: any; error: null } | { data: null; error: Error }> {
+  try {
+    const userSession = await getUserSession(event)
+
+    const octokit = new Octokit({ auth: userSession!.secure!.tokens.access_token })
+
+    const { data: userInstallationResult } = await octokit.rest.apps.listInstallationsForAuthenticatedUser()
+
+    const installations = userInstallationResult.installations
+
+    if (!installations) {
+      return { data: null, error: new Error("Unauthorized") }
+    }
+
+    const installation = installations.find((installation) => installation.id === installationId)
+
+    return { data: installation, error: null }
+  } catch (error) {
+    return { data: null, error: new Error("Unauthorized") }
+  }
+}

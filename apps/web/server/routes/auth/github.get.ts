@@ -1,33 +1,45 @@
-import { useDrizzle, eq } from "../../utils/drizzle"
-import * as schema from "~~/packages/database/schema"
+import { organisations, users, organisationMembers, githubInstallations } from "@zeitwork/database/schema"
+import { eq } from "~~/server/utils/drizzle"
 
 export default defineOAuthGitHubEventHandler({
   config: {
     emailRequired: true,
   },
   async onSuccess(event, { user, tokens }) {
-    // console.log("GitHub OAuth success:", user, tokens)
-
-    const db = useDrizzle()
-
     try {
+      let organisationId = null
+
       // Check if user exists
-      let dbUser = await db
+      let dbUser = await useDrizzle()
         .select()
-        .from(schema.users)
-        .where(eq(schema.users.githubId, user.id))
+        .from(users)
+        .where(eq(users.githubAccountId, user.id))
         .limit(1)
         .then((rows) => rows[0])
 
+      // Only find default organisation if user exists
+      if (dbUser) {
+        const [defaultOrganisation] = await useDrizzle()
+          .select()
+          .from(organisations)
+          .innerJoin(organisationMembers, eq(organisations.id, organisationMembers.organisationId))
+          .where(eq(organisationMembers.userId, dbUser.id))
+          .limit(1)
+
+        if (defaultOrganisation) {
+          organisationId = defaultOrganisation.organisations.id
+        }
+      }
+
       if (!dbUser) {
         // Create new user
-        const [newUser] = await db
-          .insert(schema.users)
+        const [newUser] = await useDrizzle()
+          .insert(users)
           .values({
             name: user.name || user.login,
             email: user.email || `${user.login}@users.noreply.github.com`,
             username: user.login,
-            githubId: user.id,
+            githubAccountId: user.id,
           })
           .returning()
 
@@ -35,17 +47,19 @@ export default defineOAuthGitHubEventHandler({
 
         if (dbUser) {
           // Create default organisation for the user
-          const [organisation] = await db
-            .insert(schema.organisations)
+          const [organisation] = await useDrizzle()
+            .insert(organisations)
             .values({
               name: user.login,
               slug: user.login.toLowerCase(),
             })
             .returning()
 
+          organisationId = organisation.id
+
           if (organisation) {
             // Add user to their organisation
-            await db.insert(schema.organisationMembers).values({
+            await useDrizzle().insert(organisationMembers).values({
               userId: dbUser.id,
               organisationId: organisation.id,
             })
@@ -66,11 +80,13 @@ export default defineOAuthGitHubEventHandler({
           name: dbUser.name,
           email: dbUser.email,
           username: dbUser.username,
-          githubId: dbUser.githubId,
+          githubId: dbUser.githubAccountId,
           avatarUrl: user.avatar_url,
         },
         secure: {
           userId: dbUser.id,
+          organisationId: organisationId,
+          tokens: tokens,
         },
       })
 
@@ -80,11 +96,36 @@ export default defineOAuthGitHubEventHandler({
         // Clear the cookie
         deleteCookie(event, "pending_installation")
 
-        // Update the user's default organisation with the installation ID
-        await db
-          .update(schema.organisations)
-          .set({ installationId: parseInt(pendingInstallation) })
-          .where(eq(schema.organisations.slug, dbUser.username.toLowerCase()))
+        // Find the default organisation for the user
+        const [organisation] = await useDrizzle()
+          .select()
+          .from(organisations)
+          .innerJoin(organisationMembers, eq(organisations.id, organisationMembers.organisationId))
+          .where(eq(organisationMembers.userId, dbUser.id))
+          .limit(1)
+        if (!organisation) {
+          throw createError({
+            statusCode: 500,
+            statusMessage: "Failed to find user's default organisation",
+          })
+        }
+
+        // Upsert the GitHub installation record
+        await useDrizzle()
+          .insert(githubInstallations)
+          .values({
+            githubInstallationId: parseInt(pendingInstallation),
+            organisationId: organisation.organisations.id,
+            githubAccountId: dbUser.githubAccountId!,
+            userId: dbUser.id,
+          })
+          .onConflictDoUpdate({
+            target: [githubInstallations.githubInstallationId],
+            set: {
+              organisationId: organisation.organisations.id,
+              userId: dbUser.id,
+            },
+          })
 
         return sendRedirect(event, `/${dbUser.username}?installed=true`)
       }

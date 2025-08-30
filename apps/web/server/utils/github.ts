@@ -1,134 +1,425 @@
-import { SignJWT, importPKCS8, importSPKI } from "jose"
-import { createPrivateKey } from "crypto"
+import { App, Octokit, RequestError } from "octokit"
 
-interface GitHubRepo {
-  id: number
-  name: string
-  full_name: string
-  default_branch: string
-}
-
-interface GitHubBranch {
-  name: string
-  commit: {
-    sha: string
-  }
-}
-
-interface GitHubInstallationToken {
-  token: string
-  expires_at: string
-}
-
-// Generate a JWT for GitHub App authentication
-async function generateAppJWT(): Promise<string> {
+// Main composable for GitHub API interactions
+export function useGitHub() {
   const config = useRuntimeConfig()
 
-  const appId = config.githubAppId
-  const privateKey = config.githubAppPrivateKey
-
-  if (!appId || !privateKey) {
-    console.error("GitHub App ID or Private Key not configured", appId, privateKey)
-    throw new Error("GitHub App ID or Private Key not configured")
-  }
-
-  const now = Math.floor(Date.now() / 1000)
-
-  // Ensure private key has proper line breaks
-  let formattedKey = privateKey
-  if (!privateKey.includes("\n")) {
-    // If the key doesn't have line breaks, it might be escaped or single-line
-    formattedKey = privateKey
-      .replace(/\\n/g, "\n") // Replace escaped newlines
-      .replace(/(-----BEGIN[^-]+-----)/g, "$1\n") // Add newline after BEGIN
-      .replace(/(-----END[^-]+-----)/g, "\n$1") // Add newline before END
-  }
-
-  // Use Node.js crypto to handle both PKCS#1 and PKCS#8 formats
-  const key = createPrivateKey(formattedKey)
-
-  const jwt = await new SignJWT({})
-    .setProtectedHeader({ alg: "RS256" })
-    .setIssuedAt(now - 60)
-    .setExpirationTime(now + 10 * 60)
-    .setIssuer(appId)
-    .sign(key)
-
-  return jwt
-}
-
-// Get an installation access token
-async function getInstallationToken(installationId: number): Promise<string> {
-  const appJWT = await generateAppJWT()
-
-  const response = await fetch(`https://api.github.com/app/installations/${installationId}/access_tokens`, {
-    method: "POST",
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${appJWT}`,
-      "X-GitHub-Api-Version": "2022-11-28",
-    },
+  // GitHub App instance
+  const app = new App({
+    appId: config.githubAppId,
+    privateKey: config.githubAppPrivateKey,
   })
 
-  if (!response.ok) {
-    const error = await response.text()
-    throw new Error(`Failed to get installation token: ${response.status} ${error}`)
+  // Get an Octokit instance for a specific installation
+  async function getInstallationOctokit(installationId: number) {
+    try {
+      const octokit = await app.getInstallationOctokit(installationId)
+      return { data: octokit, error: null }
+    } catch (error) {
+      if (error instanceof RequestError) {
+        return {
+          data: null,
+          error: new Error(`Failed to get installation Octokit (${error.status}): ${error.message}`),
+        }
+      }
+      return {
+        data: null,
+        error: error instanceof Error ? error : new Error(`Unknown error: ${error}`),
+      }
+    }
   }
 
-  const data = (await response.json()) as GitHubInstallationToken
-  return data.token
-}
-
-// Fetch repository information
-export async function getRepository(
-  installationId: number,
-  owner: string,
-  repo: string,
-): Promise<{ id: number; defaultBranch: string }> {
-  const token = await getInstallationToken(installationId)
-
-  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${token}`,
-      "X-GitHub-Api-Version": "2022-11-28",
-    },
-  })
-
-  if (!response.ok) {
-    const error = await response.text()
-    throw new Error(`Failed to fetch repository: ${response.status} ${error}`)
+  // Get an installation access token
+  async function getInstallationToken(installationId: number) {
+    try {
+      const { data } = await app.octokit.rest.apps.createInstallationAccessToken({
+        installation_id: installationId,
+      })
+      return { data: data.token, error: null }
+    } catch (error) {
+      if (error instanceof RequestError) {
+        // Handle specific GitHub API errors
+        switch (error.status) {
+          case 404:
+            return {
+              data: null,
+              error: new Error(`Installation ${installationId} not found`),
+            }
+          case 403:
+            return {
+              data: null,
+              error: new Error(`Access denied for installation ${installationId}`),
+            }
+          case 401:
+            return {
+              data: null,
+              error: new Error(`Authentication failed - check GitHub App credentials`),
+            }
+        }
+      }
+      return {
+        data: null,
+        error: error instanceof Error ? error : new Error(`Unknown error: ${error}`),
+      }
+    }
   }
 
-  const data = (await response.json()) as GitHubRepo
+  // Fetch repository information
+  async function getRepository(installationId: number, owner: string, repo: string) {
+    const { data: octokit, error: octokitError } = await getInstallationOctokit(installationId)
+    if (octokitError) return { data: null, error: octokitError }
+
+    try {
+      const { data } = await octokit.rest.repos.get({
+        owner,
+        repo,
+      })
+
+      return {
+        data: {
+          id: data.id,
+          defaultBranch: data.default_branch,
+          fullName: data.full_name,
+        },
+        error: null,
+      }
+    } catch (error) {
+      return {
+        data: null,
+        error: error instanceof Error ? error : new Error(`Unknown error: ${error}`),
+      }
+    }
+  }
+
+  // Get the latest commit SHA from a branch
+  async function getLatestCommitSHA(installationId: number, owner: string, repo: string, branch: string) {
+    const octokitResult = await getInstallationOctokit(installationId)
+    if (octokitResult.error) {
+      return { data: null, error: octokitResult.error }
+    }
+
+    try {
+      const { data } = await octokitResult.data.rest.repos.getBranch({
+        owner,
+        repo,
+        branch,
+      })
+
+      return { data: data.commit.sha, error: null }
+    } catch (error) {
+      return {
+        data: null,
+        error: error instanceof Error ? error : new Error(`Unknown error: ${error}`),
+      }
+    }
+  }
+
+  // Get commit information
+  async function getCommit(installationId: number, owner: string, repo: string, ref: string) {
+    const octokitResult = await getInstallationOctokit(installationId)
+    if (octokitResult.error) {
+      return { data: null, error: octokitResult.error }
+    }
+
+    try {
+      const { data } = await octokitResult.data.rest.repos.getCommit({
+        owner,
+        repo,
+        ref,
+      })
+
+      return { data, error: null }
+    } catch (error) {
+      return {
+        data: null,
+        error: error instanceof Error ? error : new Error(`Unknown error: ${error}`),
+      }
+    }
+  }
+
+  // List branches for a repository
+  async function listBranches(installationId: number, owner: string, repo: string) {
+    const octokitResult = await getInstallationOctokit(installationId)
+    if (octokitResult.error) {
+      return { data: null, error: octokitResult.error }
+    }
+
+    try {
+      const { data } = await octokitResult.data.rest.repos.listBranches({
+        owner,
+        repo,
+        per_page: 100, // Reasonable default
+      })
+
+      return { data, error: null }
+    } catch (error) {
+      return {
+        data: null,
+        error: error instanceof Error ? error : new Error(`Unknown error: ${error}`),
+      }
+    }
+  }
+
+  // Trigger a repository dispatch event (useful for CI/CD)
+  async function dispatchRepositoryEvent(
+    installationId: number,
+    owner: string,
+    repo: string,
+    eventType: string,
+    clientPayload?: Record<string, any>,
+  ) {
+    const octokitResult = await getInstallationOctokit(installationId)
+    if (octokitResult.error) {
+      return { data: null, error: octokitResult.error }
+    }
+
+    try {
+      await octokitResult.data.rest.repos.createDispatchEvent({
+        owner,
+        repo,
+        event_type: eventType,
+        client_payload: clientPayload || {},
+      })
+
+      return { data: undefined, error: null }
+    } catch (error) {
+      return {
+        data: null,
+        error: error instanceof Error ? error : new Error(`Unknown error: ${error}`),
+      }
+    }
+  }
+
+  // List repository collaborators
+  async function listCollaborators(installationId: number, owner: string, repo: string) {
+    const octokitResult = await getInstallationOctokit(installationId)
+    if (octokitResult.error) {
+      return { data: null, error: octokitResult.error }
+    }
+
+    try {
+      const { data } = await octokitResult.data.rest.repos.listCollaborators({
+        owner,
+        repo,
+      })
+
+      return { data, error: null }
+    } catch (error) {
+      return {
+        data: null,
+        error: error instanceof Error ? error : new Error(`Unknown error: ${error}`),
+      }
+    }
+  }
+
+  // Create a deployment
+  async function createDeployment(
+    installationId: number,
+    owner: string,
+    repo: string,
+    ref: string,
+    environment: string = "production",
+    description?: string,
+  ) {
+    const octokitResult = await getInstallationOctokit(installationId)
+    if (octokitResult.error) {
+      return { data: null, error: octokitResult.error }
+    }
+
+    try {
+      const { data } = await octokitResult.data.rest.repos.createDeployment({
+        owner,
+        repo,
+        ref,
+        environment,
+        description,
+        auto_merge: false,
+        required_contexts: [], // Skip status checks
+      })
+
+      return { data, error: null }
+    } catch (error) {
+      return {
+        data: null,
+        error: error instanceof Error ? error : new Error(`Unknown error: ${error}`),
+      }
+    }
+  }
+
+  // Update deployment status
+  async function createDeploymentStatus(
+    installationId: number,
+    owner: string,
+    repo: string,
+    deploymentId: number,
+    state: "error" | "failure" | "inactive" | "in_progress" | "queued" | "pending" | "success",
+    targetUrl?: string,
+    description?: string,
+  ) {
+    const octokitResult = await getInstallationOctokit(installationId)
+    if (octokitResult.error) {
+      return { data: null, error: octokitResult.error }
+    }
+
+    try {
+      await octokitResult.data.rest.repos.createDeploymentStatus({
+        owner,
+        repo,
+        deployment_id: deploymentId,
+        state,
+        target_url: targetUrl,
+        description,
+      })
+
+      return { data: undefined, error: null }
+    } catch (error) {
+      return {
+        data: null,
+        error: error instanceof Error ? error : new Error(`Unknown error: ${error}`),
+      }
+    }
+  }
+
+  // Get repository content (files/directories)
+  async function getContent(installationId: number, owner: string, repo: string, path: string, ref?: string) {
+    const octokitResult = await getInstallationOctokit(installationId)
+    if (octokitResult.error) {
+      return { data: null, error: octokitResult.error }
+    }
+
+    try {
+      const { data } = await octokitResult.data.rest.repos.getContent({
+        owner,
+        repo,
+        path,
+        ref,
+      })
+
+      return { data, error: null }
+    } catch (error) {
+      return {
+        data: null,
+        error: error instanceof Error ? error : new Error(`Unknown error: ${error}`),
+      }
+    }
+  }
+
+  // Helper to iterate over all installations (useful for batch operations)
+  async function* iterateInstallations() {
+    for await (const { octokit, installation } of app.eachInstallation.iterator()) {
+      yield { octokit, installation }
+    }
+  }
+
+  // Helper to iterate over all repositories in an installation
+  async function* iterateRepositories(installationId?: number) {
+    const query = installationId ? { installationId } : undefined
+    for await (const { octokit, repository } of app.eachRepository.iterator(query)) {
+      yield { octokit, repository }
+    }
+  }
+
+  // OAuth utilities for user authentication
+  async function exchangeCodeForToken(code: string) {
+    try {
+      // Use the built-in OAuth functionality from the GitHub App
+      const result = await app.oauth.createToken({
+        code,
+      })
+
+      return { data: result.authentication, error: null }
+    } catch (error) {
+      if (error instanceof RequestError) {
+        return {
+          data: null,
+          error: new Error(`OAuth token exchange failed (${error.status}): ${error.message}`),
+        }
+      }
+      return {
+        data: null,
+        error: error instanceof Error ? error : new Error(`Unknown error: ${error}`),
+      }
+    }
+  }
+
+  async function getUserWithToken(accessToken: string) {
+    try {
+      // Create a new Octokit instance with the user's access token
+      const userOctokit = new Octokit({ auth: accessToken })
+
+      const { data: githubUser } = await userOctokit.rest.users.getAuthenticated()
+
+      // Get user email if not public
+      if (!githubUser.email) {
+        const { data: emails } = await userOctokit.rest.users.listEmailsForAuthenticatedUser()
+        const primaryEmail = emails.find((e) => e.primary && e.verified)
+        if (primaryEmail) {
+          githubUser.email = primaryEmail.email
+        }
+      }
+
+      return { data: githubUser, error: null }
+    } catch (error) {
+      if (error instanceof RequestError) {
+        return {
+          data: null,
+          error: new Error(`Failed to get user data (${error.status}): ${error.message}`),
+        }
+      }
+      return {
+        data: null,
+        error: error instanceof Error ? error : new Error(`Unknown error: ${error}`),
+      }
+    }
+  }
+
+  async function listInstallations(userId: string) {
+    const { data } = await app.octokit.rest.apps.listInstallationsForAuthenticatedUser({})
+    return { data, error: null }
+  }
+
   return {
-    id: data.id,
-    defaultBranch: data.default_branch,
-  }
-}
-
-// Get the latest commit SHA from a branch
-export async function getLatestCommitSHA(
-  installationId: number,
-  owner: string,
-  repo: string,
-  branch: string,
-): Promise<string> {
-  const token = await getInstallationToken(installationId)
-
-  const response = await fetch(`https://api.github.com/repos/${owner}/${repo}/branches/${branch}`, {
-    headers: {
-      Accept: "application/vnd.github+json",
-      Authorization: `Bearer ${token}`,
-      "X-GitHub-Api-Version": "2022-11-28",
+    // Installation management
+    installation: {
+      getToken: getInstallationToken,
+      getOctokit: getInstallationOctokit,
+      iterate: iterateInstallations,
+      list: listInstallations,
     },
-  })
 
-  if (!response.ok) {
-    const error = await response.text()
-    throw new Error(`Failed to fetch branch: ${response.status} ${error}`)
+    // Repository operations
+    repository: {
+      get: getRepository,
+      listBranches,
+      listCollaborators,
+      dispatchEvent: dispatchRepositoryEvent,
+      getContent,
+      iterate: iterateRepositories,
+    },
+
+    // Branch operations
+    branch: {
+      getLatestCommitSHA,
+    },
+
+    // Commit operations
+    commit: {
+      get: getCommit,
+    },
+
+    // Deployment operations
+    deployment: {
+      create: createDeployment,
+      updateStatus: createDeploymentStatus,
+    },
+
+    // OAuth operations
+    oauth: {
+      exchangeCodeForToken,
+      getUserWithToken,
+    },
+
+    // Direct access to the App instance (if needed for advanced use cases)
+    app,
   }
-
-  const data = (await response.json()) as GitHubBranch
-  return data.commit.sha
 }
