@@ -1,70 +1,94 @@
--- name: ProjectFindById :one
-SELECT * FROM projects WHERE id = $1;
+-- name: ProjectsGetById :one
+-- Get project by ID
+SELECT 
+    id,
+    name,
+    slug,
+    github_repository,
+    default_branch,
+    latest_deployment_id,
+    organisation_id,
+    created_at,
+    updated_at
+FROM projects 
+WHERE id = $1 
+    AND deleted_at IS NULL;
 
--- name: ProjectFindBySlug :one
-SELECT * FROM projects WHERE slug = $1;
+-- name: ProjectsGetBySlugAndOrg :one
+-- Get project by slug and organisation
+SELECT 
+    id,
+    name,
+    slug,
+    github_repository,
+    default_branch,
+    latest_deployment_id,
+    organisation_id,
+    created_at,
+    updated_at
+FROM projects 
+WHERE slug = $1 
+    AND organisation_id = $2
+    AND deleted_at IS NULL;
 
--- name: ProjectFindByOrganisation :many
-SELECT * FROM projects WHERE organisation_id = $1 ORDER BY created_at DESC;
-
--- name: ProjectFind :many
-SELECT * FROM projects ORDER BY created_at DESC;
-
--- name: ProjectCreate :one
-INSERT INTO projects (name, slug, organisation_id, github_repo, github_installation_id, github_default_branch) 
-VALUES ($1, $2, $3, $4, $5, $6) RETURNING *;
-
--- name: ProjectUpdate :one
-UPDATE projects SET 
-    name = $2, 
-    slug = $3,
-    github_repo = $4,
-    github_installation_id = $5,
-    github_default_branch = $6,
-    updated_at = NOW() 
-WHERE id = $1 RETURNING *;
-
--- name: ProjectDelete :exec
-DELETE FROM projects WHERE id = $1;
-
--- name: ProjectFindByGitHubRepo :many
-SELECT * FROM projects 
-WHERE github_repo = $1 
-    AND github_installation_id = $2
+-- name: ProjectsGetByOrganisation :many
+-- Get projects by organisation
+SELECT 
+    id,
+    name,
+    slug,
+    github_repository,
+    default_branch,
+    latest_deployment_id,
+    organisation_id,
+    created_at,
+    updated_at
+FROM projects 
+WHERE organisation_id = $1 
+    AND deleted_at IS NULL
 ORDER BY created_at DESC;
 
--- name: ProjectEnvironmentFindById :one
-SELECT * FROM project_environments WHERE id = $1;
+-- name: ProjectsCreate :one
+-- Create a new project
+INSERT INTO projects (
+    id,
+    name,
+    slug,
+    github_repository,
+    default_branch,
+    organisation_id
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6
+)
+RETURNING 
+    id,
+    name,
+    slug,
+    github_repository,
+    default_branch,
+    latest_deployment_id,
+    organisation_id,
+    created_at,
+    updated_at;
 
--- name: ProjectEnvironmentFindByProject :many
-SELECT * FROM project_environments WHERE project_id = $1 ORDER BY created_at DESC;
-
--- name: ProjectEnvironmentFindByName :one
-SELECT * FROM project_environments WHERE project_id = $1 AND name = $2;
-
--- name: ProjectEnvironmentCreate :one
-INSERT INTO project_environments (project_id, name, organisation_id) VALUES ($1, $2, $3) RETURNING *;
-
--- name: ProjectEnvironmentUpdate :one
-UPDATE project_environments SET name = $2, updated_at = NOW() WHERE id = $1 RETURNING *;
-
--- name: ProjectEnvironmentDelete :exec
-DELETE FROM project_environments WHERE id = $1;
-
--- name: ProjectSecretFindById :one
-SELECT * FROM project_secrets WHERE id = $1;
-
--- name: ProjectSecretFindByProject :many
-SELECT * FROM project_secrets WHERE project_id = $1 ORDER BY name;
-
--- name: ProjectSecretFindByName :one
-SELECT * FROM project_secrets WHERE project_id = $1 AND name = $2;
-
--- name: ProjectSecretCreate :one
-INSERT INTO project_secrets (project_id, name, value, organisation_id) VALUES ($1, $2, $3, $4) RETURNING *;
-
--- name: ProjectSecretUpdate :one
-UPDATE project_secrets SET value = $2, updated_at = NOW() WHERE id = $1 RETURNING *;
-
--- name: ProjectSecretDelete :exec
-DELETE FROM project_secrets WHERE id = $1;
+-- name: ProjectsUpdateLatestDeployment :one
+-- Update project's latest deployment
+UPDATE projects 
+SET latest_deployment_id = $2, 
+    updated_at = now()
+WHERE id = $1
+RETURNING 
+    id,
+    name,
+    slug,
+    github_repository,
+    default_branch,
+    latest_deployment_id,
+    organisation_id,
+    created_at,
+    updated_at;

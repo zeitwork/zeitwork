@@ -27,9 +27,9 @@ const links = [
 </script>
 
 <template>
-  <div class="bg-neutral-strong flex h-screen flex-row">
-    <d-sidebar :links="links" />
-    <div class="flex flex-1 flex-col py-2 pr-2 pl-0">
+  <div class="bg-neutral-strong flex h-screen flex-col">
+    <d-navbar :links="links" />
+    <div class="flex flex-1 flex-col p-2 pt-0">
       <div class="border-neutral flex-1 overflow-auto rounded-lg border bg-white">
         <slot></slot>
       </div>

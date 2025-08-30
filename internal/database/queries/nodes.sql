@@ -1,40 +1,103 @@
--- name: NodeFindById :one
-SELECT * FROM nodes WHERE id = $1;
+-- name: NodesGetById :one
+-- Get node by ID
+SELECT 
+    id,
+    region_id,
+    hostname,
+    ip_address,
+    state,
+    resources,
+    created_at,
+    updated_at
+FROM nodes 
+WHERE id = $1 
+    AND deleted_at IS NULL;
 
--- name: NodeFindByState :many
-SELECT * FROM nodes WHERE state = $1;
+-- name: NodesGetByHostname :one
+-- Get node by hostname
+SELECT 
+    id,
+    region_id,
+    hostname,
+    ip_address,
+    state,
+    resources,
+    created_at,
+    updated_at
+FROM nodes 
+WHERE hostname = $1 
+    AND deleted_at IS NULL;
 
--- name: NodeFindByHostname :one
-SELECT * FROM nodes WHERE hostname = $1;
+-- name: NodesGetByRegion :many
+-- Get nodes by region
+SELECT 
+    id,
+    region_id,
+    hostname,
+    ip_address,
+    state,
+    resources,
+    created_at,
+    updated_at
+FROM nodes 
+WHERE region_id = $1 
+    AND deleted_at IS NULL
+ORDER BY created_at DESC;
 
--- name: NodeFind :many
-SELECT * FROM nodes ORDER BY created_at DESC;
-
--- name: NodeFindByRegion :many
-SELECT * FROM nodes WHERE region_id = $1 ORDER BY created_at DESC;
-
--- name: NodeCreate :one
+-- name: NodesCreate :one
+-- Create a new node
 INSERT INTO nodes (
-    region_id, hostname, ip_address, state, resources
+    id,
+    region_id,
+    hostname,
+    ip_address,
+    state,
+    resources
 ) VALUES (
-    $1, $2, $3, $4, $5
-) RETURNING *;
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6
+)
+RETURNING 
+    id,
+    region_id,
+    hostname,
+    ip_address,
+    state,
+    resources,
+    created_at,
+    updated_at;
 
--- name: NodeUpdateState :one
-UPDATE nodes SET state = $2, updated_at = NOW() WHERE id = $1 RETURNING *;
-
--- name: NodeUpdateResources :one
-UPDATE nodes SET resources = $2, updated_at = NOW() WHERE id = $1 RETURNING *;
-
--- name: NodeUpdate :one
+-- name: NodesUpdateState :one
+-- Update node state
 UPDATE nodes 
-SET 
-    ip_address = COALESCE($2, ip_address),
-    state = COALESCE($3, state),
-    resources = COALESCE($4, resources),
-    updated_at = NOW()
+SET state = $2, 
+    updated_at = now()
 WHERE id = $1
-RETURNING *;
+RETURNING 
+    id,
+    region_id,
+    hostname,
+    ip_address,
+    state,
+    resources,
+    created_at,
+    updated_at;
 
--- name: NodeDelete :exec
-DELETE FROM nodes WHERE id = $1;
+-- name: NodesGetAll :many
+-- Get all nodes
+SELECT 
+    id,
+    region_id,
+    hostname,
+    ip_address,
+    state,
+    resources,
+    created_at,
+    updated_at
+FROM nodes 
+WHERE deleted_at IS NULL
+ORDER BY created_at DESC;

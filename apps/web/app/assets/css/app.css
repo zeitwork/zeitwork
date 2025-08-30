@@ -237,7 +237,7 @@ body,
   min-height: 100%;
 }
 
-.layout-forward-enter-active,
+/* .layout-forward-enter-active,
 .layout-forward-leave-active,
 .layout-back-enter-active,
 .layout-back-leave-active {
@@ -264,7 +264,7 @@ body,
 .layout-back-leave-to {
   opacity: 0;
   transform: scale(1.02);
-}
+} */
 
 /* width */
 /* ::-webkit-scrollbar {

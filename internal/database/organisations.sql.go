@@ -11,58 +11,88 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const organisationCreate = `-- name: OrganisationCreate :one
-INSERT INTO organisations (name, slug) VALUES ($1, $2) RETURNING id, name, slug, created_at, updated_at, deleted_at
+const organisationsCreate = `-- name: OrganisationsCreate :one
+INSERT INTO organisations (
+    id,
+    name,
+    slug
+) VALUES (
+    $1,
+    $2,
+    $3
+)
+RETURNING 
+    id,
+    name,
+    slug,
+    created_at,
+    updated_at
 `
 
-type OrganisationCreateParams struct {
-	Name string `json:"name"`
-	Slug string `json:"slug"`
+type OrganisationsCreateParams struct {
+	ID   pgtype.UUID `json:"id"`
+	Name string      `json:"name"`
+	Slug string      `json:"slug"`
 }
 
-func (q *Queries) OrganisationCreate(ctx context.Context, arg *OrganisationCreateParams) (*Organisation, error) {
-	row := q.db.QueryRow(ctx, organisationCreate, arg.Name, arg.Slug)
-	var i Organisation
+type OrganisationsCreateRow struct {
+	ID        pgtype.UUID        `json:"id"`
+	Name      string             `json:"name"`
+	Slug      string             `json:"slug"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Create a new organisation
+func (q *Queries) OrganisationsCreate(ctx context.Context, arg *OrganisationsCreateParams) (*OrganisationsCreateRow, error) {
+	row := q.db.QueryRow(ctx, organisationsCreate, arg.ID, arg.Name, arg.Slug)
+	var i OrganisationsCreateRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
 		&i.Slug,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.DeletedAt,
 	)
 	return &i, err
 }
 
-const organisationDelete = `-- name: OrganisationDelete :exec
-DELETE FROM organisations WHERE id = $1
+const organisationsGetAll = `-- name: OrganisationsGetAll :many
+SELECT 
+    id,
+    name,
+    slug,
+    created_at,
+    updated_at
+FROM organisations 
+WHERE deleted_at IS NULL
+ORDER BY created_at DESC
 `
 
-func (q *Queries) OrganisationDelete(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, organisationDelete, id)
-	return err
+type OrganisationsGetAllRow struct {
+	ID        pgtype.UUID        `json:"id"`
+	Name      string             `json:"name"`
+	Slug      string             `json:"slug"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
-const organisationFind = `-- name: OrganisationFind :many
-SELECT id, name, slug, created_at, updated_at, deleted_at FROM organisations ORDER BY created_at DESC
-`
-
-func (q *Queries) OrganisationFind(ctx context.Context) ([]*Organisation, error) {
-	rows, err := q.db.Query(ctx, organisationFind)
+// Get all organisations
+func (q *Queries) OrganisationsGetAll(ctx context.Context) ([]*OrganisationsGetAllRow, error) {
+	rows, err := q.db.Query(ctx, organisationsGetAll)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []*Organisation
+	var items []*OrganisationsGetAllRow
 	for rows.Next() {
-		var i Organisation
+		var i OrganisationsGetAllRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
 			&i.Slug,
 			&i.CreatedAt,
 			&i.UpdatedAt,
-			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -74,197 +104,70 @@ func (q *Queries) OrganisationFind(ctx context.Context) ([]*Organisation, error)
 	return items, nil
 }
 
-const organisationFindById = `-- name: OrganisationFindById :one
-SELECT id, name, slug, created_at, updated_at, deleted_at FROM organisations WHERE id = $1
+const organisationsGetById = `-- name: OrganisationsGetById :one
+SELECT 
+    id,
+    name,
+    slug,
+    created_at,
+    updated_at
+FROM organisations 
+WHERE id = $1 
+    AND deleted_at IS NULL
 `
 
-func (q *Queries) OrganisationFindById(ctx context.Context, id pgtype.UUID) (*Organisation, error) {
-	row := q.db.QueryRow(ctx, organisationFindById, id)
-	var i Organisation
+type OrganisationsGetByIdRow struct {
+	ID        pgtype.UUID        `json:"id"`
+	Name      string             `json:"name"`
+	Slug      string             `json:"slug"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Get organisation by ID
+func (q *Queries) OrganisationsGetById(ctx context.Context, id pgtype.UUID) (*OrganisationsGetByIdRow, error) {
+	row := q.db.QueryRow(ctx, organisationsGetById, id)
+	var i OrganisationsGetByIdRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
 		&i.Slug,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.DeletedAt,
 	)
 	return &i, err
 }
 
-const organisationFindBySlug = `-- name: OrganisationFindBySlug :one
-SELECT id, name, slug, created_at, updated_at, deleted_at FROM organisations WHERE slug = $1
+const organisationsGetBySlug = `-- name: OrganisationsGetBySlug :one
+SELECT 
+    id,
+    name,
+    slug,
+    created_at,
+    updated_at
+FROM organisations 
+WHERE slug = $1 
+    AND deleted_at IS NULL
 `
 
-func (q *Queries) OrganisationFindBySlug(ctx context.Context, slug string) (*Organisation, error) {
-	row := q.db.QueryRow(ctx, organisationFindBySlug, slug)
-	var i Organisation
+type OrganisationsGetBySlugRow struct {
+	ID        pgtype.UUID        `json:"id"`
+	Name      string             `json:"name"`
+	Slug      string             `json:"slug"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Get organisation by slug
+func (q *Queries) OrganisationsGetBySlug(ctx context.Context, slug string) (*OrganisationsGetBySlugRow, error) {
+	row := q.db.QueryRow(ctx, organisationsGetBySlug, slug)
+	var i OrganisationsGetBySlugRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
 		&i.Slug,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.DeletedAt,
-	)
-	return &i, err
-}
-
-const organisationMemberCreate = `-- name: OrganisationMemberCreate :one
-INSERT INTO organisation_members (user_id, organisation_id) VALUES ($1, $2) RETURNING id, user_id, organisation_id, created_at, updated_at, deleted_at
-`
-
-type OrganisationMemberCreateParams struct {
-	UserID         pgtype.UUID `json:"user_id"`
-	OrganisationID pgtype.UUID `json:"organisation_id"`
-}
-
-func (q *Queries) OrganisationMemberCreate(ctx context.Context, arg *OrganisationMemberCreateParams) (*OrganisationMember, error) {
-	row := q.db.QueryRow(ctx, organisationMemberCreate, arg.UserID, arg.OrganisationID)
-	var i OrganisationMember
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.OrganisationID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-	)
-	return &i, err
-}
-
-const organisationMemberDelete = `-- name: OrganisationMemberDelete :exec
-DELETE FROM organisation_members WHERE id = $1
-`
-
-func (q *Queries) OrganisationMemberDelete(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, organisationMemberDelete, id)
-	return err
-}
-
-const organisationMemberFindById = `-- name: OrganisationMemberFindById :one
-SELECT id, user_id, organisation_id, created_at, updated_at, deleted_at FROM organisation_members WHERE id = $1
-`
-
-func (q *Queries) OrganisationMemberFindById(ctx context.Context, id pgtype.UUID) (*OrganisationMember, error) {
-	row := q.db.QueryRow(ctx, organisationMemberFindById, id)
-	var i OrganisationMember
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.OrganisationID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-	)
-	return &i, err
-}
-
-const organisationMemberFindByOrg = `-- name: OrganisationMemberFindByOrg :many
-SELECT id, user_id, organisation_id, created_at, updated_at, deleted_at FROM organisation_members WHERE organisation_id = $1 ORDER BY created_at DESC
-`
-
-func (q *Queries) OrganisationMemberFindByOrg(ctx context.Context, organisationID pgtype.UUID) ([]*OrganisationMember, error) {
-	rows, err := q.db.Query(ctx, organisationMemberFindByOrg, organisationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []*OrganisationMember
-	for rows.Next() {
-		var i OrganisationMember
-		if err := rows.Scan(
-			&i.ID,
-			&i.UserID,
-			&i.OrganisationID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, &i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const organisationMemberFindByUser = `-- name: OrganisationMemberFindByUser :many
-SELECT id, user_id, organisation_id, created_at, updated_at, deleted_at FROM organisation_members WHERE user_id = $1 ORDER BY created_at DESC
-`
-
-func (q *Queries) OrganisationMemberFindByUser(ctx context.Context, userID pgtype.UUID) ([]*OrganisationMember, error) {
-	rows, err := q.db.Query(ctx, organisationMemberFindByUser, userID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []*OrganisationMember
-	for rows.Next() {
-		var i OrganisationMember
-		if err := rows.Scan(
-			&i.ID,
-			&i.UserID,
-			&i.OrganisationID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, &i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const organisationMemberFindByUserAndOrg = `-- name: OrganisationMemberFindByUserAndOrg :one
-SELECT id, user_id, organisation_id, created_at, updated_at, deleted_at FROM organisation_members WHERE user_id = $1 AND organisation_id = $2
-`
-
-type OrganisationMemberFindByUserAndOrgParams struct {
-	UserID         pgtype.UUID `json:"user_id"`
-	OrganisationID pgtype.UUID `json:"organisation_id"`
-}
-
-func (q *Queries) OrganisationMemberFindByUserAndOrg(ctx context.Context, arg *OrganisationMemberFindByUserAndOrgParams) (*OrganisationMember, error) {
-	row := q.db.QueryRow(ctx, organisationMemberFindByUserAndOrg, arg.UserID, arg.OrganisationID)
-	var i OrganisationMember
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.OrganisationID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-	)
-	return &i, err
-}
-
-const organisationUpdate = `-- name: OrganisationUpdate :one
-UPDATE organisations SET name = $2, slug = $3, updated_at = NOW() WHERE id = $1 RETURNING id, name, slug, created_at, updated_at, deleted_at
-`
-
-type OrganisationUpdateParams struct {
-	ID   pgtype.UUID `json:"id"`
-	Name string      `json:"name"`
-	Slug string      `json:"slug"`
-}
-
-func (q *Queries) OrganisationUpdate(ctx context.Context, arg *OrganisationUpdateParams) (*Organisation, error) {
-	row := q.db.QueryRow(ctx, organisationUpdate, arg.ID, arg.Name, arg.Slug)
-	var i Organisation
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Slug,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
 	)
 	return &i, err
 }

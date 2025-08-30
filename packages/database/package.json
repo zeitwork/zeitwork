@@ -1,8 +1,7 @@
 {
-  "name": "database",
+  "name": "@zeitwork/database",
   "module": "index.ts",
   "type": "module",
-  "private": true,
   "scripts": {
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",

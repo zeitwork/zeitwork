@@ -7,95 +7,179 @@ package database
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const instanceCreate = `-- name: InstanceCreate :one
+const instancesCreate = `-- name: InstancesCreate :one
 INSERT INTO instances (
-    region_id, node_id, image_id, state, resources,
-    default_port, ip_address, environment_variables
+    id,
+    region_id,
+    node_id,
+    image_id,
+    state,
+    vcpus,
+    memory,
+    default_port,
+    ipv6_address,
+    environment_variables
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8
-) RETURNING id, region_id, node_id, image_id, state, resources, default_port, ip_address, environment_variables, created_at, updated_at, deleted_at
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7,
+    $8,
+    $9,
+    $10
+)
+RETURNING 
+    id,
+    region_id,
+    node_id,
+    image_id,
+    state,
+    vcpus,
+    memory,
+    default_port,
+    ipv6_address,
+    environment_variables,
+    created_at,
+    updated_at
 `
 
-type InstanceCreateParams struct {
-	RegionID             pgtype.UUID     `json:"region_id"`
-	NodeID               pgtype.UUID     `json:"node_id"`
-	ImageID              pgtype.UUID     `json:"image_id"`
-	State                string          `json:"state"`
-	Resources            json.RawMessage `json:"resources"`
-	DefaultPort          int32           `json:"default_port"`
-	IpAddress            string          `json:"ip_address"`
-	EnvironmentVariables string          `json:"environment_variables"`
+type InstancesCreateParams struct {
+	ID                   pgtype.UUID `json:"id"`
+	RegionID             pgtype.UUID `json:"region_id"`
+	NodeID               pgtype.UUID `json:"node_id"`
+	ImageID              pgtype.UUID `json:"image_id"`
+	State                string      `json:"state"`
+	Vcpus                int32       `json:"vcpus"`
+	Memory               int32       `json:"memory"`
+	DefaultPort          int32       `json:"default_port"`
+	Ipv6Address          string      `json:"ipv6_address"`
+	EnvironmentVariables string      `json:"environment_variables"`
 }
 
-func (q *Queries) InstanceCreate(ctx context.Context, arg *InstanceCreateParams) (*Instance, error) {
-	row := q.db.QueryRow(ctx, instanceCreate,
+type InstancesCreateRow struct {
+	ID                   pgtype.UUID        `json:"id"`
+	RegionID             pgtype.UUID        `json:"region_id"`
+	NodeID               pgtype.UUID        `json:"node_id"`
+	ImageID              pgtype.UUID        `json:"image_id"`
+	State                string             `json:"state"`
+	Vcpus                int32              `json:"vcpus"`
+	Memory               int32              `json:"memory"`
+	DefaultPort          int32              `json:"default_port"`
+	Ipv6Address          string             `json:"ipv6_address"`
+	EnvironmentVariables string             `json:"environment_variables"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Create a new instance
+func (q *Queries) InstancesCreate(ctx context.Context, arg *InstancesCreateParams) (*InstancesCreateRow, error) {
+	row := q.db.QueryRow(ctx, instancesCreate,
+		arg.ID,
 		arg.RegionID,
 		arg.NodeID,
 		arg.ImageID,
 		arg.State,
-		arg.Resources,
+		arg.Vcpus,
+		arg.Memory,
 		arg.DefaultPort,
-		arg.IpAddress,
+		arg.Ipv6Address,
 		arg.EnvironmentVariables,
 	)
-	var i Instance
+	var i InstancesCreateRow
 	err := row.Scan(
 		&i.ID,
 		&i.RegionID,
 		&i.NodeID,
 		&i.ImageID,
 		&i.State,
-		&i.Resources,
+		&i.Vcpus,
+		&i.Memory,
 		&i.DefaultPort,
-		&i.IpAddress,
+		&i.Ipv6Address,
 		&i.EnvironmentVariables,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.DeletedAt,
 	)
 	return &i, err
 }
 
-const instanceDelete = `-- name: InstanceDelete :exec
-DELETE FROM instances WHERE id = $1
+const instancesDelete = `-- name: InstancesDelete :exec
+UPDATE instances 
+SET deleted_at = now(), 
+    updated_at = now()
+WHERE id = $1
 `
 
-func (q *Queries) InstanceDelete(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, instanceDelete, id)
+// Soft delete an instance
+func (q *Queries) InstancesDelete(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, instancesDelete, id)
 	return err
 }
 
-const instanceFind = `-- name: InstanceFind :many
-SELECT id, region_id, node_id, image_id, state, resources, default_port, ip_address, environment_variables, created_at, updated_at, deleted_at FROM instances ORDER BY created_at DESC
+const instancesFindByNode = `-- name: InstancesFindByNode :many
+SELECT 
+    id,
+    region_id,
+    node_id,
+    image_id,
+    state,
+    vcpus,
+    memory,
+    default_port,
+    ipv6_address,
+    environment_variables,
+    created_at,
+    updated_at
+FROM instances 
+WHERE node_id = $1 
+    AND deleted_at IS NULL
 `
 
-func (q *Queries) InstanceFind(ctx context.Context) ([]*Instance, error) {
-	rows, err := q.db.Query(ctx, instanceFind)
+type InstancesFindByNodeRow struct {
+	ID                   pgtype.UUID        `json:"id"`
+	RegionID             pgtype.UUID        `json:"region_id"`
+	NodeID               pgtype.UUID        `json:"node_id"`
+	ImageID              pgtype.UUID        `json:"image_id"`
+	State                string             `json:"state"`
+	Vcpus                int32              `json:"vcpus"`
+	Memory               int32              `json:"memory"`
+	DefaultPort          int32              `json:"default_port"`
+	Ipv6Address          string             `json:"ipv6_address"`
+	EnvironmentVariables string             `json:"environment_variables"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Find instances by node ID for node agent
+func (q *Queries) InstancesFindByNode(ctx context.Context, nodeID pgtype.UUID) ([]*InstancesFindByNodeRow, error) {
+	rows, err := q.db.Query(ctx, instancesFindByNode, nodeID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []*Instance
+	var items []*InstancesFindByNodeRow
 	for rows.Next() {
-		var i Instance
+		var i InstancesFindByNodeRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.RegionID,
 			&i.NodeID,
 			&i.ImageID,
 			&i.State,
-			&i.Resources,
+			&i.Vcpus,
+			&i.Memory,
 			&i.DefaultPort,
-			&i.IpAddress,
+			&i.Ipv6Address,
 			&i.EnvironmentVariables,
 			&i.CreatedAt,
 			&i.UpdatedAt,
-			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -107,34 +191,64 @@ func (q *Queries) InstanceFind(ctx context.Context) ([]*Instance, error) {
 	return items, nil
 }
 
-const instanceFindByDeployment = `-- name: InstanceFindByDeployment :many
-SELECT i.id, i.region_id, i.node_id, i.image_id, i.state, i.resources, i.default_port, i.ip_address, i.environment_variables, i.created_at, i.updated_at, i.deleted_at FROM instances i
-JOIN deployment_instances di ON i.id = di.instance_id
-WHERE di.deployment_id = $1 AND i.state = 'running'
+const instancesGetByDeployment = `-- name: InstancesGetByDeployment :many
+SELECT 
+    i.id,
+    i.region_id,
+    i.node_id,
+    i.image_id,
+    i.state,
+    i.vcpus,
+    i.memory,
+    i.default_port,
+    i.ipv6_address,
+    i.environment_variables,
+    i.created_at,
+    i.updated_at
+FROM instances i
+JOIN deployment_instances di ON di.instance_id = i.id
+WHERE di.deployment_id = $1 
+    AND i.deleted_at IS NULL
 `
 
-func (q *Queries) InstanceFindByDeployment(ctx context.Context, deploymentID pgtype.UUID) ([]*Instance, error) {
-	rows, err := q.db.Query(ctx, instanceFindByDeployment, deploymentID)
+type InstancesGetByDeploymentRow struct {
+	ID                   pgtype.UUID        `json:"id"`
+	RegionID             pgtype.UUID        `json:"region_id"`
+	NodeID               pgtype.UUID        `json:"node_id"`
+	ImageID              pgtype.UUID        `json:"image_id"`
+	State                string             `json:"state"`
+	Vcpus                int32              `json:"vcpus"`
+	Memory               int32              `json:"memory"`
+	DefaultPort          int32              `json:"default_port"`
+	Ipv6Address          string             `json:"ipv6_address"`
+	EnvironmentVariables string             `json:"environment_variables"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Get instances for a deployment
+func (q *Queries) InstancesGetByDeployment(ctx context.Context, deploymentID pgtype.UUID) ([]*InstancesGetByDeploymentRow, error) {
+	rows, err := q.db.Query(ctx, instancesGetByDeployment, deploymentID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []*Instance
+	var items []*InstancesGetByDeploymentRow
 	for rows.Next() {
-		var i Instance
+		var i InstancesGetByDeploymentRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.RegionID,
 			&i.NodeID,
 			&i.ImageID,
 			&i.State,
-			&i.Resources,
+			&i.Vcpus,
+			&i.Memory,
 			&i.DefaultPort,
-			&i.IpAddress,
+			&i.Ipv6Address,
 			&i.EnvironmentVariables,
 			&i.CreatedAt,
 			&i.UpdatedAt,
-			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -146,232 +260,118 @@ func (q *Queries) InstanceFindByDeployment(ctx context.Context, deploymentID pgt
 	return items, nil
 }
 
-const instanceFindById = `-- name: InstanceFindById :one
-SELECT id, region_id, node_id, image_id, state, resources, default_port, ip_address, environment_variables, created_at, updated_at, deleted_at FROM instances WHERE id = $1
+const instancesGetById = `-- name: InstancesGetById :one
+SELECT 
+    id,
+    region_id,
+    node_id,
+    image_id,
+    state,
+    vcpus,
+    memory,
+    default_port,
+    ipv6_address,
+    environment_variables,
+    created_at,
+    updated_at
+FROM instances 
+WHERE id = $1 
+    AND deleted_at IS NULL
 `
 
-func (q *Queries) InstanceFindById(ctx context.Context, id pgtype.UUID) (*Instance, error) {
-	row := q.db.QueryRow(ctx, instanceFindById, id)
-	var i Instance
+type InstancesGetByIdRow struct {
+	ID                   pgtype.UUID        `json:"id"`
+	RegionID             pgtype.UUID        `json:"region_id"`
+	NodeID               pgtype.UUID        `json:"node_id"`
+	ImageID              pgtype.UUID        `json:"image_id"`
+	State                string             `json:"state"`
+	Vcpus                int32              `json:"vcpus"`
+	Memory               int32              `json:"memory"`
+	DefaultPort          int32              `json:"default_port"`
+	Ipv6Address          string             `json:"ipv6_address"`
+	EnvironmentVariables string             `json:"environment_variables"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Get instance by ID
+func (q *Queries) InstancesGetById(ctx context.Context, id pgtype.UUID) (*InstancesGetByIdRow, error) {
+	row := q.db.QueryRow(ctx, instancesGetById, id)
+	var i InstancesGetByIdRow
 	err := row.Scan(
 		&i.ID,
 		&i.RegionID,
 		&i.NodeID,
 		&i.ImageID,
 		&i.State,
-		&i.Resources,
+		&i.Vcpus,
+		&i.Memory,
 		&i.DefaultPort,
-		&i.IpAddress,
+		&i.Ipv6Address,
 		&i.EnvironmentVariables,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.DeletedAt,
 	)
 	return &i, err
 }
 
-const instanceFindByImage = `-- name: InstanceFindByImage :many
-SELECT id, region_id, node_id, image_id, state, resources, default_port, ip_address, environment_variables, created_at, updated_at, deleted_at FROM instances WHERE image_id = $1
+const instancesUpdateState = `-- name: InstancesUpdateState :one
+UPDATE instances 
+SET state = $2, 
+    updated_at = now()
+WHERE id = $1
+RETURNING 
+    id,
+    region_id,
+    node_id,
+    image_id,
+    state,
+    vcpus,
+    memory,
+    default_port,
+    ipv6_address,
+    environment_variables,
+    created_at,
+    updated_at
 `
 
-func (q *Queries) InstanceFindByImage(ctx context.Context, imageID pgtype.UUID) ([]*Instance, error) {
-	rows, err := q.db.Query(ctx, instanceFindByImage, imageID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []*Instance
-	for rows.Next() {
-		var i Instance
-		if err := rows.Scan(
-			&i.ID,
-			&i.RegionID,
-			&i.NodeID,
-			&i.ImageID,
-			&i.State,
-			&i.Resources,
-			&i.DefaultPort,
-			&i.IpAddress,
-			&i.EnvironmentVariables,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, &i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const instanceFindByNode = `-- name: InstanceFindByNode :many
-SELECT id, region_id, node_id, image_id, state, resources, default_port, ip_address, environment_variables, created_at, updated_at, deleted_at FROM instances WHERE node_id = $1
-`
-
-func (q *Queries) InstanceFindByNode(ctx context.Context, nodeID pgtype.UUID) ([]*Instance, error) {
-	rows, err := q.db.Query(ctx, instanceFindByNode, nodeID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []*Instance
-	for rows.Next() {
-		var i Instance
-		if err := rows.Scan(
-			&i.ID,
-			&i.RegionID,
-			&i.NodeID,
-			&i.ImageID,
-			&i.State,
-			&i.Resources,
-			&i.DefaultPort,
-			&i.IpAddress,
-			&i.EnvironmentVariables,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, &i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const instanceFindByRegion = `-- name: InstanceFindByRegion :many
-SELECT id, region_id, node_id, image_id, state, resources, default_port, ip_address, environment_variables, created_at, updated_at, deleted_at FROM instances WHERE region_id = $1 ORDER BY created_at DESC
-`
-
-func (q *Queries) InstanceFindByRegion(ctx context.Context, regionID pgtype.UUID) ([]*Instance, error) {
-	rows, err := q.db.Query(ctx, instanceFindByRegion, regionID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []*Instance
-	for rows.Next() {
-		var i Instance
-		if err := rows.Scan(
-			&i.ID,
-			&i.RegionID,
-			&i.NodeID,
-			&i.ImageID,
-			&i.State,
-			&i.Resources,
-			&i.DefaultPort,
-			&i.IpAddress,
-			&i.EnvironmentVariables,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, &i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const instanceFindByState = `-- name: InstanceFindByState :many
-SELECT id, region_id, node_id, image_id, state, resources, default_port, ip_address, environment_variables, created_at, updated_at, deleted_at FROM instances WHERE state = $1
-`
-
-func (q *Queries) InstanceFindByState(ctx context.Context, state string) ([]*Instance, error) {
-	rows, err := q.db.Query(ctx, instanceFindByState, state)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []*Instance
-	for rows.Next() {
-		var i Instance
-		if err := rows.Scan(
-			&i.ID,
-			&i.RegionID,
-			&i.NodeID,
-			&i.ImageID,
-			&i.State,
-			&i.Resources,
-			&i.DefaultPort,
-			&i.IpAddress,
-			&i.EnvironmentVariables,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, &i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const instanceUpdateNode = `-- name: InstanceUpdateNode :one
-UPDATE instances SET node_id = $2, updated_at = NOW() WHERE id = $1 RETURNING id, region_id, node_id, image_id, state, resources, default_port, ip_address, environment_variables, created_at, updated_at, deleted_at
-`
-
-type InstanceUpdateNodeParams struct {
-	ID     pgtype.UUID `json:"id"`
-	NodeID pgtype.UUID `json:"node_id"`
-}
-
-func (q *Queries) InstanceUpdateNode(ctx context.Context, arg *InstanceUpdateNodeParams) (*Instance, error) {
-	row := q.db.QueryRow(ctx, instanceUpdateNode, arg.ID, arg.NodeID)
-	var i Instance
-	err := row.Scan(
-		&i.ID,
-		&i.RegionID,
-		&i.NodeID,
-		&i.ImageID,
-		&i.State,
-		&i.Resources,
-		&i.DefaultPort,
-		&i.IpAddress,
-		&i.EnvironmentVariables,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-	)
-	return &i, err
-}
-
-const instanceUpdateState = `-- name: InstanceUpdateState :one
-UPDATE instances SET state = $2, updated_at = NOW() WHERE id = $1 RETURNING id, region_id, node_id, image_id, state, resources, default_port, ip_address, environment_variables, created_at, updated_at, deleted_at
-`
-
-type InstanceUpdateStateParams struct {
+type InstancesUpdateStateParams struct {
 	ID    pgtype.UUID `json:"id"`
 	State string      `json:"state"`
 }
 
-func (q *Queries) InstanceUpdateState(ctx context.Context, arg *InstanceUpdateStateParams) (*Instance, error) {
-	row := q.db.QueryRow(ctx, instanceUpdateState, arg.ID, arg.State)
-	var i Instance
+type InstancesUpdateStateRow struct {
+	ID                   pgtype.UUID        `json:"id"`
+	RegionID             pgtype.UUID        `json:"region_id"`
+	NodeID               pgtype.UUID        `json:"node_id"`
+	ImageID              pgtype.UUID        `json:"image_id"`
+	State                string             `json:"state"`
+	Vcpus                int32              `json:"vcpus"`
+	Memory               int32              `json:"memory"`
+	DefaultPort          int32              `json:"default_port"`
+	Ipv6Address          string             `json:"ipv6_address"`
+	EnvironmentVariables string             `json:"environment_variables"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Update instance state
+func (q *Queries) InstancesUpdateState(ctx context.Context, arg *InstancesUpdateStateParams) (*InstancesUpdateStateRow, error) {
+	row := q.db.QueryRow(ctx, instancesUpdateState, arg.ID, arg.State)
+	var i InstancesUpdateStateRow
 	err := row.Scan(
 		&i.ID,
 		&i.RegionID,
 		&i.NodeID,
 		&i.ImageID,
 		&i.State,
-		&i.Resources,
+		&i.Vcpus,
+		&i.Memory,
 		&i.DefaultPort,
-		&i.IpAddress,
+		&i.Ipv6Address,
 		&i.EnvironmentVariables,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.DeletedAt,
 	)
 	return &i, err
 }

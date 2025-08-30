@@ -11,599 +11,390 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const deploymentCreate = `-- name: DeploymentCreate :one
+const deploymentsCreate = `-- name: DeploymentsCreate :one
 INSERT INTO deployments (
-    project_id, project_environment_id, status, commit_hash, image_id, organisation_id,
-    deployment_url, nanoid, min_instances, rollout_strategy
+    id,
+    deployment_id,
+    status,
+    commit_hash,
+    project_id,
+    environment_id,
+    image_id,
+    organisation_id
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
-) RETURNING id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at, deployment_url, nanoid, rollout_strategy, min_instances, activated_at, deactivated_at
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6,
+    $7,
+    $8
+)
+RETURNING 
+    id,
+    deployment_id,
+    status,
+    commit_hash,
+    project_id,
+    environment_id,
+    image_id,
+    organisation_id,
+    created_at,
+    updated_at
 `
 
-type DeploymentCreateParams struct {
-	ProjectID            pgtype.UUID `json:"project_id"`
-	ProjectEnvironmentID pgtype.UUID `json:"project_environment_id"`
-	Status               string      `json:"status"`
-	CommitHash           string      `json:"commit_hash"`
-	ImageID              pgtype.UUID `json:"image_id"`
-	OrganisationID       pgtype.UUID `json:"organisation_id"`
-	DeploymentUrl        pgtype.Text `json:"deployment_url"`
-	Nanoid               pgtype.Text `json:"nanoid"`
-	MinInstances         int32       `json:"min_instances"`
-	RolloutStrategy      string      `json:"rollout_strategy"`
+type DeploymentsCreateParams struct {
+	ID             pgtype.UUID `json:"id"`
+	DeploymentID   string      `json:"deployment_id"`
+	Status         string      `json:"status"`
+	CommitHash     string      `json:"commit_hash"`
+	ProjectID      pgtype.UUID `json:"project_id"`
+	EnvironmentID  pgtype.UUID `json:"environment_id"`
+	ImageID        pgtype.UUID `json:"image_id"`
+	OrganisationID pgtype.UUID `json:"organisation_id"`
 }
 
-func (q *Queries) DeploymentCreate(ctx context.Context, arg *DeploymentCreateParams) (*Deployment, error) {
-	row := q.db.QueryRow(ctx, deploymentCreate,
-		arg.ProjectID,
-		arg.ProjectEnvironmentID,
+type DeploymentsCreateRow struct {
+	ID             pgtype.UUID        `json:"id"`
+	DeploymentID   string             `json:"deployment_id"`
+	Status         string             `json:"status"`
+	CommitHash     string             `json:"commit_hash"`
+	ProjectID      pgtype.UUID        `json:"project_id"`
+	EnvironmentID  pgtype.UUID        `json:"environment_id"`
+	ImageID        pgtype.UUID        `json:"image_id"`
+	OrganisationID pgtype.UUID        `json:"organisation_id"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Create a new deployment
+func (q *Queries) DeploymentsCreate(ctx context.Context, arg *DeploymentsCreateParams) (*DeploymentsCreateRow, error) {
+	row := q.db.QueryRow(ctx, deploymentsCreate,
+		arg.ID,
+		arg.DeploymentID,
 		arg.Status,
 		arg.CommitHash,
+		arg.ProjectID,
+		arg.EnvironmentID,
 		arg.ImageID,
 		arg.OrganisationID,
-		arg.DeploymentUrl,
-		arg.Nanoid,
-		arg.MinInstances,
-		arg.RolloutStrategy,
 	)
-	var i Deployment
-	err := row.Scan(
-		&i.ID,
-		&i.ProjectID,
-		&i.ProjectEnvironmentID,
-		&i.Status,
-		&i.CommitHash,
-		&i.ImageID,
-		&i.OrganisationID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.DeploymentUrl,
-		&i.Nanoid,
-		&i.RolloutStrategy,
-		&i.MinInstances,
-		&i.ActivatedAt,
-		&i.DeactivatedAt,
-	)
-	return &i, err
-}
-
-const deploymentDelete = `-- name: DeploymentDelete :exec
-DELETE FROM deployments WHERE id = $1
-`
-
-func (q *Queries) DeploymentDelete(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, deploymentDelete, id)
-	return err
-}
-
-const deploymentFind = `-- name: DeploymentFind :many
-SELECT id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at, deployment_url, nanoid, rollout_strategy, min_instances, activated_at, deactivated_at FROM deployments ORDER BY created_at DESC
-`
-
-func (q *Queries) DeploymentFind(ctx context.Context) ([]*Deployment, error) {
-	rows, err := q.db.Query(ctx, deploymentFind)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []*Deployment
-	for rows.Next() {
-		var i Deployment
-		if err := rows.Scan(
-			&i.ID,
-			&i.ProjectID,
-			&i.ProjectEnvironmentID,
-			&i.Status,
-			&i.CommitHash,
-			&i.ImageID,
-			&i.OrganisationID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.DeploymentUrl,
-			&i.Nanoid,
-			&i.RolloutStrategy,
-			&i.MinInstances,
-			&i.ActivatedAt,
-			&i.DeactivatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, &i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const deploymentFindByEnvironment = `-- name: DeploymentFindByEnvironment :many
-SELECT id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at, deployment_url, nanoid, rollout_strategy, min_instances, activated_at, deactivated_at FROM deployments WHERE project_environment_id = $1 ORDER BY created_at DESC
-`
-
-func (q *Queries) DeploymentFindByEnvironment(ctx context.Context, projectEnvironmentID pgtype.UUID) ([]*Deployment, error) {
-	rows, err := q.db.Query(ctx, deploymentFindByEnvironment, projectEnvironmentID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []*Deployment
-	for rows.Next() {
-		var i Deployment
-		if err := rows.Scan(
-			&i.ID,
-			&i.ProjectID,
-			&i.ProjectEnvironmentID,
-			&i.Status,
-			&i.CommitHash,
-			&i.ImageID,
-			&i.OrganisationID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.DeploymentUrl,
-			&i.Nanoid,
-			&i.RolloutStrategy,
-			&i.MinInstances,
-			&i.ActivatedAt,
-			&i.DeactivatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, &i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const deploymentFindById = `-- name: DeploymentFindById :one
-SELECT id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at, deployment_url, nanoid, rollout_strategy, min_instances, activated_at, deactivated_at FROM deployments WHERE id = $1
-`
-
-func (q *Queries) DeploymentFindById(ctx context.Context, id pgtype.UUID) (*Deployment, error) {
-	row := q.db.QueryRow(ctx, deploymentFindById, id)
-	var i Deployment
-	err := row.Scan(
-		&i.ID,
-		&i.ProjectID,
-		&i.ProjectEnvironmentID,
-		&i.Status,
-		&i.CommitHash,
-		&i.ImageID,
-		&i.OrganisationID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.DeploymentUrl,
-		&i.Nanoid,
-		&i.RolloutStrategy,
-		&i.MinInstances,
-		&i.ActivatedAt,
-		&i.DeactivatedAt,
-	)
-	return &i, err
-}
-
-const deploymentFindByImage = `-- name: DeploymentFindByImage :many
-SELECT id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at, deployment_url, nanoid, rollout_strategy, min_instances, activated_at, deactivated_at FROM deployments WHERE image_id = $1 ORDER BY created_at DESC
-`
-
-func (q *Queries) DeploymentFindByImage(ctx context.Context, imageID pgtype.UUID) ([]*Deployment, error) {
-	rows, err := q.db.Query(ctx, deploymentFindByImage, imageID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []*Deployment
-	for rows.Next() {
-		var i Deployment
-		if err := rows.Scan(
-			&i.ID,
-			&i.ProjectID,
-			&i.ProjectEnvironmentID,
-			&i.Status,
-			&i.CommitHash,
-			&i.ImageID,
-			&i.OrganisationID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.DeploymentUrl,
-			&i.Nanoid,
-			&i.RolloutStrategy,
-			&i.MinInstances,
-			&i.ActivatedAt,
-			&i.DeactivatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, &i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const deploymentFindByNanoID = `-- name: DeploymentFindByNanoID :one
-SELECT id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at, deployment_url, nanoid, rollout_strategy, min_instances, activated_at, deactivated_at FROM deployments WHERE nanoid = $1
-`
-
-func (q *Queries) DeploymentFindByNanoID(ctx context.Context, nanoid pgtype.Text) (*Deployment, error) {
-	row := q.db.QueryRow(ctx, deploymentFindByNanoID, nanoid)
-	var i Deployment
-	err := row.Scan(
-		&i.ID,
-		&i.ProjectID,
-		&i.ProjectEnvironmentID,
-		&i.Status,
-		&i.CommitHash,
-		&i.ImageID,
-		&i.OrganisationID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.DeploymentUrl,
-		&i.Nanoid,
-		&i.RolloutStrategy,
-		&i.MinInstances,
-		&i.ActivatedAt,
-		&i.DeactivatedAt,
-	)
-	return &i, err
-}
-
-const deploymentFindByOrganisation = `-- name: DeploymentFindByOrganisation :many
-SELECT id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at, deployment_url, nanoid, rollout_strategy, min_instances, activated_at, deactivated_at FROM deployments WHERE organisation_id = $1 ORDER BY created_at DESC
-`
-
-func (q *Queries) DeploymentFindByOrganisation(ctx context.Context, organisationID pgtype.UUID) ([]*Deployment, error) {
-	rows, err := q.db.Query(ctx, deploymentFindByOrganisation, organisationID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []*Deployment
-	for rows.Next() {
-		var i Deployment
-		if err := rows.Scan(
-			&i.ID,
-			&i.ProjectID,
-			&i.ProjectEnvironmentID,
-			&i.Status,
-			&i.CommitHash,
-			&i.ImageID,
-			&i.OrganisationID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.DeploymentUrl,
-			&i.Nanoid,
-			&i.RolloutStrategy,
-			&i.MinInstances,
-			&i.ActivatedAt,
-			&i.DeactivatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, &i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const deploymentFindByProject = `-- name: DeploymentFindByProject :many
-SELECT id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at, deployment_url, nanoid, rollout_strategy, min_instances, activated_at, deactivated_at FROM deployments WHERE project_id = $1 ORDER BY created_at DESC
-`
-
-func (q *Queries) DeploymentFindByProject(ctx context.Context, projectID pgtype.UUID) ([]*Deployment, error) {
-	rows, err := q.db.Query(ctx, deploymentFindByProject, projectID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []*Deployment
-	for rows.Next() {
-		var i Deployment
-		if err := rows.Scan(
-			&i.ID,
-			&i.ProjectID,
-			&i.ProjectEnvironmentID,
-			&i.Status,
-			&i.CommitHash,
-			&i.ImageID,
-			&i.OrganisationID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.DeploymentUrl,
-			&i.Nanoid,
-			&i.RolloutStrategy,
-			&i.MinInstances,
-			&i.ActivatedAt,
-			&i.DeactivatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, &i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const deploymentFindByStatus = `-- name: DeploymentFindByStatus :many
-SELECT id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at, deployment_url, nanoid, rollout_strategy, min_instances, activated_at, deactivated_at FROM deployments WHERE status = $1 ORDER BY created_at DESC
-`
-
-func (q *Queries) DeploymentFindByStatus(ctx context.Context, status string) ([]*Deployment, error) {
-	rows, err := q.db.Query(ctx, deploymentFindByStatus, status)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []*Deployment
-	for rows.Next() {
-		var i Deployment
-		if err := rows.Scan(
-			&i.ID,
-			&i.ProjectID,
-			&i.ProjectEnvironmentID,
-			&i.Status,
-			&i.CommitHash,
-			&i.ImageID,
-			&i.OrganisationID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.DeploymentUrl,
-			&i.Nanoid,
-			&i.RolloutStrategy,
-			&i.MinInstances,
-			&i.ActivatedAt,
-			&i.DeactivatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, &i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const deploymentInstanceCreate = `-- name: DeploymentInstanceCreate :one
-INSERT INTO deployment_instances (deployment_id, instance_id)
-VALUES ($1, $2)
-RETURNING id, deployment_id, instance_id, organisation_id, created_at, updated_at, deleted_at
-`
-
-type DeploymentInstanceCreateParams struct {
-	DeploymentID pgtype.UUID `json:"deployment_id"`
-	InstanceID   pgtype.UUID `json:"instance_id"`
-}
-
-func (q *Queries) DeploymentInstanceCreate(ctx context.Context, arg *DeploymentInstanceCreateParams) (*DeploymentInstance, error) {
-	row := q.db.QueryRow(ctx, deploymentInstanceCreate, arg.DeploymentID, arg.InstanceID)
-	var i DeploymentInstance
+	var i DeploymentsCreateRow
 	err := row.Scan(
 		&i.ID,
 		&i.DeploymentID,
-		&i.InstanceID,
-		&i.OrganisationID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-	)
-	return &i, err
-}
-
-const deploymentInstanceDelete = `-- name: DeploymentInstanceDelete :exec
-DELETE FROM deployment_instances WHERE id = $1
-`
-
-func (q *Queries) DeploymentInstanceDelete(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, deploymentInstanceDelete, id)
-	return err
-}
-
-const deploymentInstanceFindByDeployment = `-- name: DeploymentInstanceFindByDeployment :many
-SELECT id, deployment_id, instance_id, organisation_id, created_at, updated_at, deleted_at FROM deployment_instances WHERE deployment_id = $1 ORDER BY created_at DESC
-`
-
-func (q *Queries) DeploymentInstanceFindByDeployment(ctx context.Context, deploymentID pgtype.UUID) ([]*DeploymentInstance, error) {
-	rows, err := q.db.Query(ctx, deploymentInstanceFindByDeployment, deploymentID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []*DeploymentInstance
-	for rows.Next() {
-		var i DeploymentInstance
-		if err := rows.Scan(
-			&i.ID,
-			&i.DeploymentID,
-			&i.InstanceID,
-			&i.OrganisationID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, &i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const deploymentInstanceFindById = `-- name: DeploymentInstanceFindById :one
-SELECT id, deployment_id, instance_id, organisation_id, created_at, updated_at, deleted_at FROM deployment_instances WHERE id = $1
-`
-
-func (q *Queries) DeploymentInstanceFindById(ctx context.Context, id pgtype.UUID) (*DeploymentInstance, error) {
-	row := q.db.QueryRow(ctx, deploymentInstanceFindById, id)
-	var i DeploymentInstance
-	err := row.Scan(
-		&i.ID,
-		&i.DeploymentID,
-		&i.InstanceID,
-		&i.OrganisationID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-	)
-	return &i, err
-}
-
-const deploymentInstanceFindByInstance = `-- name: DeploymentInstanceFindByInstance :many
-SELECT id, deployment_id, instance_id, organisation_id, created_at, updated_at, deleted_at FROM deployment_instances WHERE instance_id = $1 ORDER BY created_at DESC
-`
-
-func (q *Queries) DeploymentInstanceFindByInstance(ctx context.Context, instanceID pgtype.UUID) ([]*DeploymentInstance, error) {
-	rows, err := q.db.Query(ctx, deploymentInstanceFindByInstance, instanceID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []*DeploymentInstance
-	for rows.Next() {
-		var i DeploymentInstance
-		if err := rows.Scan(
-			&i.ID,
-			&i.DeploymentID,
-			&i.InstanceID,
-			&i.OrganisationID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, &i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const deploymentList = `-- name: DeploymentList :many
-SELECT id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at, deployment_url, nanoid, rollout_strategy, min_instances, activated_at, deactivated_at FROM deployments ORDER BY created_at DESC
-`
-
-func (q *Queries) DeploymentList(ctx context.Context) ([]*Deployment, error) {
-	rows, err := q.db.Query(ctx, deploymentList)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []*Deployment
-	for rows.Next() {
-		var i Deployment
-		if err := rows.Scan(
-			&i.ID,
-			&i.ProjectID,
-			&i.ProjectEnvironmentID,
-			&i.Status,
-			&i.CommitHash,
-			&i.ImageID,
-			&i.OrganisationID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.DeploymentUrl,
-			&i.Nanoid,
-			&i.RolloutStrategy,
-			&i.MinInstances,
-			&i.ActivatedAt,
-			&i.DeactivatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, &i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const deploymentUpdateImage = `-- name: DeploymentUpdateImage :one
-UPDATE deployments SET image_id = $2, updated_at = NOW() WHERE id = $1 RETURNING id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at, deployment_url, nanoid, rollout_strategy, min_instances, activated_at, deactivated_at
-`
-
-type DeploymentUpdateImageParams struct {
-	ID      pgtype.UUID `json:"id"`
-	ImageID pgtype.UUID `json:"image_id"`
-}
-
-func (q *Queries) DeploymentUpdateImage(ctx context.Context, arg *DeploymentUpdateImageParams) (*Deployment, error) {
-	row := q.db.QueryRow(ctx, deploymentUpdateImage, arg.ID, arg.ImageID)
-	var i Deployment
-	err := row.Scan(
-		&i.ID,
-		&i.ProjectID,
-		&i.ProjectEnvironmentID,
 		&i.Status,
 		&i.CommitHash,
+		&i.ProjectID,
+		&i.EnvironmentID,
 		&i.ImageID,
 		&i.OrganisationID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.DeploymentUrl,
-		&i.Nanoid,
-		&i.RolloutStrategy,
-		&i.MinInstances,
-		&i.ActivatedAt,
-		&i.DeactivatedAt,
 	)
 	return &i, err
 }
 
-const deploymentUpdateStatus = `-- name: DeploymentUpdateStatus :one
-UPDATE deployments 
-SET status = $2, activated_at = $3, updated_at = NOW() 
+const deploymentsGetActiveRoutes = `-- name: DeploymentsGetActiveRoutes :many
+SELECT 
+    d.id as deployment_id,
+    d.deployment_id as deployment_name,
+    d.status,
+    dom.name as domain,
+    i.ipv6_address as ip_address,
+    i.default_port,
+    CASE 
+        WHEN i.state = 'running' THEN true 
+        ELSE false 
+    END as healthy
+FROM deployments d
+JOIN domains dom ON dom.deployment_id = d.id
+JOIN deployment_instances di ON di.deployment_id = d.id
+JOIN instances i ON i.id = di.instance_id
+WHERE d.status = 'active'
+    AND dom.verified_at IS NOT NULL
+    AND i.state IN ('running', 'starting')
+    AND dom.deleted_at IS NULL
+    AND d.deleted_at IS NULL
+    AND i.deleted_at IS NULL
+`
+
+type DeploymentsGetActiveRoutesRow struct {
+	DeploymentID   pgtype.UUID `json:"deployment_id"`
+	DeploymentName string      `json:"deployment_name"`
+	Status         string      `json:"status"`
+	Domain         string      `json:"domain"`
+	IpAddress      string      `json:"ip_address"`
+	DefaultPort    int32       `json:"default_port"`
+	Healthy        bool        `json:"healthy"`
+}
+
+// Get active deployment routes for edge proxy
+func (q *Queries) DeploymentsGetActiveRoutes(ctx context.Context) ([]*DeploymentsGetActiveRoutesRow, error) {
+	rows, err := q.db.Query(ctx, deploymentsGetActiveRoutes)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*DeploymentsGetActiveRoutesRow
+	for rows.Next() {
+		var i DeploymentsGetActiveRoutesRow
+		if err := rows.Scan(
+			&i.DeploymentID,
+			&i.DeploymentName,
+			&i.Status,
+			&i.Domain,
+			&i.IpAddress,
+			&i.DefaultPort,
+			&i.Healthy,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const deploymentsGetById = `-- name: DeploymentsGetById :one
+SELECT 
+    id,
+    deployment_id,
+    status,
+    commit_hash,
+    project_id,
+    environment_id,
+    image_id,
+    organisation_id,
+    created_at,
+    updated_at
+FROM deployments 
 WHERE id = $1 
-RETURNING id, project_id, project_environment_id, status, commit_hash, image_id, organisation_id, created_at, updated_at, deleted_at, deployment_url, nanoid, rollout_strategy, min_instances, activated_at, deactivated_at
+    AND deleted_at IS NULL
 `
 
-type DeploymentUpdateStatusParams struct {
-	ID          pgtype.UUID        `json:"id"`
-	Status      string             `json:"status"`
-	ActivatedAt pgtype.Timestamptz `json:"activated_at"`
+type DeploymentsGetByIdRow struct {
+	ID             pgtype.UUID        `json:"id"`
+	DeploymentID   string             `json:"deployment_id"`
+	Status         string             `json:"status"`
+	CommitHash     string             `json:"commit_hash"`
+	ProjectID      pgtype.UUID        `json:"project_id"`
+	EnvironmentID  pgtype.UUID        `json:"environment_id"`
+	ImageID        pgtype.UUID        `json:"image_id"`
+	OrganisationID pgtype.UUID        `json:"organisation_id"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
 
-func (q *Queries) DeploymentUpdateStatus(ctx context.Context, arg *DeploymentUpdateStatusParams) (*Deployment, error) {
-	row := q.db.QueryRow(ctx, deploymentUpdateStatus, arg.ID, arg.Status, arg.ActivatedAt)
-	var i Deployment
+// Get deployment by ID
+func (q *Queries) DeploymentsGetById(ctx context.Context, id pgtype.UUID) (*DeploymentsGetByIdRow, error) {
+	row := q.db.QueryRow(ctx, deploymentsGetById, id)
+	var i DeploymentsGetByIdRow
 	err := row.Scan(
 		&i.ID,
-		&i.ProjectID,
-		&i.ProjectEnvironmentID,
+		&i.DeploymentID,
 		&i.Status,
 		&i.CommitHash,
+		&i.ProjectID,
+		&i.EnvironmentID,
 		&i.ImageID,
 		&i.OrganisationID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.DeploymentUrl,
-		&i.Nanoid,
-		&i.RolloutStrategy,
-		&i.MinInstances,
-		&i.ActivatedAt,
-		&i.DeactivatedAt,
+	)
+	return &i, err
+}
+
+const deploymentsGetByProject = `-- name: DeploymentsGetByProject :many
+SELECT 
+    id,
+    deployment_id,
+    status,
+    commit_hash,
+    project_id,
+    environment_id,
+    image_id,
+    organisation_id,
+    created_at,
+    updated_at
+FROM deployments 
+WHERE project_id = $1 
+    AND deleted_at IS NULL
+ORDER BY created_at DESC
+`
+
+type DeploymentsGetByProjectRow struct {
+	ID             pgtype.UUID        `json:"id"`
+	DeploymentID   string             `json:"deployment_id"`
+	Status         string             `json:"status"`
+	CommitHash     string             `json:"commit_hash"`
+	ProjectID      pgtype.UUID        `json:"project_id"`
+	EnvironmentID  pgtype.UUID        `json:"environment_id"`
+	ImageID        pgtype.UUID        `json:"image_id"`
+	OrganisationID pgtype.UUID        `json:"organisation_id"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Get deployments by project ID
+func (q *Queries) DeploymentsGetByProject(ctx context.Context, projectID pgtype.UUID) ([]*DeploymentsGetByProjectRow, error) {
+	rows, err := q.db.Query(ctx, deploymentsGetByProject, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*DeploymentsGetByProjectRow
+	for rows.Next() {
+		var i DeploymentsGetByProjectRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DeploymentID,
+			&i.Status,
+			&i.CommitHash,
+			&i.ProjectID,
+			&i.EnvironmentID,
+			&i.ImageID,
+			&i.OrganisationID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const deploymentsGetPendingWithoutBuilds = `-- name: DeploymentsGetPendingWithoutBuilds :many
+SELECT 
+    d.id,
+    d.deployment_id,
+    d.status,
+    d.commit_hash,
+    d.project_id,
+    d.environment_id,
+    d.image_id,
+    d.organisation_id,
+    d.created_at,
+    d.updated_at,
+    p.github_repository,
+    p.default_branch
+FROM deployments d
+JOIN projects p ON p.id = d.project_id
+LEFT JOIN image_builds ib ON ib.deployment_id = d.id
+WHERE d.status = 'pending' 
+    AND d.deleted_at IS NULL
+    AND p.deleted_at IS NULL
+    AND ib.id IS NULL
+ORDER BY d.created_at ASC
+`
+
+type DeploymentsGetPendingWithoutBuildsRow struct {
+	ID               pgtype.UUID        `json:"id"`
+	DeploymentID     string             `json:"deployment_id"`
+	Status           string             `json:"status"`
+	CommitHash       string             `json:"commit_hash"`
+	ProjectID        pgtype.UUID        `json:"project_id"`
+	EnvironmentID    pgtype.UUID        `json:"environment_id"`
+	ImageID          pgtype.UUID        `json:"image_id"`
+	OrganisationID   pgtype.UUID        `json:"organisation_id"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	GithubRepository string             `json:"github_repository"`
+	DefaultBranch    string             `json:"default_branch"`
+}
+
+// Get pending deployments that don't have any image builds yet
+func (q *Queries) DeploymentsGetPendingWithoutBuilds(ctx context.Context) ([]*DeploymentsGetPendingWithoutBuildsRow, error) {
+	rows, err := q.db.Query(ctx, deploymentsGetPendingWithoutBuilds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*DeploymentsGetPendingWithoutBuildsRow
+	for rows.Next() {
+		var i DeploymentsGetPendingWithoutBuildsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.DeploymentID,
+			&i.Status,
+			&i.CommitHash,
+			&i.ProjectID,
+			&i.EnvironmentID,
+			&i.ImageID,
+			&i.OrganisationID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.GithubRepository,
+			&i.DefaultBranch,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const deploymentsUpdateStatus = `-- name: DeploymentsUpdateStatus :one
+UPDATE deployments 
+SET status = $2, 
+    updated_at = now()
+WHERE id = $1
+RETURNING 
+    id,
+    deployment_id,
+    status,
+    commit_hash,
+    project_id,
+    environment_id,
+    image_id,
+    organisation_id,
+    created_at,
+    updated_at
+`
+
+type DeploymentsUpdateStatusParams struct {
+	ID     pgtype.UUID `json:"id"`
+	Status string      `json:"status"`
+}
+
+type DeploymentsUpdateStatusRow struct {
+	ID             pgtype.UUID        `json:"id"`
+	DeploymentID   string             `json:"deployment_id"`
+	Status         string             `json:"status"`
+	CommitHash     string             `json:"commit_hash"`
+	ProjectID      pgtype.UUID        `json:"project_id"`
+	EnvironmentID  pgtype.UUID        `json:"environment_id"`
+	ImageID        pgtype.UUID        `json:"image_id"`
+	OrganisationID pgtype.UUID        `json:"organisation_id"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Update deployment status
+func (q *Queries) DeploymentsUpdateStatus(ctx context.Context, arg *DeploymentsUpdateStatusParams) (*DeploymentsUpdateStatusRow, error) {
+	row := q.db.QueryRow(ctx, deploymentsUpdateStatus, arg.ID, arg.Status)
+	var i DeploymentsUpdateStatusRow
+	err := row.Scan(
+		&i.ID,
+		&i.DeploymentID,
+		&i.Status,
+		&i.CommitHash,
+		&i.ProjectID,
+		&i.EnvironmentID,
+		&i.ImageID,
+		&i.OrganisationID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
 	)
 	return &i, err
 }

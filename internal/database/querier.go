@@ -11,177 +11,98 @@ import (
 )
 
 type Querier interface {
-	BuildQueueComplete(ctx context.Context, arg *BuildQueueCompleteParams) (*BuildQueue, error)
-	BuildQueueCreate(ctx context.Context, arg *BuildQueueCreateParams) (*BuildQueue, error)
-	BuildQueueDelete(ctx context.Context, id pgtype.UUID) error
-	BuildQueueDequeuePending(ctx context.Context) (*BuildQueue, error)
-	BuildQueueFail(ctx context.Context, arg *BuildQueueFailParams) (*BuildQueue, error)
-	BuildQueueFindById(ctx context.Context, id pgtype.UUID) (*BuildQueue, error)
-	BuildQueueFindByImage(ctx context.Context, imageID pgtype.UUID) (*BuildQueue, error)
-	BuildQueueFindByProject(ctx context.Context, projectID pgtype.UUID) ([]*BuildQueue, error)
-	BuildQueueFindPending(ctx context.Context) ([]*BuildQueue, error)
-	BuildQueueUpdateStatus(ctx context.Context, arg *BuildQueueUpdateStatusParams) (*BuildQueue, error)
-	DeploymentCreate(ctx context.Context, arg *DeploymentCreateParams) (*Deployment, error)
-	DeploymentDelete(ctx context.Context, id pgtype.UUID) error
-	DeploymentFind(ctx context.Context) ([]*Deployment, error)
-	DeploymentFindByEnvironment(ctx context.Context, projectEnvironmentID pgtype.UUID) ([]*Deployment, error)
-	DeploymentFindById(ctx context.Context, id pgtype.UUID) (*Deployment, error)
-	DeploymentFindByImage(ctx context.Context, imageID pgtype.UUID) ([]*Deployment, error)
-	DeploymentFindByNanoID(ctx context.Context, nanoid pgtype.Text) (*Deployment, error)
-	DeploymentFindByOrganisation(ctx context.Context, organisationID pgtype.UUID) ([]*Deployment, error)
-	DeploymentFindByProject(ctx context.Context, projectID pgtype.UUID) ([]*Deployment, error)
-	DeploymentFindByStatus(ctx context.Context, status string) ([]*Deployment, error)
-	DeploymentInstanceCreate(ctx context.Context, arg *DeploymentInstanceCreateParams) (*DeploymentInstance, error)
-	DeploymentInstanceDelete(ctx context.Context, id pgtype.UUID) error
-	DeploymentInstanceFindByDeployment(ctx context.Context, deploymentID pgtype.UUID) ([]*DeploymentInstance, error)
-	DeploymentInstanceFindById(ctx context.Context, id pgtype.UUID) (*DeploymentInstance, error)
-	DeploymentInstanceFindByInstance(ctx context.Context, instanceID pgtype.UUID) ([]*DeploymentInstance, error)
-	DeploymentList(ctx context.Context) ([]*Deployment, error)
-	DeploymentUpdateImage(ctx context.Context, arg *DeploymentUpdateImageParams) (*Deployment, error)
-	DeploymentUpdateStatus(ctx context.Context, arg *DeploymentUpdateStatusParams) (*Deployment, error)
-	DomainCreate(ctx context.Context, arg *DomainCreateParams) (*Domain, error)
-	DomainDelete(ctx context.Context, id pgtype.UUID) error
-	DomainFind(ctx context.Context) ([]*Domain, error)
-	DomainFindById(ctx context.Context, id pgtype.UUID) (*Domain, error)
-	DomainFindByName(ctx context.Context, name string) (*Domain, error)
-	DomainFindByOrganisation(ctx context.Context, organisationID pgtype.UUID) ([]*Domain, error)
-	DomainFindUnverified(ctx context.Context) ([]*Domain, error)
-	DomainRecordCreate(ctx context.Context, arg *DomainRecordCreateParams) (*DomainRecord, error)
-	DomainRecordDelete(ctx context.Context, id pgtype.UUID) error
-	DomainRecordFindByDomain(ctx context.Context, domainID pgtype.UUID) ([]*DomainRecord, error)
-	DomainRecordFindById(ctx context.Context, id pgtype.UUID) (*DomainRecord, error)
-	DomainRecordFindByType(ctx context.Context, arg *DomainRecordFindByTypeParams) ([]*DomainRecord, error)
-	DomainRecordUpdate(ctx context.Context, arg *DomainRecordUpdateParams) (*DomainRecord, error)
-	DomainUpdateToken(ctx context.Context, arg *DomainUpdateTokenParams) (*Domain, error)
-	DomainVerify(ctx context.Context, id pgtype.UUID) (*Domain, error)
-	GithubInstallationCreate(ctx context.Context, arg *GithubInstallationCreateParams) (*GithubInstallation, error)
-	GithubInstallationDelete(ctx context.Context, id int32) error
-	GithubInstallationFind(ctx context.Context) ([]*GithubInstallation, error)
-	GithubInstallationFindById(ctx context.Context, id int32) (*GithubInstallation, error)
-	GithubInstallationFindByInstallationId(ctx context.Context, githubInstallationID int32) (*GithubInstallation, error)
-	GithubInstallationFindByOrganisation(ctx context.Context, organisationID pgtype.UUID) ([]*GithubInstallation, error)
-	GithubInstallationFindByUser(ctx context.Context, userID pgtype.UUID) ([]*GithubInstallation, error)
-	GithubInstallationUpdate(ctx context.Context, arg *GithubInstallationUpdateParams) (*GithubInstallation, error)
-	IPv6AllocationAllocate(ctx context.Context, arg *IPv6AllocationAllocateParams) (*Ipv6Allocation, error)
-	IPv6AllocationCreate(ctx context.Context, arg *IPv6AllocationCreateParams) (*Ipv6Allocation, error)
-	IPv6AllocationFindAvailable(ctx context.Context, arg *IPv6AllocationFindAvailableParams) ([]*Ipv6Allocation, error)
-	IPv6AllocationFindByAddress(ctx context.Context, ipv6Address string) (*Ipv6Allocation, error)
-	IPv6AllocationFindById(ctx context.Context, id pgtype.UUID) (*Ipv6Allocation, error)
-	IPv6AllocationFindByInstance(ctx context.Context, instanceID pgtype.UUID) (*Ipv6Allocation, error)
-	IPv6AllocationFindByNode(ctx context.Context, nodeID pgtype.UUID) ([]*Ipv6Allocation, error)
-	IPv6AllocationFindByRegion(ctx context.Context, regionID pgtype.UUID) ([]*Ipv6Allocation, error)
-	IPv6AllocationRelease(ctx context.Context, id pgtype.UUID) (*Ipv6Allocation, error)
-	IPv6AllocationReserve(ctx context.Context, id pgtype.UUID) (*Ipv6Allocation, error)
-	ImageCreate(ctx context.Context, arg *ImageCreateParams) (*Image, error)
-	ImageDelete(ctx context.Context, id pgtype.UUID) error
-	ImageDequeuePending(ctx context.Context) (*Image, error)
-	ImageFind(ctx context.Context) ([]*Image, error)
-	ImageFindById(ctx context.Context, id pgtype.UUID) (*Image, error)
-	ImageFindByName(ctx context.Context, name string) (*Image, error)
-	ImageFindByStatus(ctx context.Context, status string) ([]*Image, error)
-	ImageUpdateHash(ctx context.Context, arg *ImageUpdateHashParams) (*Image, error)
-	ImageUpdateStatus(ctx context.Context, arg *ImageUpdateStatusParams) (*Image, error)
-	InstanceCreate(ctx context.Context, arg *InstanceCreateParams) (*Instance, error)
-	InstanceDelete(ctx context.Context, id pgtype.UUID) error
-	InstanceFind(ctx context.Context) ([]*Instance, error)
-	InstanceFindByDeployment(ctx context.Context, deploymentID pgtype.UUID) ([]*Instance, error)
-	InstanceFindById(ctx context.Context, id pgtype.UUID) (*Instance, error)
-	InstanceFindByImage(ctx context.Context, imageID pgtype.UUID) ([]*Instance, error)
-	InstanceFindByNode(ctx context.Context, nodeID pgtype.UUID) ([]*Instance, error)
-	InstanceFindByRegion(ctx context.Context, regionID pgtype.UUID) ([]*Instance, error)
-	InstanceFindByState(ctx context.Context, state string) ([]*Instance, error)
-	InstanceUpdateNode(ctx context.Context, arg *InstanceUpdateNodeParams) (*Instance, error)
-	InstanceUpdateState(ctx context.Context, arg *InstanceUpdateStateParams) (*Instance, error)
-	NodeCreate(ctx context.Context, arg *NodeCreateParams) (*Node, error)
-	NodeDelete(ctx context.Context, id pgtype.UUID) error
-	NodeFind(ctx context.Context) ([]*Node, error)
-	NodeFindByHostname(ctx context.Context, hostname string) (*Node, error)
-	NodeFindById(ctx context.Context, id pgtype.UUID) (*Node, error)
-	NodeFindByRegion(ctx context.Context, regionID pgtype.UUID) ([]*Node, error)
-	NodeFindByState(ctx context.Context, state string) ([]*Node, error)
-	NodeUpdate(ctx context.Context, arg *NodeUpdateParams) (*Node, error)
-	NodeUpdateResources(ctx context.Context, arg *NodeUpdateResourcesParams) (*Node, error)
-	NodeUpdateState(ctx context.Context, arg *NodeUpdateStateParams) (*Node, error)
-	OrganisationCreate(ctx context.Context, arg *OrganisationCreateParams) (*Organisation, error)
-	OrganisationDelete(ctx context.Context, id pgtype.UUID) error
-	OrganisationFind(ctx context.Context) ([]*Organisation, error)
-	OrganisationFindById(ctx context.Context, id pgtype.UUID) (*Organisation, error)
-	OrganisationFindBySlug(ctx context.Context, slug string) (*Organisation, error)
-	OrganisationMemberCreate(ctx context.Context, arg *OrganisationMemberCreateParams) (*OrganisationMember, error)
-	OrganisationMemberDelete(ctx context.Context, id pgtype.UUID) error
-	OrganisationMemberFindById(ctx context.Context, id pgtype.UUID) (*OrganisationMember, error)
-	OrganisationMemberFindByOrg(ctx context.Context, organisationID pgtype.UUID) ([]*OrganisationMember, error)
-	OrganisationMemberFindByUser(ctx context.Context, userID pgtype.UUID) ([]*OrganisationMember, error)
-	OrganisationMemberFindByUserAndOrg(ctx context.Context, arg *OrganisationMemberFindByUserAndOrgParams) (*OrganisationMember, error)
-	OrganisationUpdate(ctx context.Context, arg *OrganisationUpdateParams) (*Organisation, error)
-	ProjectCreate(ctx context.Context, arg *ProjectCreateParams) (*Project, error)
-	ProjectDelete(ctx context.Context, id pgtype.UUID) error
-	ProjectDomainCreate(ctx context.Context, arg *ProjectDomainCreateParams) (*ProjectDomain, error)
-	ProjectDomainDelete(ctx context.Context, id pgtype.UUID) error
-	ProjectDomainFindByDomain(ctx context.Context, domainID pgtype.UUID) ([]*ProjectDomain, error)
-	ProjectDomainFindById(ctx context.Context, id pgtype.UUID) (*ProjectDomain, error)
-	ProjectDomainFindByProject(ctx context.Context, projectID pgtype.UUID) ([]*ProjectDomain, error)
-	ProjectEnvironmentCreate(ctx context.Context, arg *ProjectEnvironmentCreateParams) (*ProjectEnvironment, error)
-	ProjectEnvironmentDelete(ctx context.Context, id pgtype.UUID) error
-	ProjectEnvironmentFindById(ctx context.Context, id pgtype.UUID) (*ProjectEnvironment, error)
-	ProjectEnvironmentFindByName(ctx context.Context, arg *ProjectEnvironmentFindByNameParams) (*ProjectEnvironment, error)
-	ProjectEnvironmentFindByProject(ctx context.Context, projectID pgtype.UUID) ([]*ProjectEnvironment, error)
-	ProjectEnvironmentUpdate(ctx context.Context, arg *ProjectEnvironmentUpdateParams) (*ProjectEnvironment, error)
-	ProjectFind(ctx context.Context) ([]*Project, error)
-	ProjectFindByGitHubRepo(ctx context.Context, arg *ProjectFindByGitHubRepoParams) ([]*Project, error)
-	ProjectFindById(ctx context.Context, id pgtype.UUID) (*Project, error)
-	ProjectFindByOrganisation(ctx context.Context, organisationID pgtype.UUID) ([]*Project, error)
-	ProjectFindBySlug(ctx context.Context, slug string) (*Project, error)
-	ProjectSecretCreate(ctx context.Context, arg *ProjectSecretCreateParams) (*ProjectSecret, error)
-	ProjectSecretDelete(ctx context.Context, id pgtype.UUID) error
-	ProjectSecretFindById(ctx context.Context, id pgtype.UUID) (*ProjectSecret, error)
-	ProjectSecretFindByName(ctx context.Context, arg *ProjectSecretFindByNameParams) (*ProjectSecret, error)
-	ProjectSecretFindByProject(ctx context.Context, projectID pgtype.UUID) ([]*ProjectSecret, error)
-	ProjectSecretUpdate(ctx context.Context, arg *ProjectSecretUpdateParams) (*ProjectSecret, error)
-	ProjectUpdate(ctx context.Context, arg *ProjectUpdateParams) (*Project, error)
-	RegionCreate(ctx context.Context, arg *RegionCreateParams) (*Region, error)
-	RegionDelete(ctx context.Context, id pgtype.UUID) error
-	RegionFind(ctx context.Context) ([]*Region, error)
-	RegionFindByCode(ctx context.Context, code string) (*Region, error)
-	RegionFindByCountry(ctx context.Context, country string) ([]*Region, error)
-	RegionFindById(ctx context.Context, id pgtype.UUID) (*Region, error)
-	RegionUpdate(ctx context.Context, arg *RegionUpdateParams) (*Region, error)
-	// Remove entries older than 24 hours
-	RoutingCacheCleanup(ctx context.Context) error
-	RoutingCacheDeleteByDeployment(ctx context.Context, deploymentID pgtype.UUID) error
-	RoutingCacheDeleteByDomain(ctx context.Context, domain string) error
-	RoutingCacheFindByDeployment(ctx context.Context, deploymentID pgtype.UUID) ([]*RoutingCache, error)
-	RoutingCacheFindByDomain(ctx context.Context, domain string) (*RoutingCache, error)
-	RoutingCacheUpsert(ctx context.Context, arg *RoutingCacheUpsertParams) (*RoutingCache, error)
-	SessionCreate(ctx context.Context, arg *SessionCreateParams) (*Session, error)
-	SessionDelete(ctx context.Context, id pgtype.UUID) error
-	SessionDeleteByToken(ctx context.Context, token string) error
-	SessionDeleteExpired(ctx context.Context) error
-	SessionFindActive(ctx context.Context) ([]*Session, error)
-	SessionFindById(ctx context.Context, id pgtype.UUID) (*Session, error)
-	SessionFindByToken(ctx context.Context, token string) (*Session, error)
-	SessionFindByUser(ctx context.Context, userID pgtype.UUID) ([]*Session, error)
-	SessionFindByUserAndNotExpired(ctx context.Context, userID pgtype.UUID) (*Session, error)
-	SessionUpdate(ctx context.Context, arg *SessionUpdateParams) (*Session, error)
-	TlsCertificateCreate(ctx context.Context, arg *TlsCertificateCreateParams) (*TlsCertificate, error)
-	TlsCertificateDelete(ctx context.Context, domain string) error
-	TlsCertificateFindByDomain(ctx context.Context, domain string) (*TlsCertificate, error)
-	TlsCertificateList(ctx context.Context) ([]*TlsCertificate, error)
-	TlsCertificateUpdate(ctx context.Context, arg *TlsCertificateUpdateParams) (*TlsCertificate, error)
-	UserCreate(ctx context.Context, arg *UserCreateParams) (*User, error)
-	UserDelete(ctx context.Context, id pgtype.UUID) error
-	UserFind(ctx context.Context) ([]*User, error)
-	UserFindByEmail(ctx context.Context, email string) (*User, error)
-	UserFindByGithubId(ctx context.Context, githubUserID pgtype.Int4) (*User, error)
-	UserFindById(ctx context.Context, id pgtype.UUID) (*User, error)
-	UserFindByUsername(ctx context.Context, username string) (*User, error)
-	UserUpdate(ctx context.Context, arg *UserUpdateParams) (*User, error)
-	WaitlistCreate(ctx context.Context, email string) (*Waitlist, error)
-	WaitlistDelete(ctx context.Context, id pgtype.UUID) error
-	WaitlistDeleteByEmail(ctx context.Context, email string) error
-	WaitlistFind(ctx context.Context) ([]*Waitlist, error)
-	WaitlistFindByEmail(ctx context.Context, email string) (*Waitlist, error)
-	WaitlistFindById(ctx context.Context, id pgtype.UUID) (*Waitlist, error)
+	// Create a new deployment
+	DeploymentsCreate(ctx context.Context, arg *DeploymentsCreateParams) (*DeploymentsCreateRow, error)
+	// Get active deployment routes for edge proxy
+	DeploymentsGetActiveRoutes(ctx context.Context) ([]*DeploymentsGetActiveRoutesRow, error)
+	// Get deployment by ID
+	DeploymentsGetById(ctx context.Context, id pgtype.UUID) (*DeploymentsGetByIdRow, error)
+	// Get deployments by project ID
+	DeploymentsGetByProject(ctx context.Context, projectID pgtype.UUID) ([]*DeploymentsGetByProjectRow, error)
+	// Get pending deployments that don't have any image builds yet
+	DeploymentsGetPendingWithoutBuilds(ctx context.Context) ([]*DeploymentsGetPendingWithoutBuildsRow, error)
+	// Update deployment status
+	DeploymentsUpdateStatus(ctx context.Context, arg *DeploymentsUpdateStatusParams) (*DeploymentsUpdateStatusRow, error)
+	// Create a new domain
+	DomainsCreate(ctx context.Context, arg *DomainsCreateParams) (*DomainsCreateRow, error)
+	// Get domains by deployment
+	DomainsGetByDeployment(ctx context.Context, deploymentID pgtype.UUID) ([]*DomainsGetByDeploymentRow, error)
+	// Get domain by ID
+	DomainsGetById(ctx context.Context, id pgtype.UUID) (*DomainsGetByIdRow, error)
+	// Get domain by name
+	DomainsGetByName(ctx context.Context, name string) (*DomainsGetByNameRow, error)
+	// Mark domain as verified
+	DomainsVerify(ctx context.Context, id pgtype.UUID) (*DomainsVerifyRow, error)
+	// Mark an image build as completed
+	ImageBuildsComplete(ctx context.Context, id pgtype.UUID) (*ImageBuildsCompleteRow, error)
+	// Create a new image build
+	ImageBuildsCreate(ctx context.Context, arg *ImageBuildsCreateParams) (*ImageBuildsCreateRow, error)
+	// Get the oldest pending image build and mark it as building
+	ImageBuildsDequeuePending(ctx context.Context) (*ImageBuildsDequeuePendingRow, error)
+	// Mark an image build as failed
+	ImageBuildsFail(ctx context.Context, id pgtype.UUID) (*ImageBuildsFailRow, error)
+	// Get image builds for a deployment
+	ImageBuildsGetByDeployment(ctx context.Context, deploymentID pgtype.UUID) ([]*ImageBuildsGetByDeploymentRow, error)
+	// Create a new image
+	ImagesCreate(ctx context.Context, arg *ImagesCreateParams) (*ImagesCreateRow, error)
+	// Get all images
+	ImagesGetAll(ctx context.Context) ([]*ImagesGetAllRow, error)
+	// Get image by hash
+	ImagesGetByHash(ctx context.Context, imageHash string) (*ImagesGetByHashRow, error)
+	// Get image by ID
+	ImagesGetById(ctx context.Context, id pgtype.UUID) (*ImagesGetByIdRow, error)
+	// Update image status
+	ImagesUpdateStatus(ctx context.Context, arg *ImagesUpdateStatusParams) (*ImagesUpdateStatusRow, error)
+	// Create a new instance
+	InstancesCreate(ctx context.Context, arg *InstancesCreateParams) (*InstancesCreateRow, error)
+	// Soft delete an instance
+	InstancesDelete(ctx context.Context, id pgtype.UUID) error
+	// Find instances by node ID for node agent
+	InstancesFindByNode(ctx context.Context, nodeID pgtype.UUID) ([]*InstancesFindByNodeRow, error)
+	// Get instances for a deployment
+	InstancesGetByDeployment(ctx context.Context, deploymentID pgtype.UUID) ([]*InstancesGetByDeploymentRow, error)
+	// Get instance by ID
+	InstancesGetById(ctx context.Context, id pgtype.UUID) (*InstancesGetByIdRow, error)
+	// Update instance state
+	InstancesUpdateState(ctx context.Context, arg *InstancesUpdateStateParams) (*InstancesUpdateStateRow, error)
+	// Create a new node
+	NodesCreate(ctx context.Context, arg *NodesCreateParams) (*NodesCreateRow, error)
+	// Get all nodes
+	NodesGetAll(ctx context.Context) ([]*NodesGetAllRow, error)
+	// Get node by hostname
+	NodesGetByHostname(ctx context.Context, hostname string) (*NodesGetByHostnameRow, error)
+	// Get node by ID
+	NodesGetById(ctx context.Context, id pgtype.UUID) (*NodesGetByIdRow, error)
+	// Get nodes by region
+	NodesGetByRegion(ctx context.Context, regionID pgtype.UUID) ([]*NodesGetByRegionRow, error)
+	// Update node state
+	NodesUpdateState(ctx context.Context, arg *NodesUpdateStateParams) (*NodesUpdateStateRow, error)
+	// Create a new organisation
+	OrganisationsCreate(ctx context.Context, arg *OrganisationsCreateParams) (*OrganisationsCreateRow, error)
+	// Get all organisations
+	OrganisationsGetAll(ctx context.Context) ([]*OrganisationsGetAllRow, error)
+	// Get organisation by ID
+	OrganisationsGetById(ctx context.Context, id pgtype.UUID) (*OrganisationsGetByIdRow, error)
+	// Get organisation by slug
+	OrganisationsGetBySlug(ctx context.Context, slug string) (*OrganisationsGetBySlugRow, error)
+	// Create a new project
+	ProjectsCreate(ctx context.Context, arg *ProjectsCreateParams) (*ProjectsCreateRow, error)
+	// Get project by ID
+	ProjectsGetById(ctx context.Context, id pgtype.UUID) (*ProjectsGetByIdRow, error)
+	// Get projects by organisation
+	ProjectsGetByOrganisation(ctx context.Context, organisationID pgtype.UUID) ([]*ProjectsGetByOrganisationRow, error)
+	// Get project by slug and organisation
+	ProjectsGetBySlugAndOrg(ctx context.Context, arg *ProjectsGetBySlugAndOrgParams) (*ProjectsGetBySlugAndOrgRow, error)
+	// Update project's latest deployment
+	ProjectsUpdateLatestDeployment(ctx context.Context, arg *ProjectsUpdateLatestDeploymentParams) (*ProjectsUpdateLatestDeploymentRow, error)
+	// Create a new region
+	RegionsCreate(ctx context.Context, arg *RegionsCreateParams) (*RegionsCreateRow, error)
+	// Get all regions
+	RegionsGetAll(ctx context.Context) ([]*RegionsGetAllRow, error)
+	// Get region by code
+	RegionsGetByCode(ctx context.Context, code string) (*RegionsGetByCodeRow, error)
+	// Get region by ID
+	RegionsGetById(ctx context.Context, id pgtype.UUID) (*RegionsGetByIdRow, error)
 }
 
 var _ Querier = (*Queries)(nil)
