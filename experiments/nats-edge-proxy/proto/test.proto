@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package fhr.zeitfun;
+
+option go_package="zeitfun/proto";
+
+message HttpRoute {
+  string fqdn = 1;
+  string endpoint = 2;
+}
+
+message GetHttpRoutesRequest {
+  string nodeId = 1;
+}
+
+message GetHttpRoutesResponse {
+  repeated HttpRoute httpRoutes = 1;
+}
+
+message UpsertHttpRouteRequest {
+  HttpRoute httpRoute = 1;
+}
+
+message UpsertHttpRouteResponse {}
+
+message StreamChangesRequest {}
+message Change{
+  string table = 1;
+  string id = 2;
+}
+
+service EdgeProxyAPI {
+  rpc GetHttpRoutes(GetHttpRoutesRequest) returns (GetHttpRoutesResponse) {}
+  rpc UpsertHttpRoute(UpsertHttpRouteRequest) returns (UpsertHttpRouteResponse) {}
+  rpc StreamChanges(StreamChangesRequest) returns (stream Change) {}
+}

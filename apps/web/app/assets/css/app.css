@@ -9,19 +9,25 @@
 	 * Neutral Colors
 	 */
 
-  /* Surface colors */
-  --background-color-neutral: light-dark(var(--color-white), var(--color-neutral-950));
-  --background-color-neutral-hover: light-dark(var(--color-neutral-100), var(--color-neutral-900));
-  --background-color-neutral-weak: light-dark(var(--color-neutral-50), var(--color-neutral-950));
-  --background-color-neutral-subtle: light-dark(var(--color-neutral-100), var(--color-neutral-900));
-  --background-color-neutral-strong: light-dark(var(--color-neutral-200), var(--color-neutral-800));
+  /* Background colors */
+  /* bg-neutral-[subtle, strong, inverse] */
+  --background-color-neutral: light-dark(#fcfcfc, var(--color-neutral-950));
+  --background-color-neutral-subtle: light-dark(#f8f8f8, var(--color-neutral-900));
+  --background-color-neutral-strong: light-dark(#f3f3f3, var(--color-neutral-800));
   --background-color-neutral-inverse: light-dark(var(--color-neutral-900), var(--color-neutral-200));
-  --background-color-neutral-inverse-hover: light-dark(var(--color-neutral-700), var(--color-neutral-200));
+
+  /* Surface colors */
+  /* bg-surface-[subtle, strong] */
+  --background-color-surface: light-dark(var(--color-white), var(--color-neutral-700));
+  --background-color-surface-weak: light-dark(var(--color-neutral-50), var(--color-neutral-800));
+  --background-color-surface-subtle: light-dark(var(--color-neutral-100), var(--color-neutral-900));
+  --background-color-surface-strong: light-dark(#ececec, var(--color-neutral-950));
 
   /* Content colors */
-  --text-color-neutral: light-dark(var(--color-neutral-800), var(--color-neutral-200));
-  --text-color-neutral-subtle: light-dark(var(--color-neutral-500), var(--color-neutral-400));
+  --text-color-neutral: light-dark(var(--color-neutral-700), var(--color-neutral-200));
   --text-color-neutral-weak: light-dark(var(--color-neutral-400), var(--color-neutral-600));
+  --text-color-neutral-subtle: light-dark(var(--color-neutral-500), var(--color-neutral-400));
+  --text-color-neutral-strong: light-dark(var(--color-neutral-900), var(--color-white));
   --text-color-neutral-inverse: light-dark(var(--color-white), var(--color-black));
   --text-color-neutral-inverse-subtle: light-dark(var(--color-neutral-300), var(--color-neutral-700));
 
@@ -150,9 +156,6 @@
   --text-label: var(--text-sm);
   --text-label--font-weight: 500;
 
-  --animate-overlayShow: overlayShow 150ms cubic-bezier(0.16, 1, 0.3, 1);
-  --animate-contentShow: contentShow 150ms cubic-bezier(0.16, 1, 0.3, 1);
-
   /**
    * Shadows
    */
@@ -169,6 +172,12 @@
 
   --shadow-2xl:
     0 1px 1px 0 rgba(0, 0, 0, 0.02), 0 8px 16px -4px rgba(0, 0, 0, 0.04), 0 24px 32px -8px rgba(0, 0, 0, 0.06);
+
+  /* Animations */
+  --animate-overlayShow: overlayShow 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-contentShow: contentShow 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-fade-in-from-top: fade-in-from-top 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-fade-out: fade-out 250ms cubic-bezier(0.16, 1, 0.3, 1);
 
   @keyframes overlayShow {
     from {
@@ -189,6 +198,28 @@
       scale: 1;
     }
   }
+
+  @keyframes fade-in-from-top {
+    from {
+      opacity: 0;
+      transform: scale(0.96) translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+  }
+
+  @keyframes fade-out {
+    from {
+      opacity: 1;
+      scale: 1;
+    }
+    to {
+      opacity: 0;
+      scale: 0.98;
+    }
+  }
 }
 
 /* dark mode */
@@ -205,6 +236,35 @@ body,
 #__nuxt {
   min-height: 100%;
 }
+
+/* .layout-forward-enter-active,
+.layout-forward-leave-active,
+.layout-back-enter-active,
+.layout-back-leave-active {
+  transition: all 150ms cubic-bezier(0, 0.84, 0.35, 1);
+  transform: scale(1);
+  opacity: 1;
+}
+
+.layout-forward-enter-from {
+  opacity: 0;
+  transform: scale(1.02);
+}
+
+.layout-forward-leave-to {
+  opacity: 0;
+  transform: scale(0.98);
+}
+
+.layout-back-enter-from {
+  opacity: 0;
+  transform: scale(0.98);
+}
+
+.layout-back-leave-to {
+  opacity: 0;
+  transform: scale(1.02);
+} */
 
 /* width */
 /* ::-webkit-scrollbar {

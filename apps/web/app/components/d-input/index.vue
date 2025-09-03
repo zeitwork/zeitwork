@@ -30,7 +30,7 @@ const {
   leadingBackground = true,
   trailingBackground = true,
   min,
-  max
+  max,
 } = defineProps<Props>()
 
 const [model, modifiers] = defineModel<string | number>({
@@ -53,7 +53,7 @@ const [model, modifiers] = defineModel<string | number>({
     }
 
     return value
-  }
+  },
 })
 
 const inputElement = ref<HTMLInputElement | null>(null)
@@ -61,22 +61,27 @@ const inputElement = ref<HTMLInputElement | null>(null)
 defineExpose({
   focus: () => {
     inputElement.value?.focus()
-  }
+  },
+})
+
+const slots = useSlots()
+const hasLeading = computed(() => {
+  return !!leading || !!slots.leading
+})
+
+const hasTrailing = computed(() => {
+  return !!trailing || !!slots.trailing
 })
 </script>
 
 <template>
   <div
-    class="bg-neutral border-neutral text-neutral text-copy has-[:focus]:bg-neutral flex h-9 overflow-hidden rounded-lg border leading-none transition-all outline-none has-[:focus]:border-blue-600 has-[:focus]:ring-2 has-[:focus]:ring-blue-300"
-    :class="[
-      disabled
-        ? 'bg-neutral-strong cursor-not-allowed opacity-50'
-        : 'hover:border-neutral-strong/30'
-    ]"
+    class="bg-surface-weak border-neutral text-neutral text-copy has-[:focus]:bg-neutral flex h-8 overflow-hidden rounded-md border leading-none transition-all outline-none has-[:focus]:border-neutral-300 has-[:focus]:ring-2 has-[:focus]:ring-neutral-200"
+    :class="[disabled ? 'bg-neutral-strong cursor-not-allowed opacity-50' : 'hover:border-neutral-strong/15']"
   >
     <div
       v-if="$slots.leading || leading"
-      class="border-neutral flex items-center border-r px-4"
+      class="border-neutral flex items-center px-2"
       :class="leadingBackground ? 'bg-neutral-subtle' : ''"
     >
       <template v-if="leading">
@@ -97,13 +102,13 @@ defineExpose({
       :label="label"
       :disabled="disabled"
       v-model="model"
-      class="text-copy texte-neutral h-full w-full px-2.5 outline-none"
-      :class="[hideArrows ? 'hide-arrows' : '']"
+      class="text-copy texte-neutral h-full w-full outline-none"
+      :class="[hideArrows ? 'hide-arrows' : '', hasLeading ? 'pl-0' : 'pl-2.5', hasTrailing ? 'pr-0' : 'pr-2.5']"
     />
 
     <div
       v-if="$slots.trailing || trailing"
-      class="border-neutral flex items-center border-l px-3"
+      class="border-neutral flex items-center px-2"
       :class="trailingBackground ? 'bg-neutral-subtle' : ''"
     >
       <template v-if="trailing">

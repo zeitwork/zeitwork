@@ -1,5 +1,5 @@
 <template>
-  <div class="text-neutral text-copy">
+  <div class="text-neutral-subtle text-copy">
     <slot></slot>
   </div>
 </template>

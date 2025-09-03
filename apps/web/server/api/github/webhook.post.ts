@@ -1,9 +1,6 @@
-import { useDrizzle, eq } from "~~/server/utils/drizzle"
-import * as schema from "~~/packages/database/schema"
+import { useDeploymentModel } from "~~/server/models/deployment"
+import * as schema from "@zeitwork/database/schema"
 import { Webhooks } from "@octokit/webhooks"
-import { useZeitworkClient } from "~~/server/utils/api"
-
-const DEFAULT_PORT = 3000
 
 export default defineEventHandler(async (event) => {
   // Get raw body for signature verification
@@ -40,17 +37,15 @@ export default defineEventHandler(async (event) => {
   const payload = JSON.parse(rawBody)
   const eventType = getHeader(event, "x-github-event")
 
-  log(`Received ${eventType} event for ${payload.repository?.full_name || "unknown"}`)
-
   const db = useDrizzle()
-  const client = useZeitworkClient()
+  const github = useGitHub()
 
   switch (eventType) {
     case "installation":
       if (payload.action === "created") {
-        log(`GitHub App installed: ${payload.installation.id}`)
-        // 1. look up the organisation, update the organisation with the installation ID
+        // Create a GitHub installation record
         const githubLogin = payload.installation.account.login.toLowerCase()
+        const githubAccountId = payload.installation.account.id
 
         // Look up the organization by slug (which should match the GitHub login)
         const [organisation] = await db
@@ -60,113 +55,125 @@ export default defineEventHandler(async (event) => {
           .limit(1)
 
         if (organisation) {
-          // Update the organization with the installation ID
+          // Create or update GitHub installation record
           await db
-            .update(schema.organisations)
-            .set({ installationId: payload.installation.id })
-            .where(eq(schema.organisations.id, organisation.id))
-
-          log(
-            `Updated organisation ${organisation.name} (${organisation.slug}) with installation ID ${payload.installation.id}`,
-          )
-        } else {
-          log(`Organisation not found for GitHub account: ${githubLogin}`)
+            .insert(schema.githubInstallations)
+            .values({
+              githubAccountId: githubAccountId,
+              githubInstallationId: payload.installation.id,
+              organisationId: organisation.id,
+            })
+            .onConflictDoUpdate({
+              target: [schema.githubInstallations.githubInstallationId],
+              set: {
+                githubAccountId: githubAccountId,
+                organisationId: organisation.id,
+              },
+            })
         }
       } else if (payload.action === "deleted") {
-        // Remove installation ID from all organisations that have it
+        // Remove GitHub installation records
         await db
-          .update(schema.organisations)
-          .set({ installationId: null })
-          .where(eq(schema.organisations.installationId, payload.installation.id))
-
-        log(`GitHub App uninstalled: ${payload.installation.id}`)
+          .delete(schema.githubInstallations)
+          .where(eq(schema.githubInstallations.githubInstallationId, payload.installation.id))
       }
       break
 
     case "installation_repositories":
-      log(`Repository access changed for installation ${payload.installation.id}`)
       break
 
     case "push":
-      // Only deploy pushes to the main branch
-      const branch = payload.ref?.replace("refs/heads/", "")
-      if (branch !== "main") {
-        log(`Skipping deployment for push to branch: ${branch}`)
-        return { received: true }
-      }
-
       try {
-        // Find the organization by installation ID
-        const [organisation] = await db
-          .select()
-          .from(schema.organisations)
-          .where(eq(schema.organisations.installationId, payload.installation.id))
+        // Find the organization by installation ID through the githubInstallations table
+        const [installationRecord] = await db
+          .select({
+            organisation: schema.organisations,
+            installation: schema.githubInstallations,
+          })
+          .from(schema.githubInstallations)
+          .innerJoin(schema.organisations, eq(schema.organisations.id, schema.githubInstallations.organisationId))
+          .where(eq(schema.githubInstallations.githubInstallationId, payload.installation.id))
           .limit(1)
 
-        if (!organisation) {
-          log(`Organisation not found for installation ID: ${payload.installation.id}`)
+        if (!installationRecord) {
           return { received: true }
         }
+
+        const organisation = installationRecord.organisation
 
         // Extract repository information
         const githubOwner = payload.repository.owner.login
         const githubRepo = payload.repository.name
         const commitSHA = payload.after // The SHA of the most recent commit after the push
-        const projectK8sName = `repo-${payload.repository.id}`
 
-        try {
-          // Check if project exists
-          const { data: existingProject } = await client.projects.get({
-            organisationId: organisation.id,
-            organisationNo: organisation.no,
-            projectId: projectK8sName,
-          })
+        // Optionally get additional repository information using GitHub utility
+        const { data: repoInfo, error: repoError } = await github.repository.get(
+          payload.installation.id,
+          githubOwner,
+          githubRepo,
+        )
 
-          if (existingProject) {
-            // Deploy the existing project with new commit
-            await client.projects.deploy({
-              organisationId: organisation.id,
-              organisationNo: organisation.no,
-              projectId: projectK8sName,
-              commitSHA,
-            })
-            log(`Deployed existing project ${projectK8sName} with commit ${commitSHA}`)
-          }
-        } catch (error) {
-          // Project doesn't exist, create it
-          const { data, error: createError } = await client.projects.create({
-            organisationId: organisation.id,
-            name: payload.repository.name,
-            githubOwner,
-            githubRepo,
-            port: DEFAULT_PORT,
-            desiredRevisionSHA: commitSHA,
-          })
+        // Get commit information using GitHub utility
+        const { data: commitInfo, error: commitError } = await github.commit.get(
+          payload.installation.id,
+          githubOwner,
+          githubRepo,
+          commitSHA,
+        )
 
-          if (createError) {
-            logError(`Failed to create project ${projectK8sName}`, createError)
-          } else {
-            log(`Created new project ${projectK8sName} with commit ${commitSHA}`)
-          }
+        // Fetch the project
+        const [project] = await db
+          .select()
+          .from(schema.projects)
+          .where(
+            and(
+              eq(schema.projects.githubRepositoryOwner, githubOwner),
+              eq(schema.projects.githubRepositoryName, githubRepo),
+            ),
+          )
+          .limit(1)
+        if (!project) {
+          throw createError({ statusCode: 400, message: "Project not found" })
+        }
+
+        // If branch isn't main, we simply return OK to the webhook
+        if (commitSHA !== project.githubDefaultBranch) {
+          return { statusCode: 200, statusMessage: "OK" }
+        }
+
+        const [productionEnvironment] = await db
+          .select()
+          .from(schema.projectEnvironments)
+          .where(
+            and(
+              eq(schema.projectEnvironments.projectId, project.id),
+              eq(schema.projectEnvironments.name, "production"),
+            ),
+          )
+          .limit(1)
+        if (!productionEnvironment) {
+          throw createError({ statusCode: 400, message: "Production environment not found" })
+        }
+
+        // Insert a new deployment for the project
+        const deploymentModel = useDeploymentModel()
+        const { data: deployment, error: deploymentError } = await deploymentModel.create({
+          projectId: project.id,
+          environmentId: productionEnvironment.id,
+          organisationId: organisation.id,
+        })
+        if (deploymentError) {
+          throw createError({ statusCode: 500, message: deploymentError.message })
         }
       } catch (error) {
-        logError("Error handling push event", error)
+        // Handle error silently for now
       }
       break
 
     default:
-      log(`Unhandled webhook event: ${eventType}`)
+    // Unhandled webhook event
   }
 
-  // Always return 200 to acknowledge receipt
+  // For unhandled webhook events
   return { received: true }
 })
-
-// Simple logger helper
-function log(message: string) {
-  return console.log(`[GitHub Webhook] ${message}`)
-}
-
-function logError(message: string, error?: any) {
-  console.error(`[GitHub Webhook] ERROR: ${message}`, error || "")
-}

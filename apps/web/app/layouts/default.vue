@@ -27,11 +27,10 @@ const links = [
 </script>
 
 <template>
-  <div class="flex h-screen flex-row bg-neutral-50">
-    <d-sidebar :links="links" />
-    <div class="x flex flex-1 flex-col">
-      <div class="h-14 w-full"></div>
-      <div class="mr-3 flex-1 overflow-auto rounded-t-lg border border-b-0 border-neutral-200 bg-white shadow-sm">
+  <div class="bg-neutral-strong flex h-screen flex-col">
+    <d-navbar :links="links" />
+    <div class="flex flex-1 flex-col p-2 pt-0">
+      <div class="border-neutral flex-1 overflow-auto rounded-lg border bg-white">
         <slot></slot>
       </div>
     </div>

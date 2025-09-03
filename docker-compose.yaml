@@ -1,10 +1,45 @@
 name: "zeitwork"
 
 services:
+  nats:
+    image: nats:2-alpine
+    ports:
+      - "4222:4222"
+      - "6222:6222"
+      - "8222:8222"
   postgres:
     image: postgres:17-alpine
+    ports:
+      - "5432:5432"
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+  s3:
+    image: minio/minio:latest
     ports:
-      - "5432:5432"
+      - "9000:9000"
+    environment:
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+    command: server /data
+  distribution:
+    image: distribution/distribution:3
+    ports:
+      - "5000:5000"
+    environment:
+      - REGISTRY_STORAGE_S3_REGION=eu-central-1
+      - REGISTRY_STORAGE_S3_ENDPOINT=http://s3:9000
+      - REGISTRY_STORAGE_S3_ACCESS_KEY=minioadmin
+      - REGISTRY_STORAGE_S3_SECRET_KEY=minioadmin
+      - REGISTRY_STORAGE_S3_BUCKET=registry
+      - REGISTRY_STORAGE_S3_FORCE_PATH_STYLE=true
+      - REGISTRY_STORAGE_DELETE_ENABLED=true
+    volumes:
+      - registry_data:/var/lib/registry
+    command:
+      - serve
+      - /etc/docker/registry/config.yml

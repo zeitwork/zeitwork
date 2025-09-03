@@ -7,6 +7,7 @@ export default defineNuxtConfig({
 
   app: {
     head: head(),
+    layoutTransition: { name: "layout-forward", mode: "out-in" },
   },
 
   compatibilityDate: "latest",
@@ -63,7 +64,7 @@ export default defineNuxtConfig({
     kubeConfig: process.env.NUXT_KUBE_CONFIG || "",
   },
 
-  modules: ["@nuxt/icon", "@nuxt/fonts", "nuxt-auth-utils"],
+  modules: ["@nuxt/icon", "@nuxt/fonts", "nuxt-auth-utils", "motion-v/nuxt"],
 })
 
 function head() {

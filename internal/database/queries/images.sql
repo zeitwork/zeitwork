@@ -1,0 +1,87 @@
+-- name: ImagesGetById :one
+-- Get image by ID
+SELECT 
+    id,
+    name,
+    status,
+    image_size,
+    image_hash,
+    object_key,
+    created_at,
+    updated_at
+FROM images 
+WHERE id = $1 
+    AND deleted_at IS NULL;
+
+-- name: ImagesGetByHash :one
+-- Get image by hash
+SELECT 
+    id,
+    name,
+    status,
+    image_size,
+    image_hash,
+    object_key,
+    created_at,
+    updated_at
+FROM images 
+WHERE image_hash = $1 
+    AND deleted_at IS NULL;
+
+-- name: ImagesCreate :one
+-- Create a new image
+INSERT INTO images (
+    id,
+    name,
+    status,
+    image_size,
+    image_hash,
+    object_key
+) VALUES (
+    $1,
+    $2,
+    $3,
+    $4,
+    $5,
+    $6
+)
+RETURNING 
+    id,
+    name,
+    status,
+    image_size,
+    image_hash,
+    object_key,
+    created_at,
+    updated_at;
+
+-- name: ImagesUpdateStatus :one
+-- Update image status
+UPDATE images 
+SET status = $2, 
+    updated_at = now()
+WHERE id = $1
+RETURNING 
+    id,
+    name,
+    status,
+    image_size,
+    image_hash,
+    object_key,
+    created_at,
+    updated_at;
+
+-- name: ImagesGetAll :many
+-- Get all images
+SELECT 
+    id,
+    name,
+    status,
+    image_size,
+    image_hash,
+    object_key,
+    created_at,
+    updated_at
+FROM images 
+WHERE deleted_at IS NULL
+ORDER BY created_at DESC;
