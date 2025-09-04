@@ -382,9 +382,10 @@ graph TD
 1. **Image Storage**: distribution with s3 storage
 2. **TLS Certificate Management**: CertMagic for Let's Encrypt automation
 3. **Authentication Between Services**: Currently using internal trust model - may need proper service-to-service auth and certificate management for production
-4. **Log Aggregation**: Open question - needs further research
-5. **Metrics Collection**: Open question - needs further research
-6. **Observability**: Comprehensive logging and monitoring strategy TBD
+4. **NATS State Updates**: Consider pushing relevant state updates via NATS instead of services always pulling from Postgres - could reduce database load and improve performance
+5. **Log Aggregation**: Open question - needs further research
+6. **Metrics Collection**: Open question - needs further research
+7. **Observability**: Comprehensive logging and monitoring strategy TBD
 
 ## Security Considerations
 
