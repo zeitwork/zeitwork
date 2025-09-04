@@ -179,6 +179,7 @@ The edge-proxy maintains a routing table of `domain -> deployments -> vm instanc
 
 - Pulls desired state from Postgres on startup
 - Subscribes to NATS for changes
+- **Security**: Builds Docker images inside Firecracker VMs for proper isolation and security
 - Builds Docker images from GitHub repos
 - Stores images in S3-compatible storage using distribution
 - Handles build caching and optimization
@@ -212,6 +213,7 @@ The edge-proxy maintains a routing table of `domain -> deployments -> vm instanc
 - **Minimum**: 3 VMs per deployment for redundancy
 - **Distribution**: Spread across multiple nodes/AZs when possible
 - **Resource Limits**: Each VM gets 2 vCPUs, 2GB RAM (Firecracker enforced)
+- **Security**: Firecracker VMs must run with jailer for proper isolation and security
 - **Networking**: IPv6 per VM, isolated network (VMs cannot connect to other VMs)
 - **Auto-scaling**: Automatically spin up new VMs when load justifies it
 
@@ -292,9 +294,10 @@ The edge-proxy maintains a routing table of `domain -> deployments -> vm instanc
 
 1. **Image Storage**: distribution with s3 storage
 2. **TLS Certificate Management**: CertMagic for Let's Encrypt automation
-3. **Log Aggregation**: Open question - needs further research
-4. **Metrics Collection**: Open question - needs further research
-5. **Observability**: Comprehensive logging and monitoring strategy TBD
+3. **Authentication Between Services**: Currently using internal trust model - may need proper service-to-service auth and certificate management for production
+4. **Log Aggregation**: Open question - needs further research
+5. **Metrics Collection**: Open question - needs further research
+6. **Observability**: Comprehensive logging and monitoring strategy TBD
 
 ## Security Considerations
 
