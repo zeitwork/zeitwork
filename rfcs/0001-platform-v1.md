@@ -100,34 +100,29 @@ graph TD
         S3["S3 Storage<br/>Container Images"]
     end
 
-    subgraph EventLayer ["Event Distribution"]
-        NATS["NATS<br/>Event Notifications"]
-        ActiveListener["Active Listener<br/>Postgres → NATS"]
-    end
-
     subgraph ControlLayer ["Control Plane"]
         ManagementAPI["Management API<br/>Control Operations"]
         ImageBuilder["Image Builder<br/>Docker Builds in VMs"]
     end
 
+    subgraph EventLayer ["Event Distribution"]
+        NATS["NATS<br/>Event Notifications"]
+        ActiveListener["Active Listener<br/>Postgres → NATS"]
+    end
+
     subgraph EdgeLayer ["Edge Layer"]
-        EdgeProxy1["Edge Proxy 1"]
-        EdgeProxy2["Edge Proxy 2"]
-        EdgeProxy3["Edge Proxy 3"]
+        EdgeProxy["Edge Proxy"]
+        EdgeProxy2["Edge Proxy ..."]
     end
 
     subgraph WorkerLayer ["Worker Nodes"]
-        subgraph Node1 ["Node Agent 1"]
+        subgraph Node1 ["Node Agent"]
             VM1["VM 1"]
             VM2["VM 2"]
         end
 
-        subgraph Node2 ["Node Agent 2"]
-            VM3["VM 3"]
-        end
-
-        subgraph Node3 ["Node Agent 3"]
-            VM4["VM 4"]
+        subgraph Node2 ["Node Agent ..."]
+            VM3["VM ..."]
         end
     end
 
@@ -143,35 +138,20 @@ graph TD
     ImageBuilder -->|stores images| S3
 
     %% Edge proxy connections
-    EdgeProxy1 -->|pulls routing state| Postgres
-    EdgeProxy2 -->|pulls routing state| Postgres
-    EdgeProxy3 -->|pulls routing state| Postgres
-    EdgeProxy1 -->|subscribes to events| NATS
-    EdgeProxy2 -->|subscribes to events| NATS
-    EdgeProxy3 -->|subscribes to events| NATS
+    EdgeProxy -->|pulls routing state| Postgres
+    EdgeProxy -->|subscribes to events| NATS
 
     %% Node agent connections
     Node1 -->|pulls desired state| Postgres
-    Node2 -->|pulls desired state| Postgres
-    Node3 -->|pulls desired state| Postgres
     Node1 -->|subscribes to events| NATS
-    Node2 -->|subscribes to events| NATS
-    Node3 -->|subscribes to events| NATS
     Node1 -->|reports health/metrics| ManagementAPI
-    Node2 -->|reports health/metrics| ManagementAPI
-    Node3 -->|reports health/metrics| ManagementAPI
 
     %% Traffic flow
-    EdgeProxy1 -->|routes traffic| VM1
-    EdgeProxy1 -->|routes traffic| VM2
-    EdgeProxy2 -->|routes traffic| VM3
-    EdgeProxy3 -->|routes traffic| VM4
+    EdgeProxy -->|routes traffic| VM1
+    EdgeProxy -->|routes traffic| VM2
 
     %% Image flow
     VM1 -->|pulls images| S3
-    VM2 -->|pulls images| S3
-    VM3 -->|pulls images| S3
-    VM4 -->|pulls images| S3
 
     classDef data fill:#e1f5fe
     classDef event fill:#f3e5f5
@@ -183,9 +163,9 @@ graph TD
     class Postgres,S3 data
     class NATS,ActiveListener event
     class ManagementAPI,ImageBuilder control
-    class EdgeProxy1,EdgeProxy2,EdgeProxy3 edge
-    class Node1,Node2,Node3 worker
-    class VM1,VM2,VM3,VM4 vm
+    class EdgeProxy,EdgeProxy2 edge
+    class Node1,Node2 worker
+    class VM1,VM2,VM3 vm
 ```
 
 **Key Interactions:**
