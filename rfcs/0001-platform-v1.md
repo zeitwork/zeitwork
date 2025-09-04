@@ -107,7 +107,6 @@ graph TD
 
     subgraph EventLayer ["Event Distribution"]
         NATS["NATS<br/>Event Notifications"]
-        ActiveListener["Active Listener<br/>Postgres → NATS"]
     end
 
     subgraph EdgeLayer ["Edge Layer"]
@@ -126,9 +125,15 @@ graph TD
         end
     end
 
+    ActiveListener["Active Listener<br/>Postgres → NATS"]
+
     %% Data connections
     ActiveListener -->|watches changes| Postgres
     ActiveListener -->|publishes events| NATS
+
+    %% Position Active Listener below Event Distribution and Data Layer
+    DataLayer ~~~ ActiveListener
+    EventLayer ~~~ ActiveListener
 
     %% Control plane connections
     ManagementAPI -->|reads/writes state| Postgres
