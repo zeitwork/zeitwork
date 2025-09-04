@@ -185,9 +185,8 @@ graph TD
 **Role**: Single source of truth for all platform state
 
 - **High Availability**: PlanetScale provides built-in HA with automatic failover
-- **Contains**: Projects, deployments, nodes, VM instances, domains, routing config, encrypted secrets/keys
+- **Contains**: Projects, deployments, nodes, VM instances, domains, routing config
 - **Access Pattern**: Services pull full state on startup, then subscribe to changes
-- **Security**: Secrets and TLS keys stored encrypted in Postgres (no external secret management needed)
 - **Trust Model**: Internal services trust each other - no authentication between platform components
 
 ### 2. Event Distribution (NATS)
@@ -383,16 +382,17 @@ graph TD
 2. **TLS Certificate Management**: CertMagic for Let's Encrypt automation
 3. **Authentication Between Services**: Currently using internal trust model - may need proper service-to-service auth and certificate management for production
 4. **NATS State Updates**: Consider pushing relevant state updates via NATS instead of services always pulling from Postgres - could reduce database load and improve performance
-5. **Log Aggregation**: Open question - needs further research
-6. **Metrics Collection**: Open question - needs further research
-7. **Observability**: Comprehensive logging and monitoring strategy TBD
+5. **Secret Management**: How to handle secrets and TLS keys - encrypted storage in Postgres vs external secret management system
+6. **Billing**: Usage tracking, metering, and billing system - how to measure and charge for VM usage, builds, storage, etc.
+7. **Log Aggregation**: Open question - needs further research
+8. **Metrics Collection**: Open question - needs further research
+9. **Observability**: Comprehensive logging and monitoring strategy TBD
 
 ## Security Considerations
 
 - **VM Isolation**: Firecracker provides strong isolation boundaries
 - **Network Segmentation**: Each VM gets isolated network namespace (VMs cannot communicate with each other)
 - **Internal Trust**: Platform services trust each other - no authentication between internal components
-- **Secret Management**: Encrypted secrets stored directly in Postgres
 - **Resource Limits**: Apps running out of memory will crash (by design - no swap)
 - **DDoS Protection**: Handled at L4 load balancer level
 
@@ -418,6 +418,10 @@ graph TD
 - **Performance**: Near-native performance with fast startup
 - **Resource Control**: Precise CPU/memory allocation
 - **Compatibility**: Can run any Linux application
+
+## Why Not Kubernetes?
+
+We're building a simple platform for a complex deployment scenario (30+ regions), while Kubernetes is a complex platform for simpler deployment scenarios. Our core offering is straightforward: push code, build container, run in isolated VM, route traffic - essentially building Heroku, not Kubernetes. With 30+ regions, our custom approach provides regional independence (each region fails independently), deployment simplicity (deploy a few Go binaries vs coordinating 30+ complex K8s clusters), and a minimal operational mental model (Postgres + NATS + Go services vs etcd + kubelet + CNI + service mesh + countless other components). Additionally, Firecracker VMs provide true isolation superior to K8s containers, we control our entire attack surface, and we can optimize specifically for stateless web applications rather than working within K8s's general-purpose constraints.
 
 ## Conclusion
 
