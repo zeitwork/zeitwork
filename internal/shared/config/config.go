@@ -120,9 +120,9 @@ func LoadManagerConfig() (*ManagerConfig, error) {
 	return config, nil
 }
 
-// LoadCertsConfig loads configuration for the certs service
-func LoadCertsConfig() (*BaseConfig, error) {
-	config := loadBaseConfigWithPrefix("CERTS", "certs")
+// LoadCertManagerConfig loads configuration for the certmanager service
+func LoadCertManagerConfig() (*BaseConfig, error) {
+	config := loadBaseConfigWithPrefix("CERTMANAGER", "certmanager")
 	return &config, nil
 }
 

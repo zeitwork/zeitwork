@@ -13,7 +13,7 @@ import (
 
 func main() {
 	// Load configuration
-	cfg, err := config.LoadCertsConfig()
+	cfg, err := config.LoadCertManagerConfig()
 	if err != nil {
 		panic("Failed to load configuration: " + err.Error())
 	}
@@ -35,7 +35,7 @@ func main() {
 	}()
 
 	// Start the service
-	logger.Info("Starting certs service",
+	logger.Info("Starting certmanager service",
 		"environment", cfg.Environment,
 		"log_level", cfg.LogLevel,
 	)
@@ -44,16 +44,16 @@ func main() {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
-	logger.Warn("Certs service is not implemented yet - this is a placeholder service")
+	logger.Warn("CertManager service is not implemented yet - this is a placeholder service")
 
 	// Main service loop
 	for {
 		select {
 		case <-ctx.Done():
-			logger.Info("Shutting down certs service")
+			logger.Info("Shutting down certmanager service")
 			return
 		case <-ticker.C:
-			logger.Warn("Certs service is not implemented - this is a placeholder service running every 10 seconds")
+			logger.Warn("CertManager service is not implemented - this is a placeholder service running every 10 seconds")
 		}
 	}
 }

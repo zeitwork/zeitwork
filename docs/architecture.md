@@ -12,7 +12,7 @@ Zeitwork Platform v1 is a distributed, stateless platform for running containeri
 
 We're building a Platform-as-a-Service that needs to handle hundreds of nodes and tens of thousands of VM instances. The platform should be production-grade from day one, with emphasis on reliability, scalability, and operational simplicity.
 
-**Important**: This RFC describes the **v1 implementation** of a much larger, long-term vision that isn't fully defined here. The broader goals will introduce additional constraints and requirements that may necessitate significant architectural changes. Many components in this design are considered replaceable with better solutions as we learn and scale. This v1 focuses on getting a solid, working foundation that can evolve.
+**Important**: This document describes the **v1 implementation** of a much larger, long-term vision that isn't fully defined here. The broader goals will introduce additional constraints and requirements that may necessitate significant architectural changes. Many components in this design are considered replaceable with better solutions as we learn and scale. This v1 focuses on getting a solid, working foundation that can evolve.
 
 ## Design Goals
 

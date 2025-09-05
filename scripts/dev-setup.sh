@@ -174,7 +174,7 @@ export_service_env() {
                 fi
             done
             ;;
-        "EDGEPROXY"|"CERTS"|"LISTENER")
+        "EDGEPROXY"|"CERTMANAGER"|"LISTENER")
             local service_var="${service_prefix}_PORT"
             if [ -n "${!service_var:-}" ]; then
                 export PORT="${!service_var}"
@@ -227,7 +227,7 @@ start_service() {
 stop_services() {
     print_status "Stopping all services..."
     
-    local services=("nodeagent" "edgeproxy" "builder" "certs" "listener")
+    local services=("nodeagent" "edgeproxy" "builder" "certmanager" "listener")
     
     for service in "${services[@]}"; do
         if [ -f "logs/${service}.pid" ]; then
@@ -286,8 +286,8 @@ main() {
     # Start builder
     start_service "builder" "go run ./cmd/builder/builder.go"
     
-    # Start certs
-    start_service "certs" "go run ./cmd/certs/certs.go"
+    # Start certmanager
+    start_service "certmanager" "go run ./cmd/certmanager/certmanager.go"
     
     # Start listener
     start_service "listener" "go run ./cmd/listener/listener.go"

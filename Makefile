@@ -1,8 +1,8 @@
-.PHONY: all build clean test install uninstall dev run-nodeagent run-edgeproxy run-builder run-certs run-listener
+.PHONY: all build clean test install uninstall dev run-nodeagent run-edgeproxy run-builder run-certmanager run-listener
 
 # Build variables
 BUILD_DIR := build
-BINARIES := zeitwork-nodeagent zeitwork-edgeproxy zeitwork-builder zeitwork-certs zeitwork-listener
+BINARIES := zeitwork-nodeagent zeitwork-edgeproxy zeitwork-builder zeitwork-certmanager zeitwork-listener
 GO_BUILD_FLAGS := -a -installsuffix cgo
 LDFLAGS := -s -w
 
@@ -16,7 +16,7 @@ build:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(GO_BUILD_FLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/zeitwork-nodeagent ./cmd/nodeagent
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(GO_BUILD_FLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/zeitwork-edgeproxy ./cmd/edgeproxy
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(GO_BUILD_FLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/zeitwork-builder ./cmd/builder
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(GO_BUILD_FLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/zeitwork-certs ./cmd/certs
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(GO_BUILD_FLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/zeitwork-certmanager ./cmd/certmanager
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(GO_BUILD_FLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/zeitwork-listener ./cmd/listener
 	@echo "Build complete!"
 
@@ -27,7 +27,7 @@ build-local:
 	go build -o $(BUILD_DIR)/zeitwork-nodeagent ./cmd/nodeagent
 	go build -o $(BUILD_DIR)/zeitwork-edgeproxy ./cmd/edgeproxy
 	go build -o $(BUILD_DIR)/zeitwork-builder ./cmd/builder
-	go build -o $(BUILD_DIR)/zeitwork-certs ./cmd/certs
+	go build -o $(BUILD_DIR)/zeitwork-certmanager ./cmd/certmanager
 	go build -o $(BUILD_DIR)/zeitwork-listener ./cmd/listener
 	@echo "Local build complete!"
 
@@ -50,8 +50,8 @@ install: build
 # Uninstall services (requires sudo)
 uninstall:
 	@echo "Uninstalling services (requires sudo)..."
-	@sudo systemctl stop zeitwork-nodeagent zeitwork-edgeproxy zeitwork-builder zeitwork-certs zeitwork-listener 2>/dev/null || true
-	@sudo systemctl disable zeitwork-nodeagent zeitwork-edgeproxy zeitwork-builder zeitwork-certs zeitwork-listener 2>/dev/null || true
+	@sudo systemctl stop zeitwork-nodeagent zeitwork-edgeproxy zeitwork-builder zeitwork-certmanager zeitwork-listener 2>/dev/null || true
+	@sudo systemctl disable zeitwork-nodeagent zeitwork-edgeproxy zeitwork-builder zeitwork-certmanager zeitwork-listener 2>/dev/null || true
 	@sudo rm -f /usr/local/bin/zeitwork-*
 	@sudo rm -f /etc/systemd/system/zeitwork-*.service
 	@sudo systemctl daemon-reload
@@ -82,9 +82,9 @@ run-builder:
 	@echo "Running builder locally..."
 	DATABASE_URL=postgres://postgres:postgres@localhost:5432/zeitwork_dev NATS_URL=nats://localhost:4222 LOG_LEVEL=debug ENVIRONMENT=development go run ./cmd/builder/builder.go
 
-run-certs:
-	@echo "Running certs locally..."
-	DATABASE_URL=postgres://postgres:postgres@localhost:5432/zeitwork_dev NATS_URL=nats://localhost:4222 LOG_LEVEL=debug ENVIRONMENT=development go run ./cmd/certs/certs.go
+run-certmanager:
+	@echo "Running certmanager locally..."
+	DATABASE_URL=postgres://postgres:postgres@localhost:5432/zeitwork_dev NATS_URL=nats://localhost:4222 LOG_LEVEL=debug ENVIRONMENT=development go run ./cmd/certmanager/certmanager.go
 
 run-listener:
 	@echo "Running listener locally..."
@@ -134,7 +134,7 @@ help:
 	@echo "  make run-nodeagent  - Run nodeagent locally for development"
 	@echo "  make run-edgeproxy  - Run edgeproxy locally for development"
 	@echo "  make run-builder    - Run builder locally for development"
-	@echo "  make run-certs      - Run certs locally for development"
+	@echo "  make run-certmanager - Run certmanager locally for development"
 	@echo "  make run-listener   - Run listener locally for development"
 	@echo "  make sqlc           - Generate SQL code with sqlc"
 	@echo "  make fmt            - Format Go code"
