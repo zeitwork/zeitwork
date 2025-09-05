@@ -131,3 +131,26 @@ WHERE d.status = 'pending'
     AND p.deleted_at IS NULL
     AND ib.id IS NULL
 ORDER BY d.created_at ASC;
+
+-- name: DeploymentsGetReadyForDeployment :many
+-- Get deployments that have completed builds but no instances yet (ready for deployment)
+SELECT 
+    d.id,
+    d.deployment_id,
+    d.status,
+    d.commit_hash,
+    d.project_id,
+    d.environment_id,
+    d.image_id,
+    d.organisation_id,
+    d.created_at,
+    d.updated_at,
+    ib.id as build_id
+FROM deployments d
+JOIN image_builds ib ON ib.deployment_id = d.id
+LEFT JOIN deployment_instances di ON di.deployment_id = d.id
+WHERE d.status = 'deploying'
+    AND ib.status = 'completed'
+    AND d.deleted_at IS NULL
+    AND di.id IS NULL
+ORDER BY d.created_at ASC;

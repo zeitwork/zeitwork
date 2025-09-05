@@ -68,9 +68,21 @@ func (c *Client) Subscribe(subject string, handler func(*nats.Msg)) (*nats.Subsc
 	return c.conn.Subscribe(subject, handler)
 }
 
+// QueueSubscribe creates a queue subscription to the given subject
+// Queue subscriptions allow multiple subscribers to form a queue group where only one subscriber
+// receives each message, enabling load balancing and ensuring work is not duplicated
+func (c *Client) QueueSubscribe(subject, queueGroup string, handler func(*nats.Msg)) (*nats.Subscription, error) {
+	return c.conn.QueueSubscribe(subject, queueGroup, handler)
+}
+
 // SubscribeSync creates a synchronous subscription to the given subject
 func (c *Client) SubscribeSync(subject string) (*nats.Subscription, error) {
 	return c.conn.SubscribeSync(subject)
+}
+
+// QueueSubscribeSync creates a synchronous queue subscription to the given subject
+func (c *Client) QueueSubscribeSync(subject, queueGroup string) (*nats.Subscription, error) {
+	return c.conn.QueueSubscribeSync(subject, queueGroup)
 }
 
 // Request sends a request and waits for a response
@@ -129,6 +141,30 @@ func (cc *ContextClient) Publish(subject string, data []byte) error {
 // Subscribe creates a subscription that respects context cancellation
 func (cc *ContextClient) Subscribe(subject string, handler func(*nats.Msg)) (*nats.Subscription, error) {
 	sub, err := cc.client.Subscribe(subject, func(msg *nats.Msg) {
+		select {
+		case <-cc.ctx.Done():
+			return
+		default:
+			handler(msg)
+		}
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	// Monitor context and unsubscribe when cancelled
+	go func() {
+		<-cc.ctx.Done()
+		sub.Unsubscribe()
+	}()
+
+	return sub, nil
+}
+
+// QueueSubscribe creates a queue subscription that respects context cancellation
+func (cc *ContextClient) QueueSubscribe(subject, queueGroup string, handler func(*nats.Msg)) (*nats.Subscription, error) {
+	sub, err := cc.client.QueueSubscribe(subject, queueGroup, func(msg *nats.Msg) {
 		select {
 		case <-cc.ctx.Done():
 			return

@@ -41,6 +41,12 @@ type BuilderConfig struct {
 	ContainerRegistry string // Container registry to push images to
 }
 
+// ManagerConfig contains configuration for the manager service
+type ManagerConfig struct {
+	BaseConfig
+	DatabaseURL string
+}
+
 // NATSConfig contains configuration for NATS messaging
 type NATSConfig struct {
 	URLs          []string      // NATS server URLs
@@ -91,6 +97,20 @@ func LoadBuilderConfig() (*BuilderConfig, error) {
 		BuilderType:       getEnvWithPrefix("BUILDER", "TYPE", "docker"),
 		BuildWorkDir:      getEnvWithPrefix("BUILDER", "WORK_DIR", "/tmp/zeitwork-builds"),
 		ContainerRegistry: getEnvWithPrefix("BUILDER", "CONTAINER_REGISTRY", ""),
+	}
+
+	if config.DatabaseURL == "" {
+		return nil, fmt.Errorf("DATABASE_URL is required")
+	}
+
+	return config, nil
+}
+
+// LoadManagerConfig loads configuration for the manager service
+func LoadManagerConfig() (*ManagerConfig, error) {
+	config := &ManagerConfig{
+		BaseConfig:  loadBaseConfigWithPrefix("MANAGER", "manager"),
+		DatabaseURL: getEnvWithPrefix("MANAGER", "DATABASE_URL", "postgres://localhost/zeitwork"),
 	}
 
 	if config.DatabaseURL == "" {

@@ -11,6 +11,14 @@ import (
 )
 
 type Querier interface {
+	// Create a new deployment instance relationship
+	DeploymentInstancesCreate(ctx context.Context, arg *DeploymentInstancesCreateParams) (*DeploymentInstancesCreateRow, error)
+	// Soft delete a deployment instance
+	DeploymentInstancesDelete(ctx context.Context, id pgtype.UUID) error
+	// Get deployment instances by deployment ID
+	DeploymentInstancesGetByDeployment(ctx context.Context, deploymentID pgtype.UUID) ([]*DeploymentInstancesGetByDeploymentRow, error)
+	// Get deployment instance by instance ID
+	DeploymentInstancesGetByInstance(ctx context.Context, instanceID pgtype.UUID) (*DeploymentInstancesGetByInstanceRow, error)
 	// Create a new deployment
 	DeploymentsCreate(ctx context.Context, arg *DeploymentsCreateParams) (*DeploymentsCreateRow, error)
 	// Get active deployment routes for edge proxy
@@ -21,6 +29,8 @@ type Querier interface {
 	DeploymentsGetByProject(ctx context.Context, projectID pgtype.UUID) ([]*DeploymentsGetByProjectRow, error)
 	// Get pending deployments that don't have any image builds yet
 	DeploymentsGetPendingWithoutBuilds(ctx context.Context) ([]*DeploymentsGetPendingWithoutBuildsRow, error)
+	// Get deployments that have completed builds but no instances yet (ready for deployment)
+	DeploymentsGetReadyForDeployment(ctx context.Context) ([]*DeploymentsGetReadyForDeploymentRow, error)
 	// Update deployment status
 	DeploymentsUpdateStatus(ctx context.Context, arg *DeploymentsUpdateStatusParams) (*DeploymentsUpdateStatusRow, error)
 	// Create a new domain
