@@ -13,7 +13,9 @@ import { images, instances } from "./platform";
 import { uuidv7 } from "uuidv7";
 
 const organisationId = {
-  organisationId: uuid().references(() => organisations.id),
+  organisationId: uuid()
+    .notNull()
+    .references(() => organisations.id),
 };
 
 export const waitlist = pgTable("waitlist", {

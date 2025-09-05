@@ -15,24 +15,21 @@ const imagesCreate = `-- name: ImagesCreate :one
 INSERT INTO images (
     id,
     name,
-    status,
-    image_size,
-    image_hash,
+    size,
+    hash,
     object_key
 ) VALUES (
     $1,
     $2,
     $3,
     $4,
-    $5,
-    $6
+    $5
 )
 RETURNING 
     id,
     name,
-    status,
-    image_size,
-    image_hash,
+    size,
+    hash,
     object_key,
     created_at,
     updated_at
@@ -41,18 +38,16 @@ RETURNING
 type ImagesCreateParams struct {
 	ID        pgtype.UUID `json:"id"`
 	Name      string      `json:"name"`
-	Status    string      `json:"status"`
-	ImageSize pgtype.Int4 `json:"image_size"`
-	ImageHash string      `json:"image_hash"`
+	Size      pgtype.Int4 `json:"size"`
+	Hash      string      `json:"hash"`
 	ObjectKey pgtype.Text `json:"object_key"`
 }
 
 type ImagesCreateRow struct {
 	ID        pgtype.UUID        `json:"id"`
 	Name      string             `json:"name"`
-	Status    string             `json:"status"`
-	ImageSize pgtype.Int4        `json:"image_size"`
-	ImageHash string             `json:"image_hash"`
+	Size      pgtype.Int4        `json:"size"`
+	Hash      string             `json:"hash"`
 	ObjectKey pgtype.Text        `json:"object_key"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
@@ -63,18 +58,16 @@ func (q *Queries) ImagesCreate(ctx context.Context, arg *ImagesCreateParams) (*I
 	row := q.db.QueryRow(ctx, imagesCreate,
 		arg.ID,
 		arg.Name,
-		arg.Status,
-		arg.ImageSize,
-		arg.ImageHash,
+		arg.Size,
+		arg.Hash,
 		arg.ObjectKey,
 	)
 	var i ImagesCreateRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
-		&i.Status,
-		&i.ImageSize,
-		&i.ImageHash,
+		&i.Size,
+		&i.Hash,
 		&i.ObjectKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -86,9 +79,8 @@ const imagesGetAll = `-- name: ImagesGetAll :many
 SELECT 
     id,
     name,
-    status,
-    image_size,
-    image_hash,
+    size,
+    hash,
     object_key,
     created_at,
     updated_at
@@ -100,9 +92,8 @@ ORDER BY created_at DESC
 type ImagesGetAllRow struct {
 	ID        pgtype.UUID        `json:"id"`
 	Name      string             `json:"name"`
-	Status    string             `json:"status"`
-	ImageSize pgtype.Int4        `json:"image_size"`
-	ImageHash string             `json:"image_hash"`
+	Size      pgtype.Int4        `json:"size"`
+	Hash      string             `json:"hash"`
 	ObjectKey pgtype.Text        `json:"object_key"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
@@ -121,9 +112,8 @@ func (q *Queries) ImagesGetAll(ctx context.Context) ([]*ImagesGetAllRow, error) 
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
-			&i.Status,
-			&i.ImageSize,
-			&i.ImageHash,
+			&i.Size,
+			&i.Hash,
 			&i.ObjectKey,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -142,38 +132,35 @@ const imagesGetByHash = `-- name: ImagesGetByHash :one
 SELECT 
     id,
     name,
-    status,
-    image_size,
-    image_hash,
+    size,
+    hash,
     object_key,
     created_at,
     updated_at
 FROM images 
-WHERE image_hash = $1 
+WHERE hash = $1 
     AND deleted_at IS NULL
 `
 
 type ImagesGetByHashRow struct {
 	ID        pgtype.UUID        `json:"id"`
 	Name      string             `json:"name"`
-	Status    string             `json:"status"`
-	ImageSize pgtype.Int4        `json:"image_size"`
-	ImageHash string             `json:"image_hash"`
+	Size      pgtype.Int4        `json:"size"`
+	Hash      string             `json:"hash"`
 	ObjectKey pgtype.Text        `json:"object_key"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
 // Get image by hash
-func (q *Queries) ImagesGetByHash(ctx context.Context, imageHash string) (*ImagesGetByHashRow, error) {
-	row := q.db.QueryRow(ctx, imagesGetByHash, imageHash)
+func (q *Queries) ImagesGetByHash(ctx context.Context, hash string) (*ImagesGetByHashRow, error) {
+	row := q.db.QueryRow(ctx, imagesGetByHash, hash)
 	var i ImagesGetByHashRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
-		&i.Status,
-		&i.ImageSize,
-		&i.ImageHash,
+		&i.Size,
+		&i.Hash,
 		&i.ObjectKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -185,9 +172,8 @@ const imagesGetById = `-- name: ImagesGetById :one
 SELECT 
     id,
     name,
-    status,
-    image_size,
-    image_hash,
+    size,
+    hash,
     object_key,
     created_at,
     updated_at
@@ -199,9 +185,8 @@ WHERE id = $1
 type ImagesGetByIdRow struct {
 	ID        pgtype.UUID        `json:"id"`
 	Name      string             `json:"name"`
-	Status    string             `json:"status"`
-	ImageSize pgtype.Int4        `json:"image_size"`
-	ImageHash string             `json:"image_hash"`
+	Size      pgtype.Int4        `json:"size"`
+	Hash      string             `json:"hash"`
 	ObjectKey pgtype.Text        `json:"object_key"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
@@ -214,9 +199,8 @@ func (q *Queries) ImagesGetById(ctx context.Context, id pgtype.UUID) (*ImagesGet
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
-		&i.Status,
-		&i.ImageSize,
-		&i.ImageHash,
+		&i.Size,
+		&i.Hash,
 		&i.ObjectKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -224,48 +208,57 @@ func (q *Queries) ImagesGetById(ctx context.Context, id pgtype.UUID) (*ImagesGet
 	return &i, err
 }
 
-const imagesUpdateStatus = `-- name: ImagesUpdateStatus :one
+const imagesUpdate = `-- name: ImagesUpdate :one
 UPDATE images 
-SET status = $2, 
+SET name = $2, 
+    size = $3,
+    hash = $4,
+    object_key = $5,
     updated_at = now()
 WHERE id = $1
 RETURNING 
     id,
     name,
-    status,
-    image_size,
-    image_hash,
+    size,
+    hash,
     object_key,
     created_at,
     updated_at
 `
 
-type ImagesUpdateStatusParams struct {
-	ID     pgtype.UUID `json:"id"`
-	Status string      `json:"status"`
+type ImagesUpdateParams struct {
+	ID        pgtype.UUID `json:"id"`
+	Name      string      `json:"name"`
+	Size      pgtype.Int4 `json:"size"`
+	Hash      string      `json:"hash"`
+	ObjectKey pgtype.Text `json:"object_key"`
 }
 
-type ImagesUpdateStatusRow struct {
+type ImagesUpdateRow struct {
 	ID        pgtype.UUID        `json:"id"`
 	Name      string             `json:"name"`
-	Status    string             `json:"status"`
-	ImageSize pgtype.Int4        `json:"image_size"`
-	ImageHash string             `json:"image_hash"`
+	Size      pgtype.Int4        `json:"size"`
+	Hash      string             `json:"hash"`
 	ObjectKey pgtype.Text        `json:"object_key"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
-// Update image status
-func (q *Queries) ImagesUpdateStatus(ctx context.Context, arg *ImagesUpdateStatusParams) (*ImagesUpdateStatusRow, error) {
-	row := q.db.QueryRow(ctx, imagesUpdateStatus, arg.ID, arg.Status)
-	var i ImagesUpdateStatusRow
+// Update image
+func (q *Queries) ImagesUpdate(ctx context.Context, arg *ImagesUpdateParams) (*ImagesUpdateRow, error) {
+	row := q.db.QueryRow(ctx, imagesUpdate,
+		arg.ID,
+		arg.Name,
+		arg.Size,
+		arg.Hash,
+		arg.ObjectKey,
+	)
+	var i ImagesUpdateRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
-		&i.Status,
-		&i.ImageSize,
-		&i.ImageHash,
+		&i.Size,
+		&i.Hash,
 		&i.ObjectKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,

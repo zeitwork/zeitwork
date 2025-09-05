@@ -1,5 +1,5 @@
 {
-  "id": "6534af38-f256-480b-9480-f2329c057a1c",
+  "id": "4807e5c9-baf1-4b7c-8636-ae97e3a33ca4",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -20,20 +20,14 @@
           "primaryKey": false,
           "notNull": true
         },
-        "status": {
-          "name": "status",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "image_size": {
-          "name": "image_size",
+        "size": {
+          "name": "size",
           "type": "integer",
           "primaryKey": false,
           "notNull": false
         },
-        "image_hash": {
-          "name": "image_hash",
+        "hash": {
+          "name": "hash",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -512,7 +506,7 @@
           "name": "organisation_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "created_at": {
           "name": "created_at",
@@ -633,7 +627,7 @@
           "name": "organisation_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "created_at": {
           "name": "created_at",
@@ -770,7 +764,7 @@
           "name": "organisation_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "created_at": {
           "name": "created_at",
@@ -860,7 +854,7 @@
           "name": "organisation_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "created_at": {
           "name": "created_at",
@@ -970,7 +964,7 @@
           "name": "organisation_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "created_at": {
           "name": "created_at",
@@ -1048,7 +1042,7 @@
           "name": "organisation_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "created_at": {
           "name": "created_at",
@@ -1191,7 +1185,7 @@
           "name": "organisation_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "created_at": {
           "name": "created_at",
@@ -1297,7 +1291,7 @@
           "name": "organisation_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "created_at": {
           "name": "created_at",
@@ -1412,6 +1406,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "github_installation_id": {
+          "name": "github_installation_id",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
         "latest_deployment_id": {
           "name": "latest_deployment_id",
           "type": "uuid",
@@ -1422,7 +1422,7 @@
           "name": "organisation_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "created_at": {
           "name": "created_at",

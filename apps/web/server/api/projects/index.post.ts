@@ -107,6 +107,7 @@ export default defineEventHandler(async (event) => {
           value: encryptSecret(secret.value),
           projectId: project.id,
           environmentId: productionEnv.id,
+          organisationId: secure.organisationId,
         })),
       )
     }

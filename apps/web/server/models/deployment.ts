@@ -62,6 +62,7 @@ export function useDeploymentModel() {
           commitHash: latestCommitHash,
           projectId: project.id,
           environmentId: params.environmentId,
+          organisationId: params.organisationId,
         })
         .returning()
 
@@ -82,18 +83,6 @@ export function useDeploymentModel() {
 
 const deploymentIdAlphabet = "0123456789abcdefghijklmnopqrstuvwxyz"
 const deploymentIdGenerator = customAlphabet(deploymentIdAlphabet, 10)
-
-function generateDeploymentUrl({
-  projectId,
-  deploymentId,
-  organisationSlug,
-}: {
-  projectId: string
-  deploymentId: string
-  organisationSlug: string
-}) {
-  return `${projectId}-${deploymentId}-${organisationSlug}.zeitwork.app`
-}
 
 function generateDeploymentId(): string {
   return deploymentIdGenerator()

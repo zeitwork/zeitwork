@@ -58,11 +58,11 @@ type Querier interface {
 	// Get all images
 	ImagesGetAll(ctx context.Context) ([]*ImagesGetAllRow, error)
 	// Get image by hash
-	ImagesGetByHash(ctx context.Context, imageHash string) (*ImagesGetByHashRow, error)
+	ImagesGetByHash(ctx context.Context, hash string) (*ImagesGetByHashRow, error)
 	// Get image by ID
 	ImagesGetById(ctx context.Context, id pgtype.UUID) (*ImagesGetByIdRow, error)
-	// Update image status
-	ImagesUpdateStatus(ctx context.Context, arg *ImagesUpdateStatusParams) (*ImagesUpdateStatusRow, error)
+	// Update image
+	ImagesUpdate(ctx context.Context, arg *ImagesUpdateParams) (*ImagesUpdateRow, error)
 	// Create a new instance
 	InstancesCreate(ctx context.Context, arg *InstancesCreateParams) (*InstancesCreateRow, error)
 	// Soft delete an instance

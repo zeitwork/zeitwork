@@ -5,15 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1756889576598,
-      "tag": "0000_powerful_leader",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1756893590868,
-      "tag": "0001_modern_synch",
+      "when": 1757071757802,
+      "tag": "0000_flaky_mockingbird",
       "breakpoints": true
     }
   ]

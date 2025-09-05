@@ -61,9 +61,8 @@ type GithubInstallation struct {
 type Image struct {
 	ID        pgtype.UUID        `json:"id"`
 	Name      string             `json:"name"`
-	Status    string             `json:"status"`
-	ImageSize pgtype.Int4        `json:"image_size"`
-	ImageHash string             `json:"image_hash"`
+	Size      pgtype.Int4        `json:"size"`
+	Hash      string             `json:"hash"`
 	ObjectKey pgtype.Text        `json:"object_key"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
@@ -135,12 +134,12 @@ type Project struct {
 	Slug                 string             `json:"slug"`
 	GithubRepository     string             `json:"github_repository"`
 	DefaultBranch        string             `json:"default_branch"`
+	GithubInstallationID int32              `json:"github_installation_id"`
 	LatestDeploymentID   pgtype.UUID        `json:"latest_deployment_id"`
 	OrganisationID       pgtype.UUID        `json:"organisation_id"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt            pgtype.Timestamptz `json:"deleted_at"`
-	GithubInstallationID int32              `json:"github_installation_id"`
 }
 
 type ProjectEnvironment struct {

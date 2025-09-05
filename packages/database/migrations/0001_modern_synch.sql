@@ -1,1 +1,0 @@
-ALTER TABLE "projects" ADD COLUMN "github_installation_id" integer NOT NULL;

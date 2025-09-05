@@ -3,9 +3,8 @@
 SELECT 
     id,
     name,
-    status,
-    image_size,
-    image_hash,
+    size,
+    hash,
     object_key,
     created_at,
     updated_at
@@ -18,14 +17,13 @@ WHERE id = $1
 SELECT 
     id,
     name,
-    status,
-    image_size,
-    image_hash,
+    size,
+    hash,
     object_key,
     created_at,
     updated_at
 FROM images 
-WHERE image_hash = $1 
+WHERE hash = $1 
     AND deleted_at IS NULL;
 
 -- name: ImagesCreate :one
@@ -33,40 +31,39 @@ WHERE image_hash = $1
 INSERT INTO images (
     id,
     name,
-    status,
-    image_size,
-    image_hash,
+    size,
+    hash,
     object_key
 ) VALUES (
     $1,
     $2,
     $3,
     $4,
-    $5,
-    $6
+    $5
 )
 RETURNING 
     id,
     name,
-    status,
-    image_size,
-    image_hash,
+    size,
+    hash,
     object_key,
     created_at,
     updated_at;
 
--- name: ImagesUpdateStatus :one
--- Update image status
+-- name: ImagesUpdate :one
+-- Update image
 UPDATE images 
-SET status = $2, 
+SET name = $2, 
+    size = $3,
+    hash = $4,
+    object_key = $5,
     updated_at = now()
 WHERE id = $1
 RETURNING 
     id,
     name,
-    status,
-    image_size,
-    image_hash,
+    size,
+    hash,
     object_key,
     created_at,
     updated_at;
@@ -76,9 +73,8 @@ RETURNING
 SELECT 
     id,
     name,
-    status,
-    image_size,
-    image_hash,
+    size,
+    hash,
     object_key,
     created_at,
     updated_at
