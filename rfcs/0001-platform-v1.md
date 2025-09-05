@@ -1,1 +1,1 @@
-Moved [docs/architecture.md](docs/architecture.md)
+Moved [/docs/architecture.md](/docs/architecture.md)
