@@ -1,8 +1,8 @@
-.PHONY: all build clean test install uninstall dev run-nodeagent run-edgeproxy run-builder run-certmanager run-listener
+.PHONY: all build clean test install uninstall dev run-nodeagent run-edgeproxy run-builder run-certmanager run-listener run-manager
 
 # Build variables
 BUILD_DIR := build
-BINARIES := zeitwork-nodeagent zeitwork-edgeproxy zeitwork-builder zeitwork-certmanager zeitwork-listener
+BINARIES := zeitwork-nodeagent zeitwork-edgeproxy zeitwork-builder zeitwork-certmanager zeitwork-listener zeitwork-manager
 GO_BUILD_FLAGS := -a -installsuffix cgo
 LDFLAGS := -s -w
 
@@ -18,6 +18,7 @@ build:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(GO_BUILD_FLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/zeitwork-builder ./cmd/builder
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(GO_BUILD_FLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/zeitwork-certmanager ./cmd/certmanager
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(GO_BUILD_FLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/zeitwork-listener ./cmd/listener
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build $(GO_BUILD_FLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/zeitwork-manager ./cmd/manager
 	@echo "Build complete!"
 
 # Build for local development (current OS/arch)
@@ -29,6 +30,7 @@ build-local:
 	go build -o $(BUILD_DIR)/zeitwork-builder ./cmd/builder
 	go build -o $(BUILD_DIR)/zeitwork-certmanager ./cmd/certmanager
 	go build -o $(BUILD_DIR)/zeitwork-listener ./cmd/listener
+	go build -o $(BUILD_DIR)/zeitwork-manager ./cmd/manager
 	@echo "Local build complete!"
 
 # Clean build artifacts
@@ -50,8 +52,8 @@ install: build
 # Uninstall services (requires sudo)
 uninstall:
 	@echo "Uninstalling services (requires sudo)..."
-	@sudo systemctl stop zeitwork-nodeagent zeitwork-edgeproxy zeitwork-builder zeitwork-certmanager zeitwork-listener 2>/dev/null || true
-	@sudo systemctl disable zeitwork-nodeagent zeitwork-edgeproxy zeitwork-builder zeitwork-certmanager zeitwork-listener 2>/dev/null || true
+	@sudo systemctl stop zeitwork-nodeagent zeitwork-edgeproxy zeitwork-builder zeitwork-certmanager zeitwork-listener zeitwork-manager 2>/dev/null || true
+	@sudo systemctl disable zeitwork-nodeagent zeitwork-edgeproxy zeitwork-builder zeitwork-certmanager zeitwork-listener zeitwork-manager 2>/dev/null || true
 	@sudo rm -f /usr/local/bin/zeitwork-*
 	@sudo rm -f /etc/systemd/system/zeitwork-*.service
 	@sudo systemctl daemon-reload
@@ -72,7 +74,7 @@ dev-stop:
 # Development run targets (run locally with test config)
 run-nodeagent:
 	@echo "Running nodeagent locally..."
-	DATABASE_URL=postgres://postgres:postgres@localhost:5432/zeitwork_dev NATS_URL=nats://localhost:4222 LOG_LEVEL=debug ENVIRONMENT=development go run ./cmd/nodeagent/nodeagent.go
+	DATABASE_URL=postgres://postgres:postgres@localhost:5432/zeitwork_dev NATS_URL=nats://localhost:4222 LOG_LEVEL=debug ENVIRONMENT=development NODEAGENT_NODE_ID=00000001-0000-0000-0000-000000000001 NODEAGENT_REGION_ID=00000001-0000-0000-0000-000000000000 go run ./cmd/nodeagent/nodeagent.go
 
 run-edgeproxy:
 	@echo "Running edgeproxy locally..."
@@ -89,6 +91,10 @@ run-certmanager:
 run-listener:
 	@echo "Running listener locally..."
 	DATABASE_URL=postgres://postgres:postgres@localhost:5432/zeitwork_dev NATS_URL=nats://localhost:4222 LOG_LEVEL=debug ENVIRONMENT=development go run ./cmd/listener/listener.go
+
+run-manager:
+	@echo "Running manager locally..."
+	DATABASE_URL=postgres://postgres:postgres@localhost:5432/zeitwork_dev NATS_URL=nats://localhost:4222 LOG_LEVEL=debug ENVIRONMENT=development go run ./cmd/manager/manager.go
 
 # Generate SQL code
 sqlc:
@@ -136,6 +142,7 @@ help:
 	@echo "  make run-builder    - Run builder locally for development"
 	@echo "  make run-certmanager - Run certmanager locally for development"
 	@echo "  make run-listener   - Run listener locally for development"
+	@echo "  make run-manager    - Run manager locally for development"
 	@echo "  make sqlc           - Generate SQL code with sqlc"
 	@echo "  make fmt            - Format Go code"
 	@echo "  make lint           - Lint Go code"

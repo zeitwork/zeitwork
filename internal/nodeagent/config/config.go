@@ -11,6 +11,7 @@ import (
 type Config struct {
 	Port         string
 	NodeID       string
+	RegionID     string
 	DatabaseURL  string
 	PollInterval time.Duration
 	Runtime      *RuntimeConfig
@@ -46,9 +47,14 @@ type FirecrackerRuntimeConfig struct {
 
 // LoadConfig loads configuration from environment variables
 func LoadConfig() (*Config, error) {
-	nodeID := os.Getenv("NODE_ID")
+	nodeID := os.Getenv("NODEAGENT_NODE_ID")
 	if nodeID == "" {
-		return nil, fmt.Errorf("NODE_ID environment variable is required")
+		return nil, fmt.Errorf("NODEAGENT_NODE_ID environment variable is required")
+	}
+
+	regionID := os.Getenv("NODEAGENT_REGION_ID")
+	if regionID == "" {
+		return nil, fmt.Errorf("NODEAGENT_REGION_ID environment variable is required")
 	}
 
 	databaseURL := os.Getenv("DATABASE_URL")
@@ -66,6 +72,7 @@ func LoadConfig() (*Config, error) {
 	return &Config{
 		Port:         getEnvOrDefault("PORT", "8081"),
 		NodeID:       nodeID,
+		RegionID:     regionID,
 		DatabaseURL:  databaseURL,
 		PollInterval: pollInterval,
 		Runtime:      runtimeConfig,

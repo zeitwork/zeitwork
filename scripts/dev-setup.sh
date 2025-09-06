@@ -174,7 +174,7 @@ export_service_env() {
                 fi
             done
             ;;
-        "EDGEPROXY"|"CERTMANAGER"|"LISTENER")
+        "EDGEPROXY"|"CERTMANAGER"|"LISTENER"|"MANAGER")
             local service_var="${service_prefix}_PORT"
             if [ -n "${!service_var:-}" ]; then
                 export PORT="${!service_var}"
@@ -227,7 +227,7 @@ start_service() {
 stop_services() {
     print_status "Stopping all services..."
     
-    local services=("nodeagent" "edgeproxy" "builder" "certmanager" "listener")
+    local services=("nodeagent" "edgeproxy" "builder" "certmanager" "listener" "manager")
     
     for service in "${services[@]}"; do
         if [ -f "logs/${service}.pid" ]; then
@@ -291,6 +291,9 @@ main() {
     
     # Start listener
     start_service "listener" "go run ./cmd/listener/listener.go"
+    
+    # Start manager (should be last as it orchestrates other services)
+    start_service "manager" "go run ./cmd/manager/manager.go"
     
     print_success "Development environment is up and running!"
     print_status "Service logs are available in the logs/ directory"
