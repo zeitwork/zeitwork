@@ -505,6 +505,94 @@ func (x *InstanceUpdated) GetId() string {
 	return ""
 }
 
+type NodeCreated struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *NodeCreated) Reset() {
+	*x = NodeCreated{}
+	mi := &file_proto_common_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NodeCreated) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NodeCreated) ProtoMessage() {}
+
+func (x *NodeCreated) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_common_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NodeCreated.ProtoReflect.Descriptor instead.
+func (*NodeCreated) Descriptor() ([]byte, []int) {
+	return file_proto_common_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *NodeCreated) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type NodeUpdated struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *NodeUpdated) Reset() {
+	*x = NodeUpdated{}
+	mi := &file_proto_common_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NodeUpdated) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NodeUpdated) ProtoMessage() {}
+
+func (x *NodeUpdated) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_common_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NodeUpdated.ProtoReflect.Descriptor instead.
+func (*NodeUpdated) Descriptor() ([]byte, []int) {
+	return file_proto_common_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *NodeUpdated) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
 var File_proto_common_proto protoreflect.FileDescriptor
 
 const file_proto_common_proto_rawDesc = "" +
@@ -531,6 +619,10 @@ const file_proto_common_proto_rawDesc = "" +
 	"\x0fInstanceCreated\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"!\n" +
 	"\x0fInstanceUpdated\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"\x1d\n" +
+	"\vNodeCreated\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\"\x1d\n" +
+	"\vNodeUpdated\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02idB\x10Z\x0ezeitwork/protob\x06proto3"
 
 var (
@@ -545,7 +637,7 @@ func file_proto_common_proto_rawDescGZIP() []byte {
 	return file_proto_common_proto_rawDescData
 }
 
-var file_proto_common_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_proto_common_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_proto_common_proto_goTypes = []any{
 	(*ProjectCreated)(nil),            // 0: com.zeitwork.ProjectCreated
 	(*DeploymentCreated)(nil),         // 1: com.zeitwork.DeploymentCreated
@@ -558,6 +650,8 @@ var file_proto_common_proto_goTypes = []any{
 	(*DeploymentInstanceUpdated)(nil), // 8: com.zeitwork.DeploymentInstanceUpdated
 	(*InstanceCreated)(nil),           // 9: com.zeitwork.InstanceCreated
 	(*InstanceUpdated)(nil),           // 10: com.zeitwork.InstanceUpdated
+	(*NodeCreated)(nil),               // 11: com.zeitwork.NodeCreated
+	(*NodeUpdated)(nil),               // 12: com.zeitwork.NodeUpdated
 }
 var file_proto_common_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
@@ -578,7 +672,7 @@ func file_proto_common_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_common_proto_rawDesc), len(file_proto_common_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   11,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

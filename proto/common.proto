@@ -47,3 +47,11 @@ message InstanceCreated {
 message InstanceUpdated {
   string id = 1;
 }
+
+message NodeCreated {
+  string id = 1;
+}
+
+message NodeUpdated {
+  string id = 1;
+}

@@ -2,73 +2,52 @@ package nodeagent
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"log/slog"
-	"net/http"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/nats-io/nats.go"
-	"github.com/samber/lo"
 	"github.com/zeitwork/zeitwork/internal/database"
+	"github.com/zeitwork/zeitwork/internal/nodeagent/config"
+	"github.com/zeitwork/zeitwork/internal/nodeagent/events"
+	"github.com/zeitwork/zeitwork/internal/nodeagent/monitoring"
+	"github.com/zeitwork/zeitwork/internal/nodeagent/runtime"
+	"github.com/zeitwork/zeitwork/internal/nodeagent/state"
+	"github.com/zeitwork/zeitwork/internal/nodeagent/types"
 	sharedConfig "github.com/zeitwork/zeitwork/internal/shared/config"
 	sharedNats "github.com/zeitwork/zeitwork/internal/shared/nats"
 )
 
-// Service represents the node agent service that runs on each compute node
+// Service represents the node agent service
 type Service struct {
-	logger     *slog.Logger
-	config     *Config
-	httpClient *http.Client
-	nodeID     uuid.UUID
-	db         *database.DB
-	natsClient *sharedNats.Client
+	logger *slog.Logger
+	config *config.Config
+	nodeID uuid.UUID
 
-	// Instance management
-	instanceManager *InstanceManager
-	instances       map[string]*Instance
-	instancesMu     sync.RWMutex
+	// Core components
+	db              *database.DB
+	natsClient      *sharedNats.Client
+	runtime         types.Runtime
+	stateManager    *state.Manager
+	eventSubscriber *events.Subscriber
 
-	// Polling configuration
-	pollInterval time.Duration
-}
-
-// Config holds the configuration for the node agent service
-type Config struct {
-	Port         string
-	NodeID       string
-	DatabaseURL  string
-	PollInterval time.Duration
-}
-
-// Instance represents a running VM instance
-type Instance struct {
-	ID        string
-	ImageID   string
-	State     string
-	Resources map[string]interface{}
-	EnvVars   map[string]string
+	// Monitoring components
+	healthMonitor  *monitoring.HealthMonitor
+	statsCollector *monitoring.StatsCollector
+	reporter       *monitoring.Reporter
 }
 
 // NewService creates a new node agent service
-func NewService(config *Config, logger *slog.Logger) (*Service, error) {
-	// Parse or generate node ID
-	var nodeID uuid.UUID
-	var err error
-	if config.NodeID != "" {
-		nodeID, err = uuid.Parse(config.NodeID)
-		if err != nil {
-			return nil, fmt.Errorf("invalid node ID: %w", err)
-		}
-	} else {
-		return nil, fmt.Errorf("node ID is required")
+func NewService(cfg *config.Config, logger *slog.Logger) (*Service, error) {
+	// Parse node ID
+	nodeID, err := uuid.Parse(cfg.NodeID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid node ID: %w", err)
 	}
 
 	// Connect to database
-	db, err := database.NewDB(config.DatabaseURL)
+	db, err := database.NewDB(cfg.DatabaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
@@ -84,23 +63,45 @@ func NewService(config *Config, logger *slog.Logger) (*Service, error) {
 		return nil, fmt.Errorf("failed to connect to NATS: %w", err)
 	}
 
+	// Initialize runtime
+	rt, err := runtime.NewRuntime(cfg.Runtime, logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize runtime: %w", err)
+	}
+
+	// Initialize state manager
+	stateManager := state.NewManager(logger, nodeID, db, rt)
+
+	// Initialize event handlers
+	instanceCreatedHandler := events.NewInstanceCreatedHandler(stateManager, logger)
+	instanceUpdatedHandler := events.NewInstanceUpdatedHandler(stateManager, logger)
+	nodeUpdatedHandler := events.NewNodeUpdatedHandler(stateManager, logger)
+
+	// Initialize event subscriber
+	eventSubscriber := events.NewSubscriber(logger, nodeID, natsClient,
+		instanceCreatedHandler, instanceUpdatedHandler, nodeUpdatedHandler)
+
+	// Initialize monitoring components
+	healthMonitor := monitoring.NewHealthMonitor(logger, rt)
+	statsCollector := monitoring.NewStatsCollector(logger, rt)
+	reporter := monitoring.NewReporter(logger, nodeID, db, healthMonitor, statsCollector)
+
 	service := &Service{
 		logger:          logger,
-		config:          config,
-		httpClient:      &http.Client{Timeout: 30 * time.Second},
+		config:          cfg,
 		nodeID:          nodeID,
 		db:              db,
 		natsClient:      natsClient,
-		instanceManager: NewInstanceManager(logger, nodeID),
-		instances:       make(map[string]*Instance),
-		pollInterval:    config.PollInterval,
+		runtime:         rt,
+		stateManager:    stateManager,
+		eventSubscriber: eventSubscriber,
+		healthMonitor:   healthMonitor,
+		statsCollector:  statsCollector,
+		reporter:        reporter,
 	}
 
-	// Load initial state from database
-	if err := service.loadStateFromDB(context.Background()); err != nil {
-		logger.Error("Failed to load initial state from database", "error", err)
-		// Continue anyway - we'll sync on first poll
-	}
+	// Setup health monitoring callbacks
+	service.setupHealthMonitoring()
 
 	return service, nil
 }
@@ -108,271 +109,161 @@ func NewService(config *Config, logger *slog.Logger) (*Service, error) {
 // Start starts the node agent service
 func (s *Service) Start(ctx context.Context) error {
 	s.logger.Info("Starting node agent service",
-		"port", s.config.Port,
 		"node_id", s.nodeID,
-	)
+		"runtime_mode", s.config.Runtime.Mode)
 
-	// Create a wait group for goroutines
+	// Load initial state
+	s.logger.Info("Loading initial state")
+	if err := s.stateManager.LoadInitialState(ctx); err != nil {
+		return fmt.Errorf("failed to load initial state: %w", err)
+	}
+
+	// Perform initial reconciliation
+	s.logger.Info("Performing initial reconciliation")
+	if err := s.stateManager.Reconcile(ctx); err != nil {
+		s.logger.Error("Initial reconciliation failed", "error", err)
+		// Continue anyway - we'll retry via events and periodic reconciliation
+	}
+
+	// Start all components
 	var wg sync.WaitGroup
 
-	wg.Add(2) // Add count for both goroutines
-
-	// Start database poller
+	// Start NATS event subscriber
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		s.runPoller(ctx)
+		if err := s.eventSubscriber.Subscribe(ctx); err != nil {
+			s.logger.Error("Event subscriber failed", "error", err)
+		}
 	}()
 
-	// Start NATS subscriber
+	// Start periodic state reconciliation
+	wg.Add(1)
 	go func() {
 		defer wg.Done()
-		s.runNATSSubscriber(ctx)
+		s.stateManager.StartPeriodicReconciliation(ctx)
 	}()
+
+	// Start health monitoring
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		s.healthMonitor.Start(ctx)
+	}()
+
+	// Start statistics collection
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		s.statsCollector.Start(ctx)
+	}()
+
+	// Start status reporting
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		s.reporter.Start(ctx)
+	}()
+
+	s.logger.Info("Node agent service started successfully")
 
 	// Wait for context cancellation
 	<-ctx.Done()
 
-	// Shutdown server
+	// Shutdown
 	s.logger.Info("Shutting down node agent service")
 
-	// Wait for goroutines to finish
-	wg.Wait()
+	// Stop event subscriptions
+	s.eventSubscriber.Unsubscribe()
 
 	// Close connections
 	s.natsClient.Close()
 	s.db.Close()
 
+	// Wait for all goroutines to finish
+	wg.Wait()
+
+	s.logger.Info("Node agent service stopped")
 	return nil
 }
 
-// loadStateFromDB loads the current instances from the database
-func (s *Service) loadStateFromDB(ctx context.Context) error {
-	// Convert UUID to pgtype.UUID for database query
-	pgNodeID := pgtype.UUID{
-		Bytes: s.nodeID,
-		Valid: true,
-	}
+// setupHealthMonitoring configures health monitoring callbacks
+func (s *Service) setupHealthMonitoring() {
+	// Set callback for health changes
+	s.healthMonitor.SetHealthChangeCallback(func(instanceID string, healthy bool, reason string) {
+		s.logger.Info("Instance health changed",
+			"instance_id", instanceID,
+			"healthy", healthy,
+			"reason", reason)
 
-	instances, err := s.db.Queries().InstancesFindByNode(ctx, pgNodeID)
-	if err != nil {
-		return fmt.Errorf("failed to query instances: %w", err)
-	}
+		// Report state change to database
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
 
-	s.instancesMu.Lock()
-	defer s.instancesMu.Unlock()
-
-	// Filter valid instances and convert to internal format using lo
-	validInstances := lo.Filter(instances, func(dbInstance *database.InstancesFindByNodeRow, _ int) bool {
-		return dbInstance.ID.Valid
-	})
-
-	s.instances = lo.SliceToMap(validInstances, func(dbInstance *database.InstancesFindByNodeRow) (string, *Instance) {
-		// Convert pgtype.UUID to string
-		instanceID := uuid.UUID(dbInstance.ID.Bytes)
-		imageID := uuid.UUID(dbInstance.ImageID.Bytes)
-
-		instance := &Instance{
-			ID:        instanceID.String(),
-			ImageID:   imageID.String(),
-			State:     dbInstance.State,
-			Resources: make(map[string]interface{}),
-			EnvVars:   make(map[string]string),
+		var newState string
+		if healthy {
+			newState = "running"
+		} else {
+			newState = "failed"
 		}
 
-		// Resources are stored at node level, not instance level
-		instance.Resources = make(map[string]interface{})
-
-		// Parse environment variables if available
-		if dbInstance.EnvironmentVariables != "" {
-			if err := json.Unmarshal([]byte(dbInstance.EnvironmentVariables), &instance.EnvVars); err != nil {
-				s.logger.Warn("Failed to parse instance env vars", "instance_id", instance.ID, "error", err)
-			}
+		if err := s.reporter.ReportInstanceStateChange(ctx, instanceID, newState); err != nil {
+			s.logger.Error("Failed to report instance state change",
+				"instance_id", instanceID,
+				"error", err)
 		}
-
-		return instance.ID, instance
 	})
 
-	s.logger.Info("Loaded instances from database", "count", len(s.instances))
+	s.logger.Debug("Health monitoring configured")
+}
+
+// GetNodeStatus returns the current status of the node
+func (s *Service) GetNodeStatus() NodeStatus {
+	stateStats := s.stateManager.GetStateStats()
+	healthSummary := s.healthMonitor.GetHealthSummary()
+	nodeStats := s.statsCollector.GetNodeStats()
+	runtimeInfo := s.runtime.GetRuntimeInfo()
+
+	return NodeStatus{
+		NodeID:           s.nodeID.String(),
+		RuntimeInfo:      runtimeInfo,
+		StateStats:       stateStats,
+		HealthSummary:    healthSummary,
+		NodeStats:        nodeStats,
+		DesiredInstances: s.stateManager.GetDesiredInstances(),
+		ActualInstances:  s.stateManager.GetActualInstances(),
+	}
+}
+
+// ForceReconciliation forces an immediate state reconciliation
+func (s *Service) ForceReconciliation(ctx context.Context) error {
+	s.logger.Info("Forcing immediate reconciliation")
+
+	// Refresh both desired and actual state
+	if err := s.stateManager.RefreshDesiredState(ctx); err != nil {
+		return fmt.Errorf("failed to refresh desired state: %w", err)
+	}
+
+	if err := s.stateManager.RefreshActualState(ctx); err != nil {
+		return fmt.Errorf("failed to refresh actual state: %w", err)
+	}
+
+	// Perform reconciliation
+	if err := s.stateManager.Reconcile(ctx); err != nil {
+		return fmt.Errorf("failed to perform reconciliation: %w", err)
+	}
+
+	s.logger.Info("Forced reconciliation completed")
 	return nil
 }
 
-// runPoller periodically polls the database for state updates
-func (s *Service) runPoller(ctx context.Context) {
-	ticker := time.NewTicker(s.pollInterval)
-	defer ticker.Stop()
-
-	s.logger.Info("Starting database poller", "interval", s.pollInterval)
-
-	for {
-		select {
-		case <-ctx.Done():
-			s.logger.Info("Stopping database poller")
-			return
-		case <-ticker.C:
-			if err := s.syncWithDatabase(ctx); err != nil {
-				s.logger.Error("Failed to sync with database", "error", err)
-			}
-		}
-	}
-}
-
-// syncWithDatabase loads state from database and reconciles with actual state
-func (s *Service) syncWithDatabase(ctx context.Context) error {
-	// Load desired state from database
-	if err := s.loadStateFromDB(ctx); err != nil {
-		return fmt.Errorf("failed to load state from database: %w", err)
-	}
-
-	// Reconcile with actual state
-	if err := s.reconcileState(ctx); err != nil {
-		return fmt.Errorf("failed to reconcile state: %w", err)
-	}
-
-	return nil
-}
-
-// reconcileState ensures actual VM state matches desired state from database
-func (s *Service) reconcileState(ctx context.Context) error {
-	s.instancesMu.RLock()
-	instances := lo.Values(s.instances)
-	s.instancesMu.RUnlock()
-
-	// Group instances by state for more efficient processing
-	instancesByState := lo.GroupBy(instances, func(instance *Instance) string {
-		return instance.State
-	})
-
-	// Process each state group
-	s.processInstanceGroup(ctx, instancesByState["pending"], s.startInstance)
-	s.processInstanceGroup(ctx, instancesByState["starting"], s.startInstance)
-	s.processInstanceGroup(ctx, instancesByState["stopping"], s.stopInstance)
-
-	// Handle running instances (need status check)
-	lo.ForEach(instancesByState["running"], func(instance *Instance, _ int) {
-		s.reconcileRunningInstance(ctx, instance)
-	})
-
-	// Handle stopped instances (need status check)
-	lo.ForEach(lo.Flatten([]([]*Instance){
-		instancesByState["stopped"],
-		instancesByState["terminated"],
-	}), func(instance *Instance, _ int) {
-		s.reconcileStoppedInstance(ctx, instance)
-	})
-
-	return nil
-}
-
-// processInstanceGroup processes a group of instances with the same action
-func (s *Service) processInstanceGroup(ctx context.Context, instances []*Instance, action func(context.Context, *Instance) error) {
-	lo.ForEach(instances, func(instance *Instance, _ int) {
-		s.logger.Debug("Reconciling instance", "id", instance.ID, "state", instance.State)
-		if err := action(ctx, instance); err != nil {
-			s.logger.Error("Failed to process instance", "id", instance.ID, "error", err)
-		}
-	})
-}
-
-// reconcileRunningInstance ensures a running instance is actually running
-func (s *Service) reconcileRunningInstance(ctx context.Context, instance *Instance) {
-	running, err := s.instanceManager.IsInstanceRunning(ctx, instance)
-	if err != nil {
-		s.logger.Error("Failed to check instance status", "id", instance.ID, "error", err)
-		return
-	}
-
-	if !running {
-		s.logger.Warn("VM should be running but isn't", "id", instance.ID)
-		if err := s.startInstance(ctx, instance); err != nil {
-			s.logger.Error("Failed to restart VM", "id", instance.ID, "error", err)
-		}
-	}
-}
-
-// reconcileStoppedInstance ensures a stopped instance is actually stopped
-func (s *Service) reconcileStoppedInstance(ctx context.Context, instance *Instance) {
-	running, err := s.instanceManager.IsInstanceRunning(ctx, instance)
-	if err != nil {
-		s.logger.Error("Failed to check instance status", "id", instance.ID, "error", err)
-		return
-	}
-
-	if running {
-		if err := s.stopInstance(ctx, instance); err != nil {
-			s.logger.Error("Failed to ensure VM is stopped", "id", instance.ID, "error", err)
-		}
-	}
-}
-
-// runNATSSubscriber subscribes to NATS topics for real-time updates
-func (s *Service) runNATSSubscriber(ctx context.Context) {
-	// Subscribe to node-specific topics
-	nodeSubject := fmt.Sprintf("nodes.%s.instances", s.nodeID.String())
-
-	sub, err := s.natsClient.WithContext(ctx).Subscribe(nodeSubject, func(msg *nats.Msg) {
-		s.logger.Debug("Received NATS message", "subject", msg.Subject, "data", string(msg.Data))
-
-		// Trigger immediate sync
-		if err := s.syncWithDatabase(ctx); err != nil {
-			s.logger.Error("Failed to sync after NATS message", "error", err)
-		}
-	})
-
-	if err != nil {
-		s.logger.Error("Failed to subscribe to NATS", "subject", nodeSubject, "error", err)
-		return
-	}
-	defer sub.Unsubscribe()
-
-	s.logger.Info("NATS subscriber started", "subject", nodeSubject)
-
-	// Wait for context cancellation
-	<-ctx.Done()
-	s.logger.Info("Stopping NATS subscriber")
-}
-
-// startInstance starts an instance and updates the database state
-func (s *Service) startInstance(ctx context.Context, instance *Instance) error {
-	s.logger.Info("Starting instance", "id", instance.ID, "image", instance.ImageID)
-
-	// Use instance manager to start the VM
-	if err := s.instanceManager.StartInstance(ctx, instance); err != nil {
-		return fmt.Errorf("failed to start instance: %w", err)
-	}
-
-	// Update state in database to "running"
-	return s.updateInstanceState(ctx, instance.ID, "running")
-}
-
-// stopInstance stops an instance and updates the database state
-func (s *Service) stopInstance(ctx context.Context, instance *Instance) error {
-	s.logger.Info("Stopping instance", "id", instance.ID)
-
-	// Use instance manager to stop the VM
-	if err := s.instanceManager.StopInstance(ctx, instance); err != nil {
-		return fmt.Errorf("failed to stop instance: %w", err)
-	}
-
-	// Update state in database to "stopped"
-	return s.updateInstanceState(ctx, instance.ID, "stopped")
-}
-
-// updateInstanceState updates the instance state in the database
-func (s *Service) updateInstanceState(ctx context.Context, instanceID, state string) error {
-	instanceUUID, err := uuid.Parse(instanceID)
-	if err != nil {
-		return fmt.Errorf("invalid instance ID: %w", err)
-	}
-
-	pgInstanceID := pgtype.UUID{
-		Bytes: instanceUUID,
-		Valid: true,
-	}
-
-	_, err = s.db.Queries().InstancesUpdateState(ctx, &database.InstancesUpdateStateParams{
-		ID:    pgInstanceID,
-		State: state,
-	})
-
-	return err
+// NodeStatus represents the current status of the node
+type NodeStatus struct {
+	NodeID           string                   `json:"node_id"`
+	RuntimeInfo      *types.RuntimeInfo       `json:"runtime_info"`
+	StateStats       state.StateStats         `json:"state_stats"`
+	HealthSummary    monitoring.HealthSummary `json:"health_summary"`
+	NodeStats        *monitoring.NodeStats    `json:"node_stats"`
+	DesiredInstances []*types.Instance        `json:"desired_instances"`
+	ActualInstances  []*types.Instance        `json:"actual_instances"`
 }

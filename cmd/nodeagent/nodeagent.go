@@ -6,35 +6,28 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	"github.com/zeitwork/zeitwork/internal/nodeagent"
-	"github.com/zeitwork/zeitwork/internal/shared/config"
+	"github.com/zeitwork/zeitwork/internal/nodeagent/config"
 	"github.com/zeitwork/zeitwork/internal/shared/logging"
 )
 
 func main() {
 	// Load configuration
-	cfg, err := config.LoadNodeAgentConfig()
+	cfg, err := config.LoadConfig()
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
 	// Create logger
-	logger := logging.NewLogger(cfg.ServiceName, cfg.LogLevel, cfg.Environment)
+	logger := logging.NewLogger("nodeagent", getEnvOrDefault("LOG_LEVEL", "info"), cfg.Runtime.Mode)
 
 	// Create node agent service
-	svc, err := nodeagent.NewService(&nodeagent.Config{
-		Port:         getEnvOrDefault("PORT", "8081"),
-		NodeID:       cfg.NodeID,
-		DatabaseURL:  cfg.DatabaseURL,
-		PollInterval: 10 * time.Second, // MVP: Poll every 10 seconds
-	}, logger)
+	svc, err := nodeagent.NewService(cfg, logger)
 	if err != nil {
 		logger.Error("Failed to create node agent service", "error", err)
 		os.Exit(1)
 	}
-	// Note: Close is handled in Start method
 
 	// Create context that cancels on interrupt
 	ctx, cancel := context.WithCancel(context.Background())
@@ -51,9 +44,9 @@ func main() {
 
 	// Start the service
 	logger.Info("Starting node agent service",
-		"port", getEnvOrDefault("PORT", "8081"),
-		"environment", cfg.Environment,
 		"node_id", cfg.NodeID,
+		"runtime_mode", cfg.Runtime.Mode,
+		"poll_interval", cfg.PollInterval,
 	)
 
 	if err := svc.Start(ctx); err != nil {

@@ -49,7 +49,7 @@ export const instances = pgTable("instances", {
   memory: integer().notNull(),
   defaultPort: integer().notNull(),
   ipv6Address: text().notNull(), // ipv6 address
-  environmentVariables: text().notNull(), // encrypted .env file
+  environmentVariables: text().notNull(), // encrypted { key: value } object
   ...timestamps,
 });
 
