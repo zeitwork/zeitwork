@@ -172,6 +172,18 @@ func (r *Reporter) reportInstanceStatus(ctx context.Context, instanceID string, 
 		instanceState = "failed"
 	}
 
+	// Check current state to avoid unnecessary updates
+	currentInstance, err := r.db.Queries().InstancesGetById(ctx, pgInstanceID)
+	if err != nil {
+		r.logger.Warn("Failed to get current instance state",
+			"instance_id", instanceID,
+			"error", err)
+		// Continue with update anyway
+	} else if currentInstance.State == instanceState {
+		// State hasn't changed, skip update to avoid triggering events
+		return nil
+	}
+
 	// Update instance state in database
 	_, err = r.db.Queries().InstancesUpdateState(ctx, &database.InstancesUpdateStateParams{
 		ID:    pgInstanceID,

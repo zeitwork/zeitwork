@@ -181,13 +181,18 @@ func (r *Reconciler) shouldUpdateState(actual, desired *types.Instance) bool {
 }
 
 // hasEnvVarChanges checks if environment variables have changed
+// Only compares the environment variables that are explicitly set in the desired state
+// to avoid false positives from system environment variables added by Docker
 func (r *Reconciler) hasEnvVarChanges(actual, desired map[string]string) bool {
-	if len(actual) != len(desired) {
-		return true
-	}
-
+	// Only check the desired environment variables
+	// We don't care if the actual state has additional system env vars
 	for key, desiredValue := range desired {
 		if actualValue, exists := actual[key]; !exists || actualValue != desiredValue {
+			r.logger.Debug("Environment variable changed",
+				"key", key,
+				"desired", desiredValue,
+				"actual", actualValue,
+				"exists", exists)
 			return true
 		}
 	}
