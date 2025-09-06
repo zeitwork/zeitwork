@@ -53,6 +53,8 @@ type Querier interface {
 	ImageBuildsFail(ctx context.Context, id pgtype.UUID) (*ImageBuildsFailRow, error)
 	// Get image builds for a deployment
 	ImageBuildsGetByDeployment(ctx context.Context, deploymentID pgtype.UUID) ([]*ImageBuildsGetByDeploymentRow, error)
+	// Reset builds that have been "building" for too long (using minutes parameter)
+	ImageBuildsResetStale(ctx context.Context, dollar_1 pgtype.Text) ([]*ImageBuildsResetStaleRow, error)
 	// Create a new image
 	ImagesCreate(ctx context.Context, arg *ImagesCreateParams) (*ImagesCreateRow, error)
 	// Get all images

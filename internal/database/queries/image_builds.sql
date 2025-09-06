@@ -98,3 +98,22 @@ RETURNING
     organisation_id,
     created_at,
     updated_at;
+
+-- name: ImageBuildsResetStale :many
+-- Reset builds that have been "building" for too long (using minutes parameter)
+UPDATE image_builds 
+SET status = 'pending',
+    started_at = NULL,
+    updated_at = now()
+WHERE status = 'building' 
+  AND started_at < NOW() - ($1 || ' minutes')::INTERVAL
+RETURNING 
+    id,
+    status,
+    deployment_id,
+    started_at,
+    completed_at,
+    failed_at,
+    organisation_id,
+    created_at,
+    updated_at;

@@ -280,3 +280,65 @@ func (q *Queries) ImageBuildsGetByDeployment(ctx context.Context, deploymentID p
 	}
 	return items, nil
 }
+
+const imageBuildsResetStale = `-- name: ImageBuildsResetStale :many
+UPDATE image_builds 
+SET status = 'pending',
+    started_at = NULL,
+    updated_at = now()
+WHERE status = 'building' 
+  AND started_at < NOW() - ($1 || ' minutes')::INTERVAL
+RETURNING 
+    id,
+    status,
+    deployment_id,
+    started_at,
+    completed_at,
+    failed_at,
+    organisation_id,
+    created_at,
+    updated_at
+`
+
+type ImageBuildsResetStaleRow struct {
+	ID             pgtype.UUID        `json:"id"`
+	Status         string             `json:"status"`
+	DeploymentID   pgtype.UUID        `json:"deployment_id"`
+	StartedAt      pgtype.Timestamptz `json:"started_at"`
+	CompletedAt    pgtype.Timestamptz `json:"completed_at"`
+	FailedAt       pgtype.Timestamptz `json:"failed_at"`
+	OrganisationID pgtype.UUID        `json:"organisation_id"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Reset builds that have been "building" for too long (using minutes parameter)
+func (q *Queries) ImageBuildsResetStale(ctx context.Context, dollar_1 pgtype.Text) ([]*ImageBuildsResetStaleRow, error) {
+	rows, err := q.db.Query(ctx, imageBuildsResetStale, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*ImageBuildsResetStaleRow
+	for rows.Next() {
+		var i ImageBuildsResetStaleRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Status,
+			&i.DeploymentID,
+			&i.StartedAt,
+			&i.CompletedAt,
+			&i.FailedAt,
+			&i.OrganisationID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

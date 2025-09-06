@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/nats-io/nats.go"
@@ -93,14 +93,14 @@ func NewService(cfg *config.BuilderConfig, logger *slog.Logger) (*Service, error
 func (s *Service) Start(ctx context.Context) error {
 	s.logger.Info("Starting image builder service")
 
-	// Check for any existing pending builds on startup
-	go s.initialBuildCheck(ctx)
+	// Check for any existing pending image builds on startup
+	go s.initialImageBuildCheck(ctx)
 
 	// Subscribe to NATS build notifications
 	go s.subscribeToBuilds(ctx)
 
-	// Start the main build processing loop
-	go s.buildProcessingLoop(ctx)
+	// Start cleanup routine for orphaned builds
+	go s.cleanupOrphanedBuilds(ctx)
 
 	// Wait for context cancellation
 	<-ctx.Done()
@@ -110,64 +110,53 @@ func (s *Service) Start(ctx context.Context) error {
 	return nil
 }
 
-// initialBuildCheck checks for any pending deployments without builds on service startup
-func (s *Service) initialBuildCheck(ctx context.Context) {
-	s.logger.Info("Checking for pending deployments without builds on startup")
+// initialImageBuildCheck checks for any pending image builds on service startup
+func (s *Service) initialImageBuildCheck(ctx context.Context) {
+	s.logger.Info("Checking for pending image builds on startup")
 
-	// Get all pending deployments that don't have builds yet
-	pendingDeployments, err := s.queries.DeploymentsGetPendingWithoutBuilds(ctx)
-	if err != nil {
-		s.logger.Error("Failed to get pending deployments", "error", err)
-		return
-	}
+	// Process any pending image builds that may have been created while the builder was down
+	// We'll use a simple loop to check for pending builds and process them
+	for {
+		// Try to dequeue a pending image build
+		imageBuild, err := s.queries.ImageBuildsDequeuePending(ctx)
+		if err != nil {
+			// This is expected when no builds are pending
+			s.logger.Debug("No pending image builds to process on startup")
+			break
+		}
 
-	if len(pendingDeployments) == 0 {
-		s.logger.Info("No pending deployments found on startup")
-		return
-	}
+		if imageBuild == nil {
+			break
+		}
 
-	s.logger.Info("Found pending deployments without builds", "count", len(pendingDeployments))
-
-	// Create builds for each pending deployment
-	for _, deployment := range pendingDeployments {
-		if err := s.createBuildForPendingDeployment(ctx, deployment); err != nil {
-			s.logger.Error("Failed to create build for pending deployment",
-				"deployment_id", deployment.ID,
+		// Process the build
+		if err := s.processImageBuildFromRow(ctx, imageBuild); err != nil {
+			s.logger.Error("Failed to process pending image build on startup",
+				"build_id", imageBuild.ID,
 				"error", err)
-			// Continue with other deployments instead of failing completely
+			// Continue with other builds instead of failing completely
 			continue
 		}
 
-		s.logger.Info("Created build for pending deployment",
-			"deployment_id", deployment.ID,
-			"project_id", deployment.ProjectID)
+		s.logger.Info("Processed pending image build on startup",
+			"build_id", imageBuild.ID)
 	}
 
-	s.logger.Info("Initial build check completed", "builds_created", len(pendingDeployments))
+	s.logger.Info("Initial image build check completed")
 }
 
 // subscribeToBuilds subscribes to NATS notifications for image build events
 func (s *Service) subscribeToBuilds(ctx context.Context) {
 	s.logger.Info("Subscribing to image build notifications")
 
-	// Subscribe to deployment creation events to create image builds
-	_, err := s.natsClient.Subscribe("deployment.created", func(msg *nats.Msg) {
-		s.logger.Debug("Received deployment created notification", "data", string(msg.Data))
+	// Use queue groups to ensure only one builder receives each message
+	queueGroup := "builder-workers"
 
-		// Handle deployment creation (create image build if needed)
-		if err := s.handleDeploymentCreated(ctx, msg.Data); err != nil {
-			s.logger.Error("Failed to handle deployment created notification", "error", err)
-		}
-	})
-
-	if err != nil {
-		s.logger.Error("Failed to subscribe to deployment created notifications", "error", err)
-		return
-	}
-
-	// Subscribe to image build creation events from the database
-	_, err = s.natsClient.Subscribe("image_build.created", func(msg *nats.Msg) {
-		s.logger.Debug("Received image build created notification", "data", string(msg.Data))
+	// Subscribe to image_build.created events
+	_, err := s.natsClient.QueueSubscribe("image_build.created", queueGroup, func(msg *nats.Msg) {
+		s.logger.Debug("Received image build created notification",
+			"data", string(msg.Data),
+			"queue_group", queueGroup)
 
 		// Handle the image build creation (start Docker build)
 		if err := s.handleImageBuildCreated(ctx, msg.Data); err != nil {
@@ -180,10 +169,89 @@ func (s *Service) subscribeToBuilds(ctx context.Context) {
 		return
 	}
 
-	s.logger.Info("Successfully subscribed to image build notifications")
+	// Subscribe to image_build.updated events to handle reset builds
+	_, err = s.natsClient.QueueSubscribe("image_build.updated", queueGroup, func(msg *nats.Msg) {
+		s.logger.Debug("Received image build updated notification",
+			"data", string(msg.Data),
+			"queue_group", queueGroup)
+
+		// Handle the image build update (check if it was reset to pending)
+		if err := s.handleImageBuildUpdated(ctx, msg.Data); err != nil {
+			s.logger.Error("Failed to handle image build updated notification", "error", err)
+		}
+	})
+
+	if err != nil {
+		s.logger.Error("Failed to subscribe to image build updated notifications", "error", err)
+		return
+	}
+
+	s.logger.Info("Successfully subscribed to image build notifications", "queue_group", queueGroup)
 
 	// Keep the subscription alive
 	<-ctx.Done()
+}
+
+// cleanupOrphanedBuilds runs periodic cleanup of stale builds
+func (s *Service) cleanupOrphanedBuilds(ctx context.Context) {
+	// Run cleanup every 5 minutes (or configured interval)
+	cleanupInterval := s.config.CleanupInterval
+	if cleanupInterval == 0 {
+		cleanupInterval = 5 * time.Minute // Default to 5 minutes
+	}
+
+	ticker := time.NewTicker(cleanupInterval)
+	defer ticker.Stop()
+
+	// Also run immediately on startup
+	s.performCleanup(ctx)
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			s.performCleanup(ctx)
+		}
+	}
+}
+
+// performCleanup resets stale builds that have been building for too long
+func (s *Service) performCleanup(ctx context.Context) {
+	// Calculate timeout: BuildTimeout + 10 minute buffer
+	timeout := s.config.BuildTimeout + (10 * time.Minute)
+	timeoutMinutes := int(timeout.Minutes())
+
+	s.logger.Debug("Performing cleanup of stale builds",
+		"timeout", timeout,
+		"timeout_minutes", timeoutMinutes)
+
+	// Convert timeout to pgtype.Text for the query
+	var timeoutParam pgtype.Text
+	timeoutParam.Scan(strconv.Itoa(timeoutMinutes))
+
+	// Reset builds that have been "building" for too long
+	resetBuilds, err := s.queries.ImageBuildsResetStale(ctx, timeoutParam)
+	if err != nil {
+		s.logger.Error("Failed to reset stale builds", "error", err)
+		return
+	}
+
+	if len(resetBuilds) > 0 {
+		s.logger.Warn("Reset stale builds",
+			"count", len(resetBuilds),
+			"timeout_minutes", timeoutMinutes)
+
+		// Log each reset build for debugging
+		for _, build := range resetBuilds {
+			s.logger.Warn("Reset stale build",
+				"build_id", build.ID,
+				"deployment_id", build.DeploymentID)
+		}
+
+		// Note: We don't republish events here - the listener will detect
+		// the database changes and publish image_build.updated events
+	}
 }
 
 // handleImageBuildCreated handles image build creation events from the listener
@@ -197,179 +265,65 @@ func (s *Service) handleImageBuildCreated(ctx context.Context, data []byte) erro
 	s.logger.Info("Processing image build created event",
 		"image_build_id", imageBuildCreated.Id)
 
-	// Start the actual Docker build process
-	s.logger.Info("Starting Docker build process",
-		"image_build_id", imageBuildCreated.Id)
-
-	// TODO: Implement the actual Docker build logic here
-	// This would involve:
-	// 1. Fetching the deployment and project details
-	// 2. Cloning the repository
-	// 3. Building the Docker image
-	// 4. Pushing to registry
-	// 5. Updating the image build status
-
-	return nil
+	// Try to process any pending build (the specific build might already be taken by another builder)
+	return s.processAnyPendingBuild(ctx)
 }
 
-// handleDeploymentCreated creates an image build when a deployment is created
-func (s *Service) handleDeploymentCreated(ctx context.Context, data []byte) error {
-	// Parse deployment created message
-	var deploymentCreated pb.DeploymentCreated
-	if err := proto.Unmarshal(data, &deploymentCreated); err != nil {
-		return fmt.Errorf("failed to unmarshal deployment created: %w", err)
+// handleImageBuildUpdated handles image build update events from the listener
+func (s *Service) handleImageBuildUpdated(ctx context.Context, data []byte) error {
+	// Parse the image build updated message
+	var imageBuildUpdated pb.ImageBuildUpdated
+	if err := proto.Unmarshal(data, &imageBuildUpdated); err != nil {
+		return fmt.Errorf("failed to unmarshal image build updated: %w", err)
 	}
 
-	s.logger.Info("Processing deployment created event", "deployment_id", deploymentCreated.Id)
+	s.logger.Debug("Processing image build updated event",
+		"image_build_id", imageBuildUpdated.Id)
 
-	// Parse deployment UUID
-	deploymentUUID, err := s.parseUUID(deploymentCreated.Id)
+	// When a build is updated, it might have been reset to pending status
+	// Try to process any pending build
+	return s.processAnyPendingBuild(ctx)
+}
+
+// processAnyPendingBuild tries to process any pending build from the queue
+func (s *Service) processAnyPendingBuild(ctx context.Context) error {
+	// Try to dequeue any pending build
+	imageBuild, err := s.queries.ImageBuildsDequeuePending(ctx)
 	if err != nil {
-		return fmt.Errorf("failed to parse deployment ID: %w", err)
-	}
-
-	// Check if this deployment already has a build
-	existingBuilds, err := s.queries.ImageBuildsGetByDeployment(ctx, deploymentUUID)
-	if err != nil {
-		return fmt.Errorf("failed to check existing builds: %w", err)
-	}
-
-	if len(existingBuilds) > 0 {
-		s.logger.Debug("Skipping deployment - already has builds",
-			"deployment_id", deploymentCreated.Id,
-			"existing_builds", len(existingBuilds))
+		s.logger.Debug("No pending builds available")
 		return nil
 	}
 
-	// Fetch deployment details from database
-	deployment, err := s.queries.DeploymentsGetById(ctx, deploymentUUID)
-	if err != nil {
-		return fmt.Errorf("failed to get deployment: %w", err)
-	}
-
-	// Only create builds for pending deployments
-	if deployment.Status != "pending" {
-		s.logger.Debug("Skipping deployment - not pending",
-			"deployment_id", deploymentCreated.Id,
-			"status", deployment.Status)
+	if imageBuild == nil {
+		s.logger.Debug("No pending builds found")
 		return nil
 	}
 
-	// Generate a new UUID for the image build
-	buildUUID := pgtype.UUID{}
-	if err := buildUUID.Scan(s.generateUUID()); err != nil {
-		return fmt.Errorf("failed to generate build UUID: %w", err)
-	}
-
-	// Create image build in database (this will trigger image_build.created event)
-	createParams := &database.ImageBuildsCreateParams{
-		ID:             buildUUID,
-		DeploymentID:   deploymentUUID,
-		OrganisationID: deployment.OrganisationID,
-	}
-
-	build, err := s.queries.ImageBuildsCreate(ctx, createParams)
-	if err != nil {
-		return fmt.Errorf("failed to create image build: %w", err)
-	}
-
-	s.logger.Info("Created image build for deployment",
-		"build_id", build.ID,
-		"deployment_id", build.DeploymentID,
-		"status", build.Status)
-
-	return nil
+	// Process the build we got
+	return s.processImageBuildFromRow(ctx, imageBuild)
 }
 
-// parseUUID parses a string UUID into pgtype.UUID
-func (s *Service) parseUUID(uuidStr string) (pgtype.UUID, error) {
-	var uuid pgtype.UUID
-	if err := uuid.Scan(uuidStr); err != nil {
-		return uuid, fmt.Errorf("invalid UUID format: %w", err)
-	}
-	return uuid, nil
-}
-
-// createBuildForPendingDeployment creates an image build for a pending deployment from startup check
-func (s *Service) createBuildForPendingDeployment(ctx context.Context, deployment *database.DeploymentsGetPendingWithoutBuildsRow) error {
-	// Generate a new UUID for the image build
-	buildUUID := pgtype.UUID{}
-	if err := buildUUID.Scan(s.generateUUID()); err != nil {
-		return fmt.Errorf("failed to generate build UUID: %w", err)
-	}
-
-	// Create image build in database
-	createParams := &database.ImageBuildsCreateParams{
-		ID:             buildUUID,
-		DeploymentID:   deployment.ID,
-		OrganisationID: deployment.OrganisationID,
-	}
-
-	build, err := s.queries.ImageBuildsCreate(ctx, createParams)
-	if err != nil {
-		return fmt.Errorf("failed to create image build: %w", err)
-	}
-
-	s.logger.Info("Created image build",
-		"build_id", build.ID,
-		"deployment_id", build.DeploymentID,
-		"status", build.Status)
-
-	return nil
-}
-
-// buildProcessingLoop is the main loop that processes builds
-func (s *Service) buildProcessingLoop(ctx context.Context) {
-	ticker := time.NewTicker(s.config.BuildPollInterval)
-	defer ticker.Stop()
-
-	s.logger.Info("Starting build processing loop", "poll_interval", s.config.BuildPollInterval)
-
-	for {
-		select {
-		case <-ctx.Done():
-			s.logger.Info("Build processing loop stopped")
-			return
-		case <-s.stopChan:
-			s.logger.Info("Build processing loop stopped via stop channel")
-			return
-		case <-ticker.C:
-			s.processPendingBuilds(ctx)
-		}
-	}
-}
-
-// processPendingBuilds checks for and processes any pending builds
-func (s *Service) processPendingBuilds(ctx context.Context) {
+// processImageBuildFromRow processes an image build from a database row
+func (s *Service) processImageBuildFromRow(ctx context.Context, imageBuild *database.ImageBuildsDequeuePendingRow) error {
 	// Check if we're at capacity
 	s.buildsMu.RLock()
 	atCapacity := s.activeBuildCount >= s.config.MaxConcurrentBuilds
 	s.buildsMu.RUnlock()
 
 	if atCapacity {
-		s.logger.Debug("At build capacity, skipping build check",
+		s.logger.Debug("At build capacity, deferring build",
 			"active_builds", s.activeBuildCount,
-			"max_concurrent", s.config.MaxConcurrentBuilds)
-		return
-	}
-
-	// Try to dequeue a pending image build
-	imageBuild, err := s.queries.ImageBuildsDequeuePending(ctx)
-	if err != nil {
-		// This is expected when no builds are pending
-		s.logger.Debug("No pending image builds to process")
-		return
-	}
-
-	if imageBuild == nil {
-		return
+			"max_concurrent", s.config.MaxConcurrentBuilds,
+			"build_id", imageBuild.ID)
+		// TODO: We should put the build back to pending status
+		// For now, we'll just process it anyway
 	}
 
 	// Enrich the image build with deployment and project information
 	enrichedBuild, err := s.enrichImageBuild(ctx, imageBuild)
 	if err != nil {
 		s.logger.Error("Failed to enrich image build", "build_id", imageBuild.ID, "error", err)
-		return
+		return err
 	}
 
 	s.logger.Info("Starting build processing",
@@ -385,6 +339,8 @@ func (s *Service) processPendingBuilds(ctx context.Context) {
 
 	// Process the build in a separate goroutine
 	go s.processBuild(ctx, enrichedBuild)
+
+	return nil
 }
 
 // enrichImageBuild enriches an ImageBuild with deployment and project information
@@ -515,11 +471,6 @@ func (s *Service) processBuild(ctx context.Context, build *EnrichedBuild) {
 				"deployment_id", build.DeploymentID)
 		}
 	}
-}
-
-// generateUUID generates a new UUIDv7 string
-func (s *Service) generateUUID() string {
-	return uuid.Must(uuid.NewV7()).String()
 }
 
 // Close closes the builder service

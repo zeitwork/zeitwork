@@ -94,11 +94,35 @@ func (o *DeploymentOrchestrator) HandleDeploymentUpdatedByID(ctx context.Context
 func (o *DeploymentOrchestrator) HandleDeploymentCreatedByID(ctx context.Context, deploymentID pgtype.UUID) error {
 	o.logger.Info("Processing deployment creation by ID", "deployment_id", deploymentID)
 
-	// For deployment created events, we typically just log and track
-	// The actual instance creation happens when the build completes
-	o.logger.Info("Deployment created", "deployment_id", deploymentID)
+	// Get deployment details to create the image build
+	deployment, err := o.db.DeploymentsGetById(ctx, deploymentID)
+	if err != nil {
+		return fmt.Errorf("failed to get deployment: %w", err)
+	}
 
-	return nil
+	// Only create builds for pending deployments
+	if deployment.Status != "pending" {
+		o.logger.Debug("Skipping deployment - not pending",
+			"deployment_id", deploymentID,
+			"status", deployment.Status)
+		return nil
+	}
+
+	// Check if this deployment already has a build
+	existingBuilds, err := o.db.ImageBuildsGetByDeployment(ctx, deploymentID)
+	if err != nil {
+		return fmt.Errorf("failed to check existing builds: %w", err)
+	}
+
+	if len(existingBuilds) > 0 {
+		o.logger.Debug("Skipping deployment - already has builds",
+			"deployment_id", deploymentID,
+			"existing_builds", len(existingBuilds))
+		return nil
+	}
+
+	// Create the image build
+	return o.CreateImageBuildForDeployment(ctx, deployment)
 }
 
 // HandleDeploymentChange processes deployment state changes (legacy method - can be removed)
@@ -178,6 +202,33 @@ func (o *DeploymentOrchestrator) ProcessReadyDeployments(ctx context.Context) er
 		return fmt.Errorf("failed to process %d deployments: %v", len(errors), errors)
 	}
 
+	return nil
+}
+
+// CreateImageBuildForDeployment creates an image build for a deployment
+func (o *DeploymentOrchestrator) CreateImageBuildForDeployment(ctx context.Context, deployment *database.DeploymentsGetByIdRow) error {
+	// Generate a new UUID for the image build
+	buildUUID := uuid.GeneratePgUUID()
+
+	// Create image build in database
+	createParams := &database.ImageBuildsCreateParams{
+		ID:             buildUUID,
+		DeploymentID:   deployment.ID,
+		OrganisationID: deployment.OrganisationID,
+	}
+
+	build, err := o.db.ImageBuildsCreate(ctx, createParams)
+	if err != nil {
+		return fmt.Errorf("failed to create image build: %w", err)
+	}
+
+	o.logger.Info("Created image build for deployment",
+		"build_id", build.ID,
+		"deployment_id", build.DeploymentID,
+		"status", build.Status)
+
+	// The listener service will automatically detect this database change
+	// and publish the image_build.created event to NATS
 	return nil
 }
 
