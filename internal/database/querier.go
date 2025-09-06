@@ -31,6 +31,8 @@ type Querier interface {
 	DeploymentsGetPendingWithoutBuilds(ctx context.Context) ([]*DeploymentsGetPendingWithoutBuildsRow, error)
 	// Get deployments that have completed builds but no instances yet (ready for deployment)
 	DeploymentsGetReadyForDeployment(ctx context.Context) ([]*DeploymentsGetReadyForDeploymentRow, error)
+	// Update deployment image_id after successful build
+	DeploymentsUpdateImageId(ctx context.Context, arg *DeploymentsUpdateImageIdParams) (*DeploymentsUpdateImageIdRow, error)
 	// Update deployment status
 	DeploymentsUpdateStatus(ctx context.Context, arg *DeploymentsUpdateStatusParams) (*DeploymentsUpdateStatusRow, error)
 	// Create a new domain

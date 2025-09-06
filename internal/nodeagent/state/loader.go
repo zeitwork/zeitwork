@@ -15,17 +15,19 @@ import (
 
 // Loader handles loading state from the database
 type Loader struct {
-	logger *slog.Logger
-	nodeID uuid.UUID
-	db     *database.DB
+	logger        *slog.Logger
+	nodeID        uuid.UUID
+	db            *database.DB
+	imageRegistry string
 }
 
 // NewLoader creates a new state loader
-func NewLoader(logger *slog.Logger, nodeID uuid.UUID, db *database.DB) *Loader {
+func NewLoader(logger *slog.Logger, nodeID uuid.UUID, db *database.DB, imageRegistry string) *Loader {
 	return &Loader{
-		logger: logger,
-		nodeID: nodeID,
-		db:     db,
+		logger:        logger,
+		nodeID:        nodeID,
+		db:            db,
+		imageRegistry: imageRegistry,
 	}
 }
 
@@ -51,7 +53,7 @@ func (l *Loader) LoadDesiredState(ctx context.Context) ([]*types.Instance, error
 	})
 
 	instances := lo.Map(validInstances, func(dbInstance *database.InstancesFindByNodeRow, _ int) *types.Instance {
-		return l.dbInstanceToRuntime(dbInstance)
+		return l.dbInstanceToRuntime(ctx, dbInstance)
 	})
 
 	l.logger.Debug("Desired state loaded",
@@ -91,14 +93,14 @@ func (l *Loader) LoadInstance(ctx context.Context, instanceID string) (*types.In
 		return nil, fmt.Errorf("instance %s does not belong to node %s", instanceID, l.nodeID)
 	}
 
-	instance := l.dbInstanceToRuntimeFromGetById(*dbInstance)
+	instance := l.dbInstanceToRuntimeFromGetById(ctx, *dbInstance)
 	l.logger.Debug("Instance loaded", "instance_id", instanceID)
 
 	return instance, nil
 }
 
 // dbInstanceToRuntime converts database instance to runtime instance
-func (l *Loader) dbInstanceToRuntime(dbInstance *database.InstancesFindByNodeRow) *types.Instance {
+func (l *Loader) dbInstanceToRuntime(ctx context.Context, dbInstance *database.InstancesFindByNodeRow) *types.Instance {
 	// Convert UUIDs
 	instanceID := uuid.UUID(dbInstance.ID.Bytes).String()
 	imageID := uuid.UUID(dbInstance.ImageID.Bytes).String()
@@ -113,6 +115,21 @@ func (l *Loader) dbInstanceToRuntime(dbInstance *database.InstancesFindByNodeRow
 		}
 	}
 
+	// Get the actual image tag from database
+	imageTag, err := l.getImageTag(ctx, imageID)
+	if err != nil {
+		l.logger.Error("Failed to get image tag",
+			"instance_id", instanceID,
+			"image_id", imageID,
+			"error", err)
+		// Use fallback format
+		registry := l.imageRegistry
+		if registry == "" {
+			registry = "localhost:5001"
+		}
+		imageTag = fmt.Sprintf("%s/zeitwork/%s:latest", registry, imageID[:8])
+	}
+
 	// Map database state to runtime state
 	runtimeState := l.mapDatabaseState(dbInstance.State)
 
@@ -125,7 +142,7 @@ func (l *Loader) dbInstanceToRuntime(dbInstance *database.InstancesFindByNodeRow
 	instance := &types.Instance{
 		ID:        instanceID,
 		ImageID:   imageID,
-		ImageTag:  l.buildImageTag(imageID), // TODO: Get actual image tag from images table
+		ImageTag:  imageTag,
 		State:     runtimeState,
 		Resources: resources,
 		EnvVars:   envVars,
@@ -139,7 +156,7 @@ func (l *Loader) dbInstanceToRuntime(dbInstance *database.InstancesFindByNodeRow
 }
 
 // dbInstanceToRuntimeFromGetById converts database instance from GetById query to runtime instance
-func (l *Loader) dbInstanceToRuntimeFromGetById(dbInstance database.InstancesGetByIdRow) *types.Instance {
+func (l *Loader) dbInstanceToRuntimeFromGetById(ctx context.Context, dbInstance database.InstancesGetByIdRow) *types.Instance {
 	// Convert UUIDs
 	instanceID := uuid.UUID(dbInstance.ID.Bytes).String()
 	imageID := uuid.UUID(dbInstance.ImageID.Bytes).String()
@@ -154,6 +171,21 @@ func (l *Loader) dbInstanceToRuntimeFromGetById(dbInstance database.InstancesGet
 		}
 	}
 
+	// Get the actual image tag from database
+	imageTag, err := l.getImageTag(ctx, imageID)
+	if err != nil {
+		l.logger.Error("Failed to get image tag",
+			"instance_id", instanceID,
+			"image_id", imageID,
+			"error", err)
+		// Use fallback format
+		registry := l.imageRegistry
+		if registry == "" {
+			registry = "localhost:5001"
+		}
+		imageTag = fmt.Sprintf("%s/zeitwork/%s:latest", registry, imageID[:8])
+	}
+
 	// Map database state to runtime state
 	runtimeState := l.mapDatabaseState(dbInstance.State)
 
@@ -166,7 +198,7 @@ func (l *Loader) dbInstanceToRuntimeFromGetById(dbInstance database.InstancesGet
 	instance := &types.Instance{
 		ID:        instanceID,
 		ImageID:   imageID,
-		ImageTag:  l.buildImageTag(imageID), // TODO: Get actual image tag from images table
+		ImageTag:  imageTag,
 		State:     runtimeState,
 		Resources: resources,
 		EnvVars:   envVars,
@@ -202,12 +234,36 @@ func (l *Loader) mapDatabaseState(dbState string) types.InstanceState {
 	}
 }
 
-// buildImageTag constructs an image tag from image ID
-// TODO: This should query the images table to get the actual tag
-func (l *Loader) buildImageTag(imageID string) string {
-	// For now, use a placeholder format
-	// In production, this should query the images table to get registry/name:tag
-	return fmt.Sprintf("localhost:5000/zeitwork/%s:latest", imageID[:8])
+// getImageTag queries the images table to get the actual image tag
+func (l *Loader) getImageTag(ctx context.Context, imageID string) (string, error) {
+	// Parse image ID to UUID
+	imageUUID, err := uuid.Parse(imageID)
+	if err != nil {
+		return "", fmt.Errorf("invalid image ID: %w", err)
+	}
+
+	pgImageID := pgtype.UUID{
+		Bytes: imageUUID,
+		Valid: true,
+	}
+
+	// Query the image from database
+	image, err := l.db.Queries().ImagesGetById(ctx, pgImageID)
+	if err != nil {
+		if isNotFoundError(err) {
+			l.logger.Warn("Image not found in database, using fallback format",
+				"image_id", imageID)
+			// Fallback to placeholder format if image not found
+			registry := l.imageRegistry
+			if registry == "" {
+				registry = "localhost:5001"
+			}
+			return fmt.Sprintf("%s/zeitwork/%s:latest", registry, imageID[:8]), nil
+		}
+		return "", fmt.Errorf("failed to query image: %w", err)
+	}
+
+	return image.Name, nil
 }
 
 // Helper functions

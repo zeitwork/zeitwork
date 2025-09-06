@@ -65,8 +65,8 @@ func (d *DockerRuntime) buildContainerConfig(spec *runtimeTypes.InstanceSpec) *c
 func (d *DockerRuntime) buildHostConfig(spec *runtimeTypes.InstanceSpec) *container.HostConfig {
 	hostConfig := &container.HostConfig{
 		RestartPolicy: container.RestartPolicy{
-			Name:              "unless-stopped",
-			MaximumRetryCount: 3,
+			Name: "unless-stopped",
+			// MaximumRetryCount can only be used with "on-failure" restart policy
 		},
 		NetworkMode: container.NetworkMode(d.config.NetworkName),
 	}

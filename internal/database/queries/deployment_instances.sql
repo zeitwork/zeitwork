@@ -3,16 +3,19 @@
 INSERT INTO deployment_instances (
     id,
     deployment_id,
-    instance_id
+    instance_id,
+    organisation_id
 ) VALUES (
     $1,
     $2,
-    $3
+    $3,
+    $4
 )
 RETURNING 
     id,
     deployment_id,
     instance_id,
+    organisation_id,
     created_at,
     updated_at;
 

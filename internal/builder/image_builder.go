@@ -21,11 +21,13 @@ import (
 
 // BuildResult represents the result of a build operation
 type BuildResult struct {
-	Success  bool
-	ImageTag string
-	BuildLog string
-	Error    error
-	Duration time.Duration
+	Success   bool
+	ImageTag  string
+	ImageHash string // SHA256 hash of the built image
+	ImageSize int64  // Size of the image in bytes
+	BuildLog  string
+	Error     error
+	Duration  time.Duration
 }
 
 // EnrichedBuild combines ImageBuild with related deployment and project information
@@ -166,16 +168,25 @@ func (d *DockerBuilder) Build(ctx context.Context, build *EnrichedBuild) *BuildR
 		return result
 	}
 
-	// Push the image to registry if configured
-	if d.registry != "" {
-		pushLog, err := d.pushDockerImage(ctx, imageTag)
-		result.BuildLog += "\n" + pushLog
+	// Get image information after successful build
+	imageInfo, err := d.getImageInfo(ctx, imageTag)
+	if err != nil {
+		result.Error = fmt.Errorf("failed to get image info: %w", err)
+		result.Duration = time.Since(startTime)
+		return result
+	}
 
-		if err != nil {
-			result.Error = fmt.Errorf("docker push failed: %w", err)
-			result.Duration = time.Since(startTime)
-			return result
-		}
+	result.ImageHash = imageInfo.Hash
+	result.ImageSize = imageInfo.Size
+
+	// Always push the image to distribution registry (localhost:5001)
+	pushLog, err := d.pushDockerImage(ctx, imageTag)
+	result.BuildLog += "\n" + pushLog
+
+	if err != nil {
+		result.Error = fmt.Errorf("docker push failed: %w", err)
+		result.Duration = time.Since(startTime)
+		return result
 	}
 
 	result.Success = true
@@ -238,10 +249,10 @@ func (d *DockerBuilder) generateImageTag(build *EnrichedBuild) string {
 
 	tag := fmt.Sprintf("%s:%x-%s", repoName, build.ProjectID.Bytes, shortCommit)
 
-	// If registry is configured, prefix with registry
-	if d.registry != "" {
-		tag = fmt.Sprintf("%s/%s", d.registry, tag)
-	}
+	// Use distribution registry from docker-compose (localhost:5001)
+	// This overrides the configured registry to ensure we use the distribution registry
+	distributionRegistry := "localhost:5001"
+	tag = fmt.Sprintf("%s/%s", distributionRegistry, tag)
 
 	return tag
 }
@@ -285,6 +296,39 @@ func (d *DockerBuilder) buildDockerImage(ctx context.Context, buildDir, imageTag
 
 	d.logger.Debug("Docker image built successfully", "tag", imageTag)
 	return string(buildLog), nil
+}
+
+// ImageInfo holds information about a Docker image
+type ImageInfo struct {
+	Hash string
+	Size int64
+}
+
+// getImageInfo retrieves information about a Docker image
+func (d *DockerBuilder) getImageInfo(ctx context.Context, imageTag string) (*ImageInfo, error) {
+	d.logger.Debug("Getting image info", "tag", imageTag)
+
+	// Inspect the image to get its information
+	imageInspect, err := d.dockerClient.ImageInspect(ctx, imageTag)
+	if err != nil {
+		return nil, fmt.Errorf("failed to inspect image: %w", err)
+	}
+
+	// Get the image ID (which is the SHA256 hash)
+	imageHash := strings.TrimPrefix(imageInspect.ID, "sha256:")
+
+	// Get the image size
+	imageSize := imageInspect.Size
+
+	d.logger.Debug("Retrieved image info",
+		"tag", imageTag,
+		"hash", imageHash[:12], // Log first 12 chars of hash
+		"size", imageSize)
+
+	return &ImageInfo{
+		Hash: imageHash,
+		Size: imageSize,
+	}, nil
 }
 
 // pushDockerImage pushes the Docker image to the registry using Docker Go SDK

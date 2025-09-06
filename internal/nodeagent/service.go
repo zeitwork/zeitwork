@@ -74,8 +74,14 @@ func NewService(cfg *config.Config, logger *slog.Logger) (*Service, error) {
 		return nil, fmt.Errorf("failed to initialize runtime: %w", err)
 	}
 
+	// Get image registry configuration for state manager
+	imageRegistry := ""
+	if cfg.Runtime.DockerConfig != nil {
+		imageRegistry = cfg.Runtime.DockerConfig.ImageRegistry
+	}
+
 	// Initialize state manager
-	stateManager := state.NewManager(logger, nodeID, db, rt)
+	stateManager := state.NewManager(logger, nodeID, db, rt, imageRegistry)
 
 	// Initialize event handlers
 	instanceCreatedHandler := events.NewInstanceCreatedHandler(stateManager, logger)

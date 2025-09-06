@@ -16,6 +16,7 @@ import (
 	"github.com/zeitwork/zeitwork/internal/database"
 	"github.com/zeitwork/zeitwork/internal/shared/config"
 	natsClient "github.com/zeitwork/zeitwork/internal/shared/nats"
+	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 	pb "github.com/zeitwork/zeitwork/proto"
 )
 
@@ -420,10 +421,44 @@ func (s *Service) processBuild(ctx context.Context, build *EnrichedBuild) {
 		s.logger.Info("Build completed successfully",
 			"build_id", build.ID,
 			"image_tag", result.ImageTag,
+			"image_hash", result.ImageHash[:12], // Log first 12 chars
+			"image_size", result.ImageSize,
 			"duration", result.Duration)
 
+		// Create image record in database
+		imageID, err := s.createImageRecord(buildCtx, result, build)
+		if err != nil {
+			s.logger.Error("Failed to create image record", "build_id", build.ID, "error", err)
+			// Mark build as failed since we couldn't create the image record
+			s.queries.ImageBuildsFail(buildCtx, build.ID)
+			s.queries.DeploymentsUpdateStatus(buildCtx, &database.DeploymentsUpdateStatusParams{
+				ID:     build.DeploymentID,
+				Status: "failed",
+			})
+			return
+		}
+
+		// Update deployment with the created image_id
+		_, err = s.queries.DeploymentsUpdateImageId(buildCtx, &database.DeploymentsUpdateImageIdParams{
+			ID:      build.DeploymentID,
+			ImageID: imageID,
+		})
+		if err != nil {
+			s.logger.Error("Failed to update deployment image_id",
+				"build_id", build.ID,
+				"deployment_id", build.DeploymentID,
+				"image_id", imageID,
+				"error", err)
+			// Continue anyway - the image was created successfully
+		} else {
+			s.logger.Info("Updated deployment with image_id",
+				"build_id", build.ID,
+				"deployment_id", build.DeploymentID,
+				"image_id", imageID)
+		}
+
 		// Mark build as completed
-		_, err := s.queries.ImageBuildsComplete(buildCtx, build.ID)
+		_, err = s.queries.ImageBuildsComplete(buildCtx, build.ID)
 		if err != nil {
 			s.logger.Error("Failed to mark build as completed", "build_id", build.ID, "error", err)
 		}
@@ -471,6 +506,41 @@ func (s *Service) processBuild(ctx context.Context, build *EnrichedBuild) {
 				"deployment_id", build.DeploymentID)
 		}
 	}
+}
+
+// createImageRecord creates a new image record in the database
+func (s *Service) createImageRecord(ctx context.Context, result *BuildResult, build *EnrichedBuild) (pgtype.UUID, error) {
+	// Generate a new UUID for the image
+	imageUUID := uuid.GeneratePgUUID()
+
+	// Convert image size to pgtype.Int4, handling overflow
+	var imageSize pgtype.Int4
+	if result.ImageSize > 2147483647 { // Max int32 value
+		// For very large images, store max int32 value as a placeholder
+		imageSize = pgtype.Int4{Int32: 2147483647, Valid: true}
+	} else {
+		imageSize = pgtype.Int4{Int32: int32(result.ImageSize), Valid: true}
+	}
+
+	// Create the image record
+	_, err := s.queries.ImagesCreate(ctx, &database.ImagesCreateParams{
+		ID:        imageUUID,
+		Name:      result.ImageTag,
+		Size:      imageSize,
+		Hash:      result.ImageHash,
+		ObjectKey: pgtype.Text{}, // We're not using S3 object key for registry images
+	})
+
+	if err != nil {
+		return pgtype.UUID{}, fmt.Errorf("failed to create image record: %w", err)
+	}
+
+	s.logger.Debug("Created image record",
+		"image_id", imageUUID,
+		"image_tag", result.ImageTag,
+		"image_hash", result.ImageHash[:12])
+
+	return imageUUID, nil
 }
 
 // Close closes the builder service

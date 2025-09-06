@@ -92,7 +92,7 @@ func loadRuntimeConfig() (*RuntimeConfig, error) {
 		config.DockerConfig = &DockerRuntimeConfig{
 			Endpoint:          getEnvOrDefault("DOCKER_ENDPOINT", "unix:///var/run/docker.sock"),
 			NetworkName:       getEnvOrDefault("DOCKER_NETWORK", "zeitwork"),
-			ImageRegistry:     getEnvOrDefault("IMAGE_REGISTRY", "localhost:5000"),
+			ImageRegistry:     getEnvOrDefault("IMAGE_REGISTRY", "localhost:5001"),
 			PullTimeout:       getEnvDuration("DOCKER_PULL_TIMEOUT", 5*time.Minute),
 			StartTimeout:      getEnvDuration("DOCKER_START_TIMEOUT", 30*time.Second),
 			StopTimeout:       getEnvDuration("DOCKER_STOP_TIMEOUT", 10*time.Second),

@@ -168,6 +168,9 @@ func (r *Reconciler) shouldUpdateState(actual, desired *types.Instance) bool {
 	switch desired.State {
 	case types.InstanceStateRunning:
 		return actual.State != types.InstanceStateRunning
+	case types.InstanceStatePending:
+		// Pending instances should be started if they're not already running
+		return actual.State != types.InstanceStateRunning
 	case types.InstanceStateStopped:
 		return actual.State == types.InstanceStateRunning
 	case types.InstanceStateTerminated:
@@ -206,7 +209,8 @@ func (r *Reconciler) executeCreate(ctx context.Context, instance *types.Instance
 	}
 
 	// Start the instance if it should be running
-	if instance.State == types.InstanceStateRunning {
+	// Instances in "pending" or "running" state should be started
+	if instance.State == types.InstanceStateRunning || instance.State == types.InstanceStatePending {
 		if err := r.runtime.StartInstance(ctx, createdInstance); err != nil {
 			// Try to clean up the created instance
 			if deleteErr := r.runtime.DeleteInstance(ctx, createdInstance); deleteErr != nil {
@@ -266,6 +270,9 @@ func (r *Reconciler) executeDelete(ctx context.Context, instance *types.Instance
 func (r *Reconciler) updateInstanceState(ctx context.Context, update *InstanceUpdate) error {
 	switch update.Desired.State {
 	case types.InstanceStateRunning:
+		return r.runtime.StartInstance(ctx, update.Current)
+	case types.InstanceStatePending:
+		// Pending instances should be started
 		return r.runtime.StartInstance(ctx, update.Current)
 	case types.InstanceStateStopped:
 		return r.runtime.StopInstance(ctx, update.Current)

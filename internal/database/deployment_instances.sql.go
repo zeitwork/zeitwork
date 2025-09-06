@@ -15,42 +15,53 @@ const deploymentInstancesCreate = `-- name: DeploymentInstancesCreate :one
 INSERT INTO deployment_instances (
     id,
     deployment_id,
-    instance_id
+    instance_id,
+    organisation_id
 ) VALUES (
     $1,
     $2,
-    $3
+    $3,
+    $4
 )
 RETURNING 
     id,
     deployment_id,
     instance_id,
+    organisation_id,
     created_at,
     updated_at
 `
 
 type DeploymentInstancesCreateParams struct {
-	ID           pgtype.UUID `json:"id"`
-	DeploymentID pgtype.UUID `json:"deployment_id"`
-	InstanceID   pgtype.UUID `json:"instance_id"`
+	ID             pgtype.UUID `json:"id"`
+	DeploymentID   pgtype.UUID `json:"deployment_id"`
+	InstanceID     pgtype.UUID `json:"instance_id"`
+	OrganisationID pgtype.UUID `json:"organisation_id"`
 }
 
 type DeploymentInstancesCreateRow struct {
-	ID           pgtype.UUID        `json:"id"`
-	DeploymentID pgtype.UUID        `json:"deployment_id"`
-	InstanceID   pgtype.UUID        `json:"instance_id"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	ID             pgtype.UUID        `json:"id"`
+	DeploymentID   pgtype.UUID        `json:"deployment_id"`
+	InstanceID     pgtype.UUID        `json:"instance_id"`
+	OrganisationID pgtype.UUID        `json:"organisation_id"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
 
 // Create a new deployment instance relationship
 func (q *Queries) DeploymentInstancesCreate(ctx context.Context, arg *DeploymentInstancesCreateParams) (*DeploymentInstancesCreateRow, error) {
-	row := q.db.QueryRow(ctx, deploymentInstancesCreate, arg.ID, arg.DeploymentID, arg.InstanceID)
+	row := q.db.QueryRow(ctx, deploymentInstancesCreate,
+		arg.ID,
+		arg.DeploymentID,
+		arg.InstanceID,
+		arg.OrganisationID,
+	)
 	var i DeploymentInstancesCreateRow
 	err := row.Scan(
 		&i.ID,
 		&i.DeploymentID,
 		&i.InstanceID,
+		&i.OrganisationID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)

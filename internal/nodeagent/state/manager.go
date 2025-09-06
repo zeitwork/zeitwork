@@ -31,8 +31,8 @@ type Manager struct {
 }
 
 // NewManager creates a new state manager
-func NewManager(logger *slog.Logger, nodeID uuid.UUID, db *database.DB, rt types.Runtime) *Manager {
-	loader := NewLoader(logger, nodeID, db)
+func NewManager(logger *slog.Logger, nodeID uuid.UUID, db *database.DB, rt types.Runtime, imageRegistry string) *Manager {
+	loader := NewLoader(logger, nodeID, db, imageRegistry)
 	reconciler := NewReconciler(logger, rt)
 
 	return &Manager{

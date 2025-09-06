@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
@@ -255,12 +254,15 @@ func (d *DockerRuntime) ensureImage(ctx context.Context, imageTag string) error 
 		}
 	}
 
+	// Ensure image tag uses the correct registry
+	fullImageTag := d.ensureRegistryPrefix(imageTag)
+
 	// Pull image
-	d.logger.Info("Pulling Docker image", "image", imageTag)
+	d.logger.Info("Pulling Docker image", "image", fullImageTag)
 	pullCtx, cancel := context.WithTimeout(ctx, d.config.PullTimeout)
 	defer cancel()
 
-	reader, err := d.client.ImagePull(pullCtx, imageTag, image.PullOptions{})
+	reader, err := d.client.ImagePull(pullCtx, fullImageTag, image.PullOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to pull image: %w", err)
 	}
@@ -285,16 +287,33 @@ func (d *DockerRuntime) getContainerName(instanceID string) string {
 
 // isZeitworkContainer checks if a container is managed by zeitwork
 func (d *DockerRuntime) isZeitworkContainer(container container.Summary) bool {
-	for _, name := range container.Names {
-		if strings.HasPrefix(name, "/zeitwork-") {
+	// Only consider containers that have the proper zeitwork.managed label
+	// This prevents interference with other containers that might have zeitwork-like names
+	if container.Labels != nil {
+		if managed, ok := container.Labels["zeitwork.managed"]; ok && managed == "true" {
 			return true
 		}
 	}
 	return false
 }
 
+// ensureRegistryPrefix ensures the image tag has the correct registry prefix
+func (d *DockerRuntime) ensureRegistryPrefix(imageTag string) string {
+	// If the image tag already has a registry prefix, use it as-is
+	if strings.Contains(imageTag, "/") && strings.Contains(strings.Split(imageTag, "/")[0], ":") {
+		return imageTag
+	}
+
+	// If no registry prefix, add the configured registry
+	if d.config.ImageRegistry != "" {
+		return fmt.Sprintf("%s/%s", d.config.ImageRegistry, imageTag)
+	}
+
+	return imageTag
+}
+
 // mapContainerState maps Docker container state to runtime state
-func (d *DockerRuntime) mapContainerState(state *types.ContainerState) runtimeTypes.InstanceState {
+func (d *DockerRuntime) mapContainerState(state *container.State) runtimeTypes.InstanceState {
 	if state.Running {
 		return runtimeTypes.InstanceStateRunning
 	}

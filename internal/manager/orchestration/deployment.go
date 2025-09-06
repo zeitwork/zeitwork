@@ -160,7 +160,7 @@ func (o *DeploymentOrchestrator) CreateInstancesForDeployment(ctx context.Contex
 
 	// Create deployment-instance relationships
 	lo.ForEach(instanceIDs, func(instanceID pgtype.UUID, _ int) {
-		o.createDeploymentInstanceRelation(ctx, deployment.ID, instanceID)
+		o.createDeploymentInstanceRelation(ctx, deployment.ID, instanceID, deployment.OrganisationID)
 	})
 
 	// Update deployment status to active
@@ -278,20 +278,22 @@ func (o *DeploymentOrchestrator) createSingleInstance(ctx context.Context, deplo
 	return instance.ID
 }
 
-func (o *DeploymentOrchestrator) createDeploymentInstanceRelation(ctx context.Context, deploymentID, instanceID pgtype.UUID) {
+func (o *DeploymentOrchestrator) createDeploymentInstanceRelation(ctx context.Context, deploymentID, instanceID, organisationID pgtype.UUID) {
 	relationUUID := uuid.GeneratePgUUID()
 
 	createParams := &database.DeploymentInstancesCreateParams{
-		ID:           relationUUID,
-		DeploymentID: deploymentID,
-		InstanceID:   instanceID,
+		ID:             relationUUID,
+		DeploymentID:   deploymentID,
+		InstanceID:     instanceID,
+		OrganisationID: organisationID,
 	}
 
 	lo.Must(o.db.DeploymentInstancesCreate(ctx, createParams))
 
 	o.logger.Info("Created deployment instance relationship",
 		"deployment_id", deploymentID,
-		"instance_id", instanceID)
+		"instance_id", instanceID,
+		"organisation_id", organisationID)
 }
 
 func (o *DeploymentOrchestrator) handleDeploymentFailed(ctx context.Context, deployment *database.DeploymentsGetByIdRow) error {

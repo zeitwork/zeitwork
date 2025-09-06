@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -21,6 +22,11 @@ type DeploymentReconciler struct {
 	logger  *slog.Logger
 	ticker  *time.Ticker
 	stopCh  chan struct{}
+
+	// Synchronization for graceful shutdown
+	mu      sync.Mutex
+	stopped bool
+	wg      sync.WaitGroup
 }
 
 // NewDeploymentReconciler creates a new deployment reconciler
@@ -35,6 +41,13 @@ func NewDeploymentReconciler(queries *database.Queries, db *pgxpool.Pool, logger
 
 // Start starts the reconciler loop
 func (r *DeploymentReconciler) Start(ctx context.Context) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if r.stopped {
+		return fmt.Errorf("reconciler has been stopped and cannot be restarted")
+	}
+
 	r.logger.Info("Starting deployment reconciler")
 
 	// Run initial reconciliation
@@ -44,26 +57,47 @@ func (r *DeploymentReconciler) Start(ctx context.Context) error {
 
 	// Start periodic reconciliation
 	r.ticker = time.NewTicker(30 * time.Second)
+	r.wg.Add(1)
 	go r.reconcileLoop(ctx)
 
 	r.logger.Info("Deployment reconciler started")
 	return nil
 }
 
-// Stop stops the reconciler
+// Stop stops the reconciler gracefully
 func (r *DeploymentReconciler) Stop() {
-	r.logger.Info("Stopping deployment reconciler")
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
-	if r.ticker != nil {
-		r.ticker.Stop()
+	if r.stopped {
+		r.logger.Debug("Reconciler already stopped")
+		return
 	}
 
+	r.logger.Info("Stopping deployment reconciler")
+	r.stopped = true
+
+	// Stop the ticker first to prevent new cycles
+	if r.ticker != nil {
+		r.ticker.Stop()
+		r.logger.Debug("Ticker stopped")
+	}
+
+	// Close the stop channel to signal the goroutine to exit
 	close(r.stopCh)
+
+	// Wait for the reconcile loop goroutine to finish
+	r.logger.Debug("Waiting for reconciler goroutine to finish")
+	r.wg.Wait()
+
 	r.logger.Info("Deployment reconciler stopped")
 }
 
 // reconcileLoop runs the periodic reconciliation
 func (r *DeploymentReconciler) reconcileLoop(ctx context.Context) {
+	defer r.wg.Done()
+	r.logger.Debug("Reconciler loop started")
+
 	for {
 		select {
 		case <-r.ticker.C:
@@ -309,7 +343,7 @@ func (r *DeploymentReconciler) createInstancesTransaction(ctx context.Context, d
 
 	// Create deployment-instance relationships
 	for _, instanceID := range instanceIDs {
-		if err := r.createDeploymentInstanceRelation(ctx, txQueries, deployment.ID, instanceID); err != nil {
+		if err := r.createDeploymentInstanceRelation(ctx, txQueries, deployment.ID, instanceID, deployment.OrganisationID); err != nil {
 			return fmt.Errorf("failed to create deployment-instance relation: %w", err)
 		}
 	}
@@ -380,13 +414,14 @@ func (r *DeploymentReconciler) createSingleInstance(ctx context.Context, queries
 }
 
 // createDeploymentInstanceRelation creates the deployment-instance relationship
-func (r *DeploymentReconciler) createDeploymentInstanceRelation(ctx context.Context, queries *database.Queries, deploymentID, instanceID pgtype.UUID) error {
+func (r *DeploymentReconciler) createDeploymentInstanceRelation(ctx context.Context, queries *database.Queries, deploymentID, instanceID, organisationID pgtype.UUID) error {
 	relationUUID := uuid.GeneratePgUUID()
 
 	createParams := &database.DeploymentInstancesCreateParams{
-		ID:           relationUUID,
-		DeploymentID: deploymentID,
-		InstanceID:   instanceID,
+		ID:             relationUUID,
+		DeploymentID:   deploymentID,
+		InstanceID:     instanceID,
+		OrganisationID: organisationID,
 	}
 
 	_, err := queries.DeploymentInstancesCreate(ctx, createParams)
@@ -396,7 +431,8 @@ func (r *DeploymentReconciler) createDeploymentInstanceRelation(ctx context.Cont
 
 	r.logger.Debug("Created deployment instance relationship",
 		"deployment_id", deploymentID,
-		"instance_id", instanceID)
+		"instance_id", instanceID,
+		"organisation_id", organisationID)
 
 	return nil
 }

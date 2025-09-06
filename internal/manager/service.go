@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -35,6 +36,10 @@ type Service struct {
 
 	instanceID string
 	stopChan   chan struct{}
+
+	// Synchronization
+	mu     sync.Mutex
+	closed bool
 }
 
 // NewService creates a new manager service
@@ -215,6 +220,15 @@ func (s *Service) handleNATSMessage(ctx context.Context, eventType events.EventT
 
 // Close closes the manager service and cleans up resources
 func (s *Service) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Check if already closed
+	if s.closed {
+		s.logger.Debug("Service already closed", "instance_id", s.instanceID)
+		return nil
+	}
+
 	s.logger.Info("Closing manager service", "instance_id", s.instanceID)
 
 	// Stop the reconciler
@@ -235,7 +249,10 @@ func (s *Service) Close() error {
 		s.logger.Debug("Database connections closed", "instance_id", s.instanceID)
 	}
 
+	// Close the stop channel only once
 	close(s.stopChan)
+	s.closed = true
+
 	s.logger.Info("Manager service closed successfully", "instance_id", s.instanceID)
 
 	return nil

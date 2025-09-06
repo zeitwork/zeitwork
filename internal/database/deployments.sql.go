@@ -414,6 +414,61 @@ func (q *Queries) DeploymentsGetReadyForDeployment(ctx context.Context) ([]*Depl
 	return items, nil
 }
 
+const deploymentsUpdateImageId = `-- name: DeploymentsUpdateImageId :one
+UPDATE deployments 
+SET image_id = $2, 
+    updated_at = now()
+WHERE id = $1
+RETURNING 
+    id,
+    deployment_id,
+    status,
+    commit_hash,
+    project_id,
+    environment_id,
+    image_id,
+    organisation_id,
+    created_at,
+    updated_at
+`
+
+type DeploymentsUpdateImageIdParams struct {
+	ID      pgtype.UUID `json:"id"`
+	ImageID pgtype.UUID `json:"image_id"`
+}
+
+type DeploymentsUpdateImageIdRow struct {
+	ID             pgtype.UUID        `json:"id"`
+	DeploymentID   string             `json:"deployment_id"`
+	Status         string             `json:"status"`
+	CommitHash     string             `json:"commit_hash"`
+	ProjectID      pgtype.UUID        `json:"project_id"`
+	EnvironmentID  pgtype.UUID        `json:"environment_id"`
+	ImageID        pgtype.UUID        `json:"image_id"`
+	OrganisationID pgtype.UUID        `json:"organisation_id"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Update deployment image_id after successful build
+func (q *Queries) DeploymentsUpdateImageId(ctx context.Context, arg *DeploymentsUpdateImageIdParams) (*DeploymentsUpdateImageIdRow, error) {
+	row := q.db.QueryRow(ctx, deploymentsUpdateImageId, arg.ID, arg.ImageID)
+	var i DeploymentsUpdateImageIdRow
+	err := row.Scan(
+		&i.ID,
+		&i.DeploymentID,
+		&i.Status,
+		&i.CommitHash,
+		&i.ProjectID,
+		&i.EnvironmentID,
+		&i.ImageID,
+		&i.OrganisationID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return &i, err
+}
+
 const deploymentsUpdateStatus = `-- name: DeploymentsUpdateStatus :one
 UPDATE deployments 
 SET status = $2, 

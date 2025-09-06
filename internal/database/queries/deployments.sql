@@ -154,3 +154,21 @@ WHERE d.status = 'deploying'
     AND d.deleted_at IS NULL
     AND di.id IS NULL
 ORDER BY d.created_at ASC;
+
+-- name: DeploymentsUpdateImageId :one
+-- Update deployment image_id after successful build
+UPDATE deployments 
+SET image_id = $2, 
+    updated_at = now()
+WHERE id = $1
+RETURNING 
+    id,
+    deployment_id,
+    status,
+    commit_hash,
+    project_id,
+    environment_id,
+    image_id,
+    organisation_id,
+    created_at,
+    updated_at;
