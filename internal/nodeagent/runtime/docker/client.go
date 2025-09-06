@@ -284,7 +284,7 @@ func (d *DockerRuntime) getContainerName(instanceID string) string {
 }
 
 // isZeitworkContainer checks if a container is managed by zeitwork
-func (d *DockerRuntime) isZeitworkContainer(container types.Container) bool {
+func (d *DockerRuntime) isZeitworkContainer(container container.Summary) bool {
 	for _, name := range container.Names {
 		if strings.HasPrefix(name, "/zeitwork-") {
 			return true

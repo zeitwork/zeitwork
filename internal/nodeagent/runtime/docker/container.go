@@ -164,7 +164,7 @@ func (d *DockerRuntime) buildNetworkConfig(spec *runtimeTypes.InstanceSpec) *net
 }
 
 // containerToInstance converts a Docker container to a runtime instance
-func (d *DockerRuntime) containerToInstance(ctx context.Context, container types.Container) (*runtimeTypes.Instance, error) {
+func (d *DockerRuntime) containerToInstance(ctx context.Context, container container.Summary) (*runtimeTypes.Instance, error) {
 	// Get instance ID from labels
 	instanceID, ok := container.Labels["zeitwork.instance.id"]
 	if !ok {
