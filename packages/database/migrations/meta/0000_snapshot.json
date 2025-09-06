@@ -1,5 +1,5 @@
 {
-  "id": "4807e5c9-baf1-4b7c-8636-ae97e3a33ca4",
+  "id": "6823ffbb-e169-406c-977e-df30f43a9d4f",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -119,8 +119,8 @@
           "primaryKey": false,
           "notNull": true
         },
-        "ipv6_address": {
-          "name": "ipv6_address",
+        "ip_address": {
+          "name": "ip_address",
           "type": "text",
           "primaryKey": false,
           "notNull": true

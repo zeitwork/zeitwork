@@ -4,8 +4,17 @@ volumes:
   registry_data:
 
 networks:
-  default:
+  zeitwork:
     name: zeitwork
+    enable_ipv6: true
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: "172.20.0.0/16"
+          gateway: "172.20.0.1"
+        - subnet: "fd12::/16" # ULA range for generated IPv6 addresses
+          gateway: "fd12::1"
 
 services:
   nats:
@@ -43,3 +52,11 @@ services:
       - REGISTRY_STORAGE_DELETE_ENABLED=true
     volumes:
       - registry_data:/var/lib/registry
+
+  # Dummy service to ensure zeitwork network is created and maintained
+  network-keeper:
+    image: busybox:latest
+    command: sleep infinity
+    networks:
+      - zeitwork
+    restart: unless-stopped

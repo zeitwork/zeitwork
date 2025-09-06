@@ -9,7 +9,7 @@ SELECT
     vcpus,
     memory,
     default_port,
-    ipv6_address,
+    ip_address,
     environment_variables,
     created_at,
     updated_at
@@ -32,7 +32,27 @@ RETURNING
     vcpus,
     memory,
     default_port,
-    ipv6_address,
+    ip_address,
+    environment_variables,
+    created_at,
+    updated_at;
+
+-- name: InstancesUpdateIpAddress :one
+-- Update instance IP address after container creation
+UPDATE instances 
+SET ip_address = $2, 
+    updated_at = now()
+WHERE id = $1
+RETURNING 
+    id,
+    region_id,
+    node_id,
+    image_id,
+    state,
+    vcpus,
+    memory,
+    default_port,
+    ip_address,
     environment_variables,
     created_at,
     updated_at;
@@ -48,7 +68,7 @@ SELECT
     vcpus,
     memory,
     default_port,
-    ipv6_address,
+    ip_address,
     environment_variables,
     created_at,
     updated_at
@@ -67,7 +87,7 @@ INSERT INTO instances (
     vcpus,
     memory,
     default_port,
-    ipv6_address,
+    ip_address,
     environment_variables
 ) VALUES (
     $1,
@@ -90,7 +110,7 @@ RETURNING
     vcpus,
     memory,
     default_port,
-    ipv6_address,
+    ip_address,
     environment_variables,
     created_at,
     updated_at;
@@ -106,7 +126,7 @@ SELECT
     i.vcpus,
     i.memory,
     i.default_port,
-    i.ipv6_address,
+    i.ip_address,
     i.environment_variables,
     i.created_at,
     i.updated_at

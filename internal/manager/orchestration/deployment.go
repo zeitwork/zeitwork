@@ -164,7 +164,7 @@ func (o *DeploymentOrchestrator) CreateInstancesForDeployment(ctx context.Contex
 	})
 
 	// Update deployment status to active
-	lo.Must0(o.db.DeploymentsUpdateStatus(ctx, &database.DeploymentsUpdateStatusParams{
+	lo.Must(o.db.DeploymentsUpdateStatus(ctx, &database.DeploymentsUpdateStatusParams{
 		ID:     deployment.ID,
 		Status: "active",
 	}))
@@ -253,18 +253,24 @@ func (o *DeploymentOrchestrator) calculateInstanceCount(availableNodes int) int 
 
 func (o *DeploymentOrchestrator) createSingleInstance(ctx context.Context, deployment *database.DeploymentsGetReadyForDeploymentRow, node *database.NodesGetAllRow) pgtype.UUID {
 	instanceUUID := uuid.GeneratePgUUID()
-	imageUUID := uuid.GeneratePgUUID() // Mock image ID
+
+	// Use the image_id from the deployment (set by the builder after successful build)
+	if !deployment.ImageID.Valid {
+		o.logger.Error("Deployment has no image_id - this should not happen for ready deployments",
+			"deployment_id", deployment.ID)
+		panic(fmt.Sprintf("Deployment %v has no image_id", deployment.ID))
+	}
 
 	createParams := &database.InstancesCreateParams{
 		ID:                   instanceUUID,
 		RegionID:             node.RegionID,
 		NodeID:               node.ID,
-		ImageID:              imageUUID,
+		ImageID:              deployment.ImageID,
 		State:                "pending",
 		Vcpus:                1,
 		Memory:               1024,
-		DefaultPort:          8080,
-		Ipv6Address:          "",
+		DefaultPort:          3000,
+		IpAddress:            "",
 		EnvironmentVariables: "{}",
 	}
 

@@ -33,7 +33,7 @@ type Manager struct {
 // NewManager creates a new state manager
 func NewManager(logger *slog.Logger, nodeID uuid.UUID, db *database.DB, rt types.Runtime, imageRegistry string) *Manager {
 	loader := NewLoader(logger, nodeID, db, imageRegistry)
-	reconciler := NewReconciler(logger, rt)
+	reconciler := NewReconciler(logger, rt, db.Queries())
 
 	return &Manager{
 		logger:            logger,
@@ -44,7 +44,7 @@ func NewManager(logger *slog.Logger, nodeID uuid.UUID, db *database.DB, rt types
 		reconciler:        reconciler,
 		desiredState:      make(map[string]*types.Instance),
 		actualState:       make(map[string]*types.Instance),
-		reconcileInterval: 6 * time.Hour, // Full reconciliation every 6 hours
+		reconcileInterval: 5 * time.Minute, // More frequent reconciliation to detect stopped containers
 	}
 }
 

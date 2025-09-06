@@ -48,7 +48,7 @@ export const instances = pgTable("instances", {
   vcpus: integer().notNull(),
   memory: integer().notNull(),
   defaultPort: integer().notNull(),
-  ipv6Address: text().notNull(), // ipv6 address
+  ipAddress: text().notNull(), // IP address (IPv4 or IPv6)
   environmentVariables: text().notNull(), // encrypted { key: value } object
   ...timestamps,
 });

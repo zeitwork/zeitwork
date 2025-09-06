@@ -41,19 +41,47 @@ func (l *Loader) LoadDesiredState(ctx context.Context) ([]*types.Instance, error
 		Valid: true,
 	}
 
+	l.logger.Debug("Querying database for instances",
+		"node_id", l.nodeID.String(),
+		"pg_node_id_valid", pgNodeID.Valid)
+
 	// Query instances for this node
 	dbInstances, err := l.db.Queries().InstancesFindByNode(ctx, pgNodeID)
 	if err != nil {
+		l.logger.Error("Database query failed",
+			"node_id", l.nodeID.String(),
+			"error", err)
 		return nil, fmt.Errorf("failed to query instances: %w", err)
 	}
 
+	l.logger.Debug("Database query completed",
+		"node_id", l.nodeID.String(),
+		"raw_instances_count", len(dbInstances))
+
 	// Filter valid instances and convert to runtime format
 	validInstances := lo.Filter(dbInstances, func(dbInstance *database.InstancesFindByNodeRow, _ int) bool {
-		return dbInstance.ID.Valid && dbInstance.ImageID.Valid
+		isValid := dbInstance.ID.Valid && dbInstance.ImageID.Valid
+		if !isValid {
+			l.logger.Warn("Filtering out invalid instance",
+				"id_valid", dbInstance.ID.Valid,
+				"image_id_valid", dbInstance.ImageID.Valid,
+				"instance_id", dbInstance.ID)
+		}
+		return isValid
 	})
 
+	l.logger.Debug("Instance filtering completed",
+		"raw_instances", len(dbInstances),
+		"valid_instances", len(validInstances))
+
 	instances := lo.Map(validInstances, func(dbInstance *database.InstancesFindByNodeRow, _ int) *types.Instance {
-		return l.dbInstanceToRuntime(ctx, dbInstance)
+		instance := l.dbInstanceToRuntime(ctx, dbInstance)
+		l.logger.Debug("Converted instance",
+			"instance_id", instance.ID,
+			"state", instance.State,
+			"ip_address", instance.NetworkInfo.IPAddress,
+			"default_port", instance.NetworkInfo.DefaultPort)
+		return instance
 	})
 
 	l.logger.Debug("Desired state loaded",
@@ -147,7 +175,8 @@ func (l *Loader) dbInstanceToRuntime(ctx context.Context, dbInstance *database.I
 		Resources: resources,
 		EnvVars:   envVars,
 		NetworkInfo: &types.NetworkInfo{
-			IPv6Address: dbInstance.Ipv6Address,
+			IPAddress:   dbInstance.IpAddress,
+			DefaultPort: dbInstance.DefaultPort,
 		},
 		CreatedAt: dbInstance.CreatedAt.Time,
 	}
@@ -203,7 +232,8 @@ func (l *Loader) dbInstanceToRuntimeFromGetById(ctx context.Context, dbInstance 
 		Resources: resources,
 		EnvVars:   envVars,
 		NetworkInfo: &types.NetworkInfo{
-			IPv6Address: dbInstance.Ipv6Address,
+			IPAddress:   dbInstance.IpAddress,
+			DefaultPort: dbInstance.DefaultPort,
 		},
 		CreatedAt: dbInstance.CreatedAt.Time,
 	}

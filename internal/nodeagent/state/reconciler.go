@@ -5,7 +5,11 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/samber/lo"
+
+	"github.com/zeitwork/zeitwork/internal/database"
 	"github.com/zeitwork/zeitwork/internal/nodeagent/types"
 )
 
@@ -13,13 +17,15 @@ import (
 type Reconciler struct {
 	logger  *slog.Logger
 	runtime types.Runtime
+	queries *database.Queries
 }
 
 // NewReconciler creates a new state reconciler
-func NewReconciler(logger *slog.Logger, rt types.Runtime) *Reconciler {
+func NewReconciler(logger *slog.Logger, rt types.Runtime, queries *database.Queries) *Reconciler {
 	return &Reconciler{
 		logger:  logger,
 		runtime: rt,
+		queries: queries,
 	}
 }
 
@@ -207,9 +213,20 @@ func (r *Reconciler) executeCreate(ctx context.Context, instance *types.Instance
 	// Convert to instance spec
 	spec := r.instanceToSpec(instance)
 
+	// Debug log the spec details
+	r.logger.Debug("Instance spec created",
+		"instance_id", instance.ID,
+		"image_tag", spec.ImageTag,
+		"default_port", spec.NetworkConfig.DefaultPort,
+		"network_name", spec.NetworkConfig.NetworkName)
+
 	// Create the instance
 	createdInstance, err := r.runtime.CreateInstance(ctx, spec)
 	if err != nil {
+		r.logger.Error("Failed to create instance",
+			"instance_id", instance.ID,
+			"error", err,
+			"spec", spec)
 		return fmt.Errorf("failed to create instance: %w", err)
 	}
 
@@ -224,6 +241,17 @@ func (r *Reconciler) executeCreate(ctx context.Context, instance *types.Instance
 					"error", deleteErr)
 			}
 			return fmt.Errorf("failed to start instance: %w", err)
+		}
+
+		// Update the database with the actual container IP address
+		if createdInstance.NetworkInfo != nil && createdInstance.NetworkInfo.IPAddress != "" {
+			if err := r.updateInstanceIPAddress(ctx, createdInstance.ID, createdInstance.NetworkInfo.IPAddress); err != nil {
+				r.logger.Warn("Failed to update instance IP address in database",
+					"instance_id", createdInstance.ID,
+					"ip_address", createdInstance.NetworkInfo.IPAddress,
+					"error", err)
+				// Don't fail the whole operation for this
+			}
 		}
 	}
 
@@ -314,8 +342,33 @@ func (r *Reconciler) instanceToSpec(instance *types.Instance) *types.InstanceSpe
 		Resources:            instance.Resources,
 		EnvironmentVariables: instance.EnvVars,
 		NetworkConfig: &types.NetworkConfig{
-			IPv6Address: instance.NetworkInfo.IPv6Address,
-			EnableIPv6:  instance.NetworkInfo.IPv6Address != "",
+			DefaultPort:  instance.NetworkInfo.DefaultPort,
+			NetworkName:  "zeitwork", // Use the zeitwork network
+			PortMappings: instance.NetworkInfo.PortMappings,
 		},
 	}
+}
+
+// updateInstanceIPAddress updates the instance IP address in the database
+func (r *Reconciler) updateInstanceIPAddress(ctx context.Context, instanceID string, ipAddress string) error {
+	// Parse instance ID to UUID
+	instanceUUID, err := uuid.Parse(instanceID)
+	if err != nil {
+		return fmt.Errorf("failed to parse instance ID: %w", err)
+	}
+
+	// Update in database
+	_, err = r.queries.InstancesUpdateIpAddress(ctx, &database.InstancesUpdateIpAddressParams{
+		ID:        pgtype.UUID{Bytes: instanceUUID, Valid: true},
+		IpAddress: ipAddress,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to update instance IP address: %w", err)
+	}
+
+	r.logger.Debug("Updated instance IP address in database",
+		"instance_id", instanceID,
+		"ip_address", ipAddress)
+
+	return nil
 }

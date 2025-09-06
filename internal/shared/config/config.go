@@ -26,6 +26,8 @@ type NodeAgentConfig struct {
 type EdgeProxyConfig struct {
 	BaseConfig
 	DatabaseURL string
+	PortHttp    int
+	PortHttps   int
 }
 
 type BuilderConfig struct {
@@ -69,9 +71,14 @@ func LoadNodeAgentConfig() (*NodeAgentConfig, error) {
 
 // LoadEdgeProxyConfig loads configuration for the edge proxy service
 func LoadEdgeProxyConfig() (*EdgeProxyConfig, error) {
+	httpPort, _ := strconv.Atoi(getEnvWithPrefix("EDGEPROXY", "HTTP_PORT", "8080"))
+	httpsPort, _ := strconv.Atoi(getEnvWithPrefix("EDGEPROXY", "HTTPS_PORT", "8443"))
+
 	config := &EdgeProxyConfig{
 		BaseConfig:  loadBaseConfigWithPrefix("EDGEPROXY", "edge-proxy"),
 		DatabaseURL: getEnvWithPrefix("EDGEPROXY", "DATABASE_URL", "postgres://localhost/zeitwork"),
+		PortHttp:    httpPort,
+		PortHttps:   httpsPort,
 	}
 
 	if config.DatabaseURL == "" {

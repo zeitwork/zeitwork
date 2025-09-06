@@ -90,34 +90,7 @@ func (d *DockerRuntime) buildHostConfig(spec *runtimeTypes.InstanceSpec) *contai
 		}
 	}
 
-	// Port mappings
-	if spec.NetworkConfig != nil {
-		portBindings := make(nat.PortMap)
-
-		// Default port mapping
-		if spec.NetworkConfig.DefaultPort > 0 {
-			internalPort := nat.Port(fmt.Sprintf("%d/tcp", spec.NetworkConfig.DefaultPort))
-			portBindings[internalPort] = []nat.PortBinding{
-				{
-					HostIP:   "0.0.0.0",
-					HostPort: strconv.Itoa(int(spec.NetworkConfig.DefaultPort)),
-				},
-			}
-		}
-
-		// Additional port mappings
-		for internalPort, externalPort := range spec.NetworkConfig.PortMappings {
-			containerPort := nat.Port(fmt.Sprintf("%d/tcp", internalPort))
-			portBindings[containerPort] = []nat.PortBinding{
-				{
-					HostIP:   "0.0.0.0",
-					HostPort: strconv.Itoa(int(externalPort)),
-				},
-			}
-		}
-
-		hostConfig.PortBindings = portBindings
-	}
+	// No port mappings needed - edge proxy connects directly to container IP addresses
 
 	// Volume mounts
 	if spec.VolumeConfig != nil {
@@ -153,10 +126,9 @@ func (d *DockerRuntime) buildNetworkConfig(spec *runtimeTypes.InstanceSpec) *net
 
 	endpointConfig := &network.EndpointSettings{}
 
-	// Set IPv6 address if specified
-	if spec.NetworkConfig.IPv6Address != "" {
-		endpointConfig.IPAddress = spec.NetworkConfig.IPv6Address
-	}
+	// For development: Use Docker's automatic IPv4 assignment (172.20.x.x)
+	// The edge proxy will connect directly to these IPv4 addresses
+	// TODO: For production, add support for static IP assignment if needed
 
 	networkConfig.EndpointsConfig[d.config.NetworkName] = endpointConfig
 
@@ -236,20 +208,18 @@ func (d *DockerRuntime) extractNetworkInfo(containerJSON types.ContainerJSON) *r
 
 	// Get network settings
 	if containerJSON.NetworkSettings != nil {
-		// Get IP address
-		if containerJSON.NetworkSettings.IPAddress != "" {
-			networkInfo.IPAddress = containerJSON.NetworkSettings.IPAddress
-		}
-
-		// Get network from networks map
+		// Get IPv4 address from the zeitwork network
 		for networkName, network := range containerJSON.NetworkSettings.Networks {
 			if network.IPAddress != "" {
 				networkInfo.IPAddress = network.IPAddress
 				networkInfo.NetworkID = networkName
+				break // Use the first available IPv4 address
 			}
-			if network.GlobalIPv6Address != "" {
-				networkInfo.IPv6Address = network.GlobalIPv6Address
-			}
+		}
+
+		// Fallback to default IP address if no network-specific IP found
+		if networkInfo.IPAddress == "" && containerJSON.NetworkSettings.IPAddress != "" {
+			networkInfo.IPAddress = containerJSON.NetworkSettings.IPAddress
 		}
 
 		// Extract port mappings

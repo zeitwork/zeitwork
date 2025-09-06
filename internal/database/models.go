@@ -91,7 +91,7 @@ type Instance struct {
 	Vcpus                int32              `json:"vcpus"`
 	Memory               int32              `json:"memory"`
 	DefaultPort          int32              `json:"default_port"`
-	Ipv6Address          string             `json:"ipv6_address"`
+	IpAddress            string             `json:"ip_address"`
 	EnvironmentVariables string             `json:"environment_variables"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`

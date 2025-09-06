@@ -377,6 +377,21 @@ func (s *Service) setupHealthMonitoring() {
 				"instance_id", instanceID,
 				"error", err)
 		}
+
+		// Trigger immediate reconciliation when instance becomes unhealthy
+		if !healthy {
+			s.logger.Info("Triggering reconciliation due to unhealthy instance", "instance_id", instanceID)
+			go func() {
+				reconcileCtx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+				defer cancel()
+
+				if err := s.ForceReconciliation(reconcileCtx); err != nil {
+					s.logger.Error("Failed to trigger reconciliation after health change",
+						"instance_id", instanceID,
+						"error", err)
+				}
+			}()
+		}
 	})
 
 	s.logger.Debug("Health monitoring configured")

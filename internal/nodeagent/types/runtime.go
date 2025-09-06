@@ -84,10 +84,8 @@ type ResourceSpec struct {
 // NetworkConfig defines network configuration for an instance
 type NetworkConfig struct {
 	DefaultPort  int32             // Default port to expose
-	PortMappings map[int32]int32   // Internal port -> External port mapping
+	PortMappings map[int32]int32   // Internal port -> External port mapping (not used in development)
 	NetworkName  string            // Network to connect to
-	IPv6Address  string            // IPv6 address (if specified)
-	EnableIPv6   bool              // Whether to enable IPv6
 	DNSServers   []string          // Custom DNS servers
 	ExtraHosts   map[string]string // Extra host entries
 }
@@ -106,9 +104,9 @@ type VolumeMount struct {
 
 // NetworkInfo contains runtime network information
 type NetworkInfo struct {
-	IPAddress    string          // Internal IP address
-	IPv6Address  string          // IPv6 address
-	PortMappings map[int32]int32 // Actual port mappings
+	IPAddress    string          // Internal IP address (IPv4 in development, IPv6 in production)
+	DefaultPort  int32           // Default port to expose
+	PortMappings map[int32]int32 // Actual port mappings (not used in development)
 	NetworkID    string          // Network ID
 }
 

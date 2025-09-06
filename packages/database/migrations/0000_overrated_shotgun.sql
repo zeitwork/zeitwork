@@ -18,7 +18,7 @@ CREATE TABLE "instances" (
 	"vcpus" integer NOT NULL,
 	"memory" integer NOT NULL,
 	"default_port" integer NOT NULL,
-	"ipv6_address" text NOT NULL,
+	"ip_address" text NOT NULL,
 	"environment_variables" text NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,

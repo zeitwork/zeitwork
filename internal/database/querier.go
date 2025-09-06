@@ -77,6 +77,8 @@ type Querier interface {
 	InstancesGetByDeployment(ctx context.Context, deploymentID pgtype.UUID) ([]*InstancesGetByDeploymentRow, error)
 	// Get instance by ID
 	InstancesGetById(ctx context.Context, id pgtype.UUID) (*InstancesGetByIdRow, error)
+	// Update instance IP address after container creation
+	InstancesUpdateIpAddress(ctx context.Context, arg *InstancesUpdateIpAddressParams) (*InstancesUpdateIpAddressRow, error)
 	// Update instance state
 	InstancesUpdateState(ctx context.Context, arg *InstancesUpdateStateParams) (*InstancesUpdateStateRow, error)
 	// Create a new node

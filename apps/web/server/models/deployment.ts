@@ -1,4 +1,4 @@
-import { deployments, organisations, projects } from "@zeitwork/database/schema"
+import { deployments, organisations, projects, domains } from "@zeitwork/database/schema"
 import { customAlphabet } from "nanoid"
 import { eq } from "../utils/drizzle"
 
@@ -42,7 +42,7 @@ export function useDeploymentModel() {
         return { data: null, error: new Error("Organisation not found") }
       }
 
-      let deploymentId = generateDeploymentId()
+      const deploymentId = generateDeploymentId()
 
       const { data: latestCommitHash, error: latestCommitHashError } = await github.branch.getLatestCommitSHA(
         project.githubInstallationId,
@@ -57,7 +57,7 @@ export function useDeploymentModel() {
       const [deployment] = await useDrizzle()
         .insert(deployments)
         .values({
-          deploymentId: generateDeploymentId(),
+          deploymentId: deploymentId,
           status: "pending",
           commitHash: latestCommitHash,
           projectId: project.id,
@@ -68,6 +68,22 @@ export function useDeploymentModel() {
 
       if (!deployment) {
         return { data: null, error: new Error("Failed to create deployment") }
+      }
+
+      // Create internal domain for the deployment
+      const internalDomainName = generateInternalDomain(project.slug, deploymentId, organisation.slug)
+
+      try {
+        await useDrizzle().insert(domains).values({
+          name: internalDomainName,
+          deploymentId: deployment.id,
+          internal: true,
+          verifiedAt: new Date(), // Internal domains are always verified
+          organisationId: params.organisationId,
+        })
+      } catch (domainError) {
+        // Log the error but don't fail the deployment creation
+        console.error("Failed to create internal domain:", domainError)
       }
 
       return { data: deployment, error: null }
@@ -86,4 +102,15 @@ const deploymentIdGenerator = customAlphabet(deploymentIdAlphabet, 10)
 
 function generateDeploymentId(): string {
   return deploymentIdGenerator()
+}
+
+/**
+ * Generates an internal domain name for a deployment
+ * Pattern: <project-slug>-<deployment-id>-<org-slug>.zeitwork.app (production)
+ * Pattern: <project-slug>-<deployment-id>-<org-slug>.zeitwork.localhost:7777 (development)
+ */
+function generateInternalDomain(projectSlug: string, deploymentId: string, orgSlug: string): string {
+  const isDevelopment = process.env.NODE_ENV === "development" || process.env.ENVIRONMENT === "development"
+  const baseDomain = isDevelopment ? "zeitwork.localhost:8080" : "zeitwork.app"
+  return `${projectSlug}-${deploymentId}-${orgSlug}.${baseDomain}`
 }

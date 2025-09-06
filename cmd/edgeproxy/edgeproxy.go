@@ -34,6 +34,8 @@ func main() {
 		DatabaseURL:        cfg.DatabaseURL,
 		ConfigPollInterval: 30 * time.Second, // Keep polling as fallback
 		NATSConfig:         natsCfg,
+		PortHttp:           cfg.PortHttp,
+		PortHttps:          cfg.PortHttps,
 	}, logger)
 	if err != nil {
 		logger.Error("Failed to create edge proxy service", "error", err)

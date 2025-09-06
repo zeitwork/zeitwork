@@ -102,7 +102,7 @@ SELECT
     d.deployment_id as deployment_name,
     d.status,
     dom.name as domain,
-    i.ipv6_address as ip_address,
+    i.ip_address,
     i.default_port,
     CASE 
         WHEN i.state = 'running' THEN true 

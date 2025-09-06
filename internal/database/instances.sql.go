@@ -21,7 +21,7 @@ INSERT INTO instances (
     vcpus,
     memory,
     default_port,
-    ipv6_address,
+    ip_address,
     environment_variables
 ) VALUES (
     $1,
@@ -44,7 +44,7 @@ RETURNING
     vcpus,
     memory,
     default_port,
-    ipv6_address,
+    ip_address,
     environment_variables,
     created_at,
     updated_at
@@ -59,7 +59,7 @@ type InstancesCreateParams struct {
 	Vcpus                int32       `json:"vcpus"`
 	Memory               int32       `json:"memory"`
 	DefaultPort          int32       `json:"default_port"`
-	Ipv6Address          string      `json:"ipv6_address"`
+	IpAddress            string      `json:"ip_address"`
 	EnvironmentVariables string      `json:"environment_variables"`
 }
 
@@ -72,7 +72,7 @@ type InstancesCreateRow struct {
 	Vcpus                int32              `json:"vcpus"`
 	Memory               int32              `json:"memory"`
 	DefaultPort          int32              `json:"default_port"`
-	Ipv6Address          string             `json:"ipv6_address"`
+	IpAddress            string             `json:"ip_address"`
 	EnvironmentVariables string             `json:"environment_variables"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
@@ -89,7 +89,7 @@ func (q *Queries) InstancesCreate(ctx context.Context, arg *InstancesCreateParam
 		arg.Vcpus,
 		arg.Memory,
 		arg.DefaultPort,
-		arg.Ipv6Address,
+		arg.IpAddress,
 		arg.EnvironmentVariables,
 	)
 	var i InstancesCreateRow
@@ -102,7 +102,7 @@ func (q *Queries) InstancesCreate(ctx context.Context, arg *InstancesCreateParam
 		&i.Vcpus,
 		&i.Memory,
 		&i.DefaultPort,
-		&i.Ipv6Address,
+		&i.IpAddress,
 		&i.EnvironmentVariables,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -133,7 +133,7 @@ SELECT
     vcpus,
     memory,
     default_port,
-    ipv6_address,
+    ip_address,
     environment_variables,
     created_at,
     updated_at
@@ -151,7 +151,7 @@ type InstancesFindByNodeRow struct {
 	Vcpus                int32              `json:"vcpus"`
 	Memory               int32              `json:"memory"`
 	DefaultPort          int32              `json:"default_port"`
-	Ipv6Address          string             `json:"ipv6_address"`
+	IpAddress            string             `json:"ip_address"`
 	EnvironmentVariables string             `json:"environment_variables"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
@@ -176,7 +176,7 @@ func (q *Queries) InstancesFindByNode(ctx context.Context, nodeID pgtype.UUID) (
 			&i.Vcpus,
 			&i.Memory,
 			&i.DefaultPort,
-			&i.Ipv6Address,
+			&i.IpAddress,
 			&i.EnvironmentVariables,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -201,7 +201,7 @@ SELECT
     i.vcpus,
     i.memory,
     i.default_port,
-    i.ipv6_address,
+    i.ip_address,
     i.environment_variables,
     i.created_at,
     i.updated_at
@@ -220,7 +220,7 @@ type InstancesGetByDeploymentRow struct {
 	Vcpus                int32              `json:"vcpus"`
 	Memory               int32              `json:"memory"`
 	DefaultPort          int32              `json:"default_port"`
-	Ipv6Address          string             `json:"ipv6_address"`
+	IpAddress            string             `json:"ip_address"`
 	EnvironmentVariables string             `json:"environment_variables"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
@@ -245,7 +245,7 @@ func (q *Queries) InstancesGetByDeployment(ctx context.Context, deploymentID pgt
 			&i.Vcpus,
 			&i.Memory,
 			&i.DefaultPort,
-			&i.Ipv6Address,
+			&i.IpAddress,
 			&i.EnvironmentVariables,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -270,7 +270,7 @@ SELECT
     vcpus,
     memory,
     default_port,
-    ipv6_address,
+    ip_address,
     environment_variables,
     created_at,
     updated_at
@@ -288,7 +288,7 @@ type InstancesGetByIdRow struct {
 	Vcpus                int32              `json:"vcpus"`
 	Memory               int32              `json:"memory"`
 	DefaultPort          int32              `json:"default_port"`
-	Ipv6Address          string             `json:"ipv6_address"`
+	IpAddress            string             `json:"ip_address"`
 	EnvironmentVariables string             `json:"environment_variables"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
@@ -307,7 +307,68 @@ func (q *Queries) InstancesGetById(ctx context.Context, id pgtype.UUID) (*Instan
 		&i.Vcpus,
 		&i.Memory,
 		&i.DefaultPort,
-		&i.Ipv6Address,
+		&i.IpAddress,
+		&i.EnvironmentVariables,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return &i, err
+}
+
+const instancesUpdateIpAddress = `-- name: InstancesUpdateIpAddress :one
+UPDATE instances 
+SET ip_address = $2, 
+    updated_at = now()
+WHERE id = $1
+RETURNING 
+    id,
+    region_id,
+    node_id,
+    image_id,
+    state,
+    vcpus,
+    memory,
+    default_port,
+    ip_address,
+    environment_variables,
+    created_at,
+    updated_at
+`
+
+type InstancesUpdateIpAddressParams struct {
+	ID        pgtype.UUID `json:"id"`
+	IpAddress string      `json:"ip_address"`
+}
+
+type InstancesUpdateIpAddressRow struct {
+	ID                   pgtype.UUID        `json:"id"`
+	RegionID             pgtype.UUID        `json:"region_id"`
+	NodeID               pgtype.UUID        `json:"node_id"`
+	ImageID              pgtype.UUID        `json:"image_id"`
+	State                string             `json:"state"`
+	Vcpus                int32              `json:"vcpus"`
+	Memory               int32              `json:"memory"`
+	DefaultPort          int32              `json:"default_port"`
+	IpAddress            string             `json:"ip_address"`
+	EnvironmentVariables string             `json:"environment_variables"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Update instance IP address after container creation
+func (q *Queries) InstancesUpdateIpAddress(ctx context.Context, arg *InstancesUpdateIpAddressParams) (*InstancesUpdateIpAddressRow, error) {
+	row := q.db.QueryRow(ctx, instancesUpdateIpAddress, arg.ID, arg.IpAddress)
+	var i InstancesUpdateIpAddressRow
+	err := row.Scan(
+		&i.ID,
+		&i.RegionID,
+		&i.NodeID,
+		&i.ImageID,
+		&i.State,
+		&i.Vcpus,
+		&i.Memory,
+		&i.DefaultPort,
+		&i.IpAddress,
 		&i.EnvironmentVariables,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -329,7 +390,7 @@ RETURNING
     vcpus,
     memory,
     default_port,
-    ipv6_address,
+    ip_address,
     environment_variables,
     created_at,
     updated_at
@@ -349,7 +410,7 @@ type InstancesUpdateStateRow struct {
 	Vcpus                int32              `json:"vcpus"`
 	Memory               int32              `json:"memory"`
 	DefaultPort          int32              `json:"default_port"`
-	Ipv6Address          string             `json:"ipv6_address"`
+	IpAddress            string             `json:"ip_address"`
 	EnvironmentVariables string             `json:"environment_variables"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
@@ -368,7 +429,7 @@ func (q *Queries) InstancesUpdateState(ctx context.Context, arg *InstancesUpdate
 		&i.Vcpus,
 		&i.Memory,
 		&i.DefaultPort,
-		&i.Ipv6Address,
+		&i.IpAddress,
 		&i.EnvironmentVariables,
 		&i.CreatedAt,
 		&i.UpdatedAt,

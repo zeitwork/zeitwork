@@ -1,5 +1,5 @@
-import { deployments, projects } from "@zeitwork/database/schema"
-import { eq, and } from "drizzle-orm"
+import { deployments, domains, projects } from "@zeitwork/database/schema"
+import { eq, and, inArray } from "drizzle-orm"
 import { z } from "zod"
 
 const paramsSchema = z.object({
@@ -12,8 +12,12 @@ export default defineEventHandler(async (event) => {
 
   const { id } = await getValidatedRouterParams(event, paramsSchema.parse)
 
+  type LatestDeployment = typeof deployments.$inferSelect & {
+    domains?: (typeof domains.$inferSelect)[]
+  }
+
   type Project = typeof projects.$inferSelect & {
-    latestDeployment?: typeof deployments.$inferSelect | null
+    latestDeployment?: LatestDeployment | null
   }
 
   let project: Project | null = null
@@ -44,11 +48,20 @@ export default defineEventHandler(async (event) => {
     let [latestDeployment] = await useDrizzle()
       .select()
       .from(deployments)
-      .where(eq(deployments.id, project.latestDeploymentId))
+      .where(eq(deployments.projectId, project.id))
       .limit(1)
     project.latestDeployment = latestDeployment
   } else {
     project.latestDeployment = null
+  }
+
+  // Fetch the domains for each deployment
+  if (project.latestDeployment) {
+    const results = await useDrizzle()
+      .select()
+      .from(domains)
+      .where(eq(domains.deploymentId, project.latestDeployment.id))
+    project.latestDeployment.domains = results
   }
 
   return project

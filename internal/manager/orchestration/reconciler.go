@@ -395,7 +395,7 @@ func (r *DeploymentReconciler) createSingleInstance(ctx context.Context, queries
 		Vcpus:                2,    // Standard allocation as per architecture
 		Memory:               2048, // 2GB RAM as per architecture
 		DefaultPort:          8080,
-		Ipv6Address:          ipv6Address,
+		IpAddress:            ipv6Address,
 		EnvironmentVariables: "{}",
 	}
 

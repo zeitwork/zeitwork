@@ -15,21 +15,24 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	natsgo "github.com/nats-io/nats.go"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/zeitwork/zeitwork/internal/database"
 	"github.com/zeitwork/zeitwork/internal/shared/config"
 	"github.com/zeitwork/zeitwork/internal/shared/nats"
+	pb "github.com/zeitwork/zeitwork/proto"
 )
 
-// VMEndpoint represents a VM endpoint with its IPv6 address
+// VMEndpoint represents a VM endpoint with its IP address (IPv4 or IPv6)
 // IPv6 format: fd00:00:<region_id>:<node_id>:<vm_id>/64
+// IPv4 format: 172.20.x.x (Docker internal network)
 type VMEndpoint struct {
-	URL      *url.URL
-	IPv6     string // Full IPv6 address
-	RegionID string // Extracted from IPv6
-	NodeID   string // Extracted from IPv6
-	VMID     string // Extracted from IPv6
-	Port     int    // Service port
+	URL       *url.URL
+	IPAddress string // Full IP address (IPv4 or IPv6)
+	RegionID  string // Extracted from address (IPv6 only)
+	NodeID    string // Extracted from address (IPv6 only)
+	VMID      string // Extracted from address (IPv6 only)
+	Port      int    // Service port
 }
 
 // Route represents a routing configuration for a domain
@@ -41,15 +44,16 @@ type Route struct {
 
 // Service represents the native Go edge proxy service
 type Service struct {
-	logger     *slog.Logger
-	config     *Config
-	db         *pgxpool.Pool
-	queries    *database.Queries
-	natsClient *nats.Client
-	routesMu   sync.RWMutex
-	routes     map[string]*Route // Key: domain name
-	portHttp   int
-	portHttps  int
+	logger          *slog.Logger
+	config          *Config
+	db              *pgxpool.Pool
+	queries         *database.Queries
+	natsClient      *nats.Client
+	routesMu        sync.RWMutex
+	routes          map[string]*Route // Key: domain name
+	portHttp        int
+	portHttps       int
+	templateManager *TemplateManager
 }
 
 // Config holds the configuration for the edge proxy service
@@ -106,15 +110,22 @@ func NewService(config *Config, logger *slog.Logger) (*Service, error) {
 		logger.Info("Connected to NATS for routing updates")
 	}
 
+	// Initialize template manager
+	templateManager, err := NewTemplateManager()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create template manager: %w", err)
+	}
+
 	s := &Service{
-		logger:     logger,
-		config:     config,
-		db:         db,
-		queries:    queries,
-		natsClient: natsClient,
-		routes:     make(map[string]*Route),
-		portHttp:   config.PortHttp,
-		portHttps:  config.PortHttps,
+		logger:          logger,
+		config:          config,
+		db:              db,
+		queries:         queries,
+		natsClient:      natsClient,
+		routes:          make(map[string]*Route),
+		portHttp:        config.PortHttp,
+		portHttps:       config.PortHttps,
+		templateManager: templateManager,
 	}
 
 	return s, nil
@@ -194,13 +205,13 @@ func (s *Service) startHTTPServer(ctx context.Context) {
 		}
 	}()
 
-	// Start HTTPS server
+	// Start HTTPS server only in production or if certificates are available
+	// TODO: Add proper TLS certificate configuration for production
 	go func() {
-		s.logger.Info("Starting HTTPS proxy server", "port", s.portHttps)
-		// TODO: Add TLS certificate configuration
-		if err := httpsServer.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
-			s.logger.Error("HTTPS server failed", "error", err)
-		}
+		s.logger.Info("HTTPS server disabled in development mode", "port", s.portHttps)
+		// if err := httpsServer.ListenAndServeTLS("cert.pem", "key.pem"); err != nil && err != http.ErrServerClosed {
+		// 	s.logger.Error("HTTPS server failed", "error", err)
+		// }
 	}()
 
 	// Wait for context cancellation and shutdown
@@ -236,15 +247,13 @@ func (s *Service) handleProxy(w http.ResponseWriter, r *http.Request) {
 
 	if !exists {
 		s.logger.Debug("Domain not found in routing table", "domain", domain)
-		w.WriteHeader(http.StatusNotFound)
-		w.Write([]byte("404 - domain not found"))
+		s.templateManager.ServeErrorPage(w, r, http.StatusNotFound, domain, "Domain not found in routing table")
 		return
 	}
 
 	if len(route.Endpoints) == 0 {
 		s.logger.Warn("No endpoints available for domain", "domain", domain)
-		w.WriteHeader(http.StatusBadGateway)
-		w.Write([]byte("502 - no healthy VMs available"))
+		s.templateManager.ServeErrorPage(w, r, http.StatusBadGateway, domain, "No healthy VMs available")
 		return
 	}
 
@@ -252,22 +261,45 @@ func (s *Service) handleProxy(w http.ResponseWriter, r *http.Request) {
 	endpoint := s.selectVMEndpoint(route.Endpoints)
 	if endpoint == nil {
 		s.logger.Error("Failed to select VM endpoint", "domain", domain)
-		w.WriteHeader(http.StatusBadGateway)
-		w.Write([]byte("502 - no healthy VM available"))
+		s.templateManager.ServeErrorPage(w, r, http.StatusBadGateway, domain, "No healthy VM available")
 		return
 	}
 
 	// Log the routing decision
 	s.logger.Debug("Routing request",
 		"domain", domain,
-		"vm_ipv6", endpoint.IPv6,
+		"ip_address", endpoint.IPAddress,
 		"region", endpoint.RegionID,
 		"node", endpoint.NodeID,
 		"vm", endpoint.VMID,
 		"port", endpoint.Port)
 
-	// Proxy the request to the selected VM
+	// Proxy the request to the selected VM with error handling
 	proxy := httputil.NewSingleHostReverseProxy(endpoint.URL)
+
+	// Custom error handler for proxy failures
+	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+		s.logger.Error("Proxy request failed",
+			"domain", domain,
+			"ip_address", endpoint.IPAddress,
+			"error", err)
+
+		// Determine appropriate error code based on the error
+		statusCode := http.StatusBadGateway
+		description := "Backend service is temporarily unavailable"
+
+		if strings.Contains(err.Error(), "connection refused") {
+			description = "Backend service is not responding"
+		} else if strings.Contains(err.Error(), "timeout") {
+			statusCode = http.StatusGatewayTimeout
+			description = "Backend service request timed out"
+		} else if strings.Contains(err.Error(), "no such host") {
+			description = "Backend service address cannot be resolved"
+		}
+
+		s.templateManager.ServeErrorPage(w, r, statusCode, domain, description)
+	}
+
 	proxy.ServeHTTP(w, r)
 }
 
@@ -281,6 +313,17 @@ func (s *Service) selectVMEndpoint(endpoints []VMEndpoint) *VMEndpoint {
 	// All endpoints are assumed healthy as they're filtered during config loading
 	selected := endpoints[rand.Intn(len(endpoints))]
 	return &selected
+}
+
+// detectIPVersion determines if an address is IPv4 or IPv6
+func detectIPVersion(address string) int {
+	// Remove any CIDR suffix
+	address = strings.Split(address, "/")[0]
+
+	if strings.Contains(address, ":") {
+		return 6 // IPv6
+	}
+	return 4 // IPv4
 }
 
 // parseIPv6VM extracts region, node, and VM IDs from an IPv6 address
@@ -299,7 +342,44 @@ func parseIPv6VM(ipv6 string) (regionID, nodeID, vmID string) {
 	return
 }
 
+// normalizeIPAddress converts IP address to the format expected by the runtime
+func normalizeIPAddress(address string, ipVersion int) string {
+	// Remove CIDR suffix
+	address = strings.Split(address, "/")[0]
+
+	if ipVersion == 6 {
+		// Convert IPv6 address format to match what Docker actually assigns
+		// Convert fd00:00:0199:0199:0199 -> fd00::199:199:199
+		if strings.HasPrefix(address, "fd00:00:") {
+			parts := strings.Split(address, ":")
+			if len(parts) >= 5 {
+				return fmt.Sprintf("fd00::%s:%s:%s",
+					strings.TrimLeft(parts[2], "0"),
+					strings.TrimLeft(parts[3], "0"),
+					strings.TrimLeft(parts[4], "0"))
+			}
+		}
+		// TODO: Production IPv6 Implementation
+		// - Add fd12:: support for production IPv6 (avoids conflicts with existing fd62:: on host)
+		// - Implement proper IPv6 routing for production environments
+		// - Consider using ULA ranges that don't conflict with existing network infrastructure
+		// - Add IPv6 firewall rules and security considerations
+		if strings.HasPrefix(address, "fd12:00:") {
+			// TODO: Implement fd12:: address normalization for production
+			// Similar to fd00:: but with different prefix
+		}
+	}
+
+	// IPv4 addresses are used as-is
+	return address
+}
+
 // loadAndApplyConfig loads configuration from database and applies it to the proxy
+//
+// Development vs Production IP Handling:
+// - Development: Uses Docker IPv4 addresses (172.20.x.x) which are accessible from macOS host
+// - Production: Uses IPv6 addresses (fd00:: or fd12::) with proper routing infrastructure
+// - The edge proxy automatically detects IP version and handles both transparently
 func (s *Service) loadAndApplyConfig() error {
 	// Get all active deployments with their routes
 	rows, err := s.queries.DeploymentsGetActiveRoutes(context.Background())
@@ -321,31 +401,49 @@ func (s *Service) loadAndApplyConfig() error {
 		if !row.Healthy {
 			s.logger.Debug("Skipping unhealthy VM",
 				"domain", domain,
-				"ipv6", row.IpAddress)
+				"ip_address", row.IpAddress)
 			continue
 		}
 
-		// Create VM endpoint URL
-		endpointURL, err := url.Parse(fmt.Sprintf("http://[%s]:%d", row.IpAddress, row.DefaultPort))
+		// Detect IP version and normalize address
+		ipVersion := detectIPVersion(row.IpAddress)
+		normalizedAddress := normalizeIPAddress(row.IpAddress, ipVersion)
+
+		// Create VM endpoint URL based on IP version
+		var endpointURL *url.URL
+		var err error
+
+		if ipVersion == 6 {
+			// IPv6 addresses need brackets in URLs
+			endpointURL, err = url.Parse(fmt.Sprintf("http://[%s]:%d", normalizedAddress, row.DefaultPort))
+		} else {
+			// IPv4 addresses don't need brackets
+			endpointURL, err = url.Parse(fmt.Sprintf("http://%s:%d", normalizedAddress, row.DefaultPort))
+		}
+
 		if err != nil {
 			s.logger.Error("Failed to parse VM endpoint URL",
-				"ipv6", row.IpAddress,
+				"ip_address", row.IpAddress,
+				"normalized", normalizedAddress,
 				"port", row.DefaultPort,
 				"error", err)
 			continue
 		}
 
-		// Parse IPv6 to extract region, node, and VM IDs
-		regionID, nodeID, vmID := parseIPv6VM(row.IpAddress)
+		// Extract region, node, and VM IDs (only for IPv6)
+		var regionID, nodeID, vmID string
+		if ipVersion == 6 {
+			regionID, nodeID, vmID = parseIPv6VM(row.IpAddress)
+		}
 
 		// Create VM endpoint
 		vmEndpoint := VMEndpoint{
-			URL:      endpointURL,
-			IPv6:     row.IpAddress,
-			RegionID: regionID,
-			NodeID:   nodeID,
-			VMID:     vmID,
-			Port:     int(row.DefaultPort),
+			URL:       endpointURL,
+			IPAddress: row.IpAddress,
+			RegionID:  regionID,
+			NodeID:    nodeID,
+			VMID:      vmID,
+			Port:      int(row.DefaultPort),
 		}
 
 		// Get or create route for this domain
@@ -361,7 +459,7 @@ func (s *Service) loadAndApplyConfig() error {
 		// Add VM endpoint to route (avoid duplicates)
 		endpointExists := false
 		for _, ep := range route.Endpoints {
-			if ep.IPv6 == vmEndpoint.IPv6 && ep.Port == vmEndpoint.Port {
+			if ep.IPAddress == vmEndpoint.IPAddress && ep.Port == vmEndpoint.Port {
 				endpointExists = true
 				break
 			}
@@ -393,19 +491,43 @@ func (s *Service) loadAndApplyConfig() error {
 	return nil
 }
 
-// routingUpdateSubscriber subscribes to NATS routing update messages
+// routingUpdateSubscriber subscribes to NATS routing-relevant events
 func (s *Service) routingUpdateSubscriber(ctx context.Context) {
 	s.logger.Info("Starting NATS routing update subscriber")
 
-	// Subscribe to general routing updates
-	sub, err := s.natsClient.WithContext(ctx).Subscribe("routing.updates", s.handleRoutingUpdate)
+	// Subscribe to deployment events
+	deploymentSub, err := s.natsClient.WithContext(ctx).Subscribe("deployment.>", s.handleRoutingUpdate)
 	if err != nil {
-		s.logger.Error("Failed to subscribe to routing updates", "error", err)
+		s.logger.Error("Failed to subscribe to deployment events", "error", err)
 		return
 	}
-	defer sub.Unsubscribe()
+	defer deploymentSub.Unsubscribe()
 
-	s.logger.Info("Subscribed to NATS routing updates")
+	// Subscribe to instance events
+	instanceSub, err := s.natsClient.WithContext(ctx).Subscribe("instance.>", s.handleRoutingUpdate)
+	if err != nil {
+		s.logger.Error("Failed to subscribe to instance events", "error", err)
+		return
+	}
+	defer instanceSub.Unsubscribe()
+
+	// Subscribe to domain events
+	domainSub, err := s.natsClient.WithContext(ctx).Subscribe("domain.>", s.handleRoutingUpdate)
+	if err != nil {
+		s.logger.Error("Failed to subscribe to domain events", "error", err)
+		return
+	}
+	defer domainSub.Unsubscribe()
+
+	// Subscribe to deployment_instance events
+	deploymentInstanceSub, err := s.natsClient.WithContext(ctx).Subscribe("deployment_instance.>", s.handleRoutingUpdate)
+	if err != nil {
+		s.logger.Error("Failed to subscribe to deployment_instance events", "error", err)
+		return
+	}
+	defer deploymentInstanceSub.Unsubscribe()
+
+	s.logger.Info("Subscribed to NATS routing events (deployment, instance, domain, deployment_instance)")
 
 	// Wait for context cancellation
 	<-ctx.Done()
@@ -416,31 +538,84 @@ func (s *Service) routingUpdateSubscriber(ctx context.Context) {
 func (s *Service) handleRoutingUpdate(msg *natsgo.Msg) {
 	s.logger.Debug("Received routing update message", "subject", msg.Subject)
 
-	// Parse the JSON message since we don't use protobuf for routing updates anymore
-	var change struct {
-		Table     string `json:"table"`
-		Operation string `json:"operation"`
-		ID        string `json:"id"`
-		Timestamp int64  `json:"timestamp"`
+	// Extract table and operation from subject (e.g., "deployment.created" -> "deployment", "created")
+	parts := strings.Split(msg.Subject, ".")
+	if len(parts) != 2 {
+		s.logger.Error("Invalid subject format", "subject", msg.Subject)
+		return
 	}
-	if err := json.Unmarshal(msg.Data, &change); err != nil {
-		s.logger.Error("Failed to unmarshal routing update", "error", err)
+	table := parts[0]
+	operation := parts[1]
+
+	// Parse the protobuf message based on the subject
+	var id string
+	var err error
+
+	switch msg.Subject {
+	case "deployment.created":
+		var event pb.DeploymentCreated
+		if err = proto.Unmarshal(msg.Data, &event); err == nil {
+			id = event.GetId()
+		}
+	case "deployment.updated":
+		var event pb.DeploymentUpdated
+		if err = proto.Unmarshal(msg.Data, &event); err == nil {
+			id = event.GetId()
+		}
+	case "instance.created":
+		var event pb.InstanceCreated
+		if err = proto.Unmarshal(msg.Data, &event); err == nil {
+			id = event.GetId()
+		}
+	case "instance.updated":
+		var event pb.InstanceUpdated
+		if err = proto.Unmarshal(msg.Data, &event); err == nil {
+			id = event.GetId()
+		}
+	case "domain.created":
+		var event pb.DomainCreated
+		if err = proto.Unmarshal(msg.Data, &event); err == nil {
+			id = event.GetId()
+		}
+	case "domain.updated":
+		var event pb.DomainUpdated
+		if err = proto.Unmarshal(msg.Data, &event); err == nil {
+			id = event.GetId()
+		}
+	case "deployment_instance.created":
+		var event pb.DeploymentInstanceCreated
+		if err = proto.Unmarshal(msg.Data, &event); err == nil {
+			id = event.GetId()
+		}
+	case "deployment_instance.updated":
+		var event pb.DeploymentInstanceUpdated
+		if err = proto.Unmarshal(msg.Data, &event); err == nil {
+			id = event.GetId()
+		}
+	default:
+		s.logger.Debug("Ignoring unhandled event", "subject", msg.Subject)
+		return
+	}
+
+	if err != nil {
+		s.logger.Error("Failed to unmarshal protobuf message", "subject", msg.Subject, "error", err)
 		return
 	}
 
 	s.logger.Info("Processing routing update",
-		"table", change.Table,
-		"operation", change.Operation,
-		"id", change.ID)
+		"table", table,
+		"operation", operation,
+		"id", id)
 
 	// Trigger configuration reload for routing-relevant changes
-	if s.isRoutingRelevantChange(change.Table) {
+	if s.isRoutingRelevantChange(table) {
 		if err := s.TriggerConfigReload(); err != nil {
 			s.logger.Error("Failed to reload configuration after routing update", "error", err)
 		} else {
 			s.logger.Info("Configuration reloaded due to routing update",
-				"table", change.Table,
-				"operation", change.Operation)
+				"table", table,
+				"operation", operation,
+				"id", id)
 		}
 	}
 }
