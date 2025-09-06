@@ -7,17 +7,17 @@ definePageMeta({
 
 const route = useRoute()
 const orgId = route.params.org as string
-const projectId = route.params.project as string
+const projectSlug = route.params.project as string
 
 const { data: deployments } = await useFetch(`/api/deployments`, {
   query: {
-    projectId,
+    projectSlug,
   },
 })
 </script>
 
 <template>
-  <div class="p-4">
+  <div class="flex-1 overflow-auto bg-black p-4 text-white">
     <pre>{{ deployments }}</pre>
   </div>
 </template>

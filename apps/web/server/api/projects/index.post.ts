@@ -48,13 +48,13 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: "No installation found for repository" })
   }
 
+  const githubRepository = `${body.repository.owner}/${body.repository.repo}`
+
   // Check if project already exists
   const [project] = await useDrizzle()
     .select()
     .from(projects)
-    .where(
-      and(eq(projects.organisationId, secure.organisationId), eq(projects.githubInstallationId, githubInstallationId)),
-    )
+    .where(and(eq(projects.organisationId, secure.organisationId), eq(projects.githubRepository, githubRepository)))
     .limit(1)
   if (project) {
     throw createError({ statusCode: 400, message: "Project already exists" })
@@ -68,7 +68,7 @@ export default defineEventHandler(async (event) => {
       .values({
         name: body.name,
         slug: generateSlug(body.name),
-        githubRepository: `${body.repository.owner}/${body.repository.repo}`,
+        githubRepository: githubRepository,
         githubInstallationId: githubInstallationId!,
         defaultBranch: "main",
         organisationId: secure.organisationId,
