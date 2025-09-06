@@ -57,6 +57,9 @@ func (h *BuildCompletedHandler) HandleEvent(ctx context.Context, data []byte) er
 		return fmt.Errorf("failed to unmarshal ImageBuildUpdated: %w", err)
 	}
 
-	h.logger.Info("Build completed", "build_id", event.Id)
+	h.logger.Info("Build updated", "build_id", event.Id)
+
+	// The reconciler will handle determining if the build is actually completed
+	// by querying the database and checking the status
 	return h.orchestrator.HandleBuildCompletedByID(ctx, uuid.MustParseUUID(event.Id))
 }

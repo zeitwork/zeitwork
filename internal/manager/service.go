@@ -30,6 +30,7 @@ type Service struct {
 
 	// Components
 	orchestrator  *orchestration.DeploymentOrchestrator
+	reconciler    *orchestration.DeploymentReconciler
 	eventRegistry *events.Registry
 
 	instanceID string
@@ -56,6 +57,9 @@ func NewService(cfg *config.ManagerConfig, logger *slog.Logger) (*Service, error
 	// Initialize orchestration layer
 	orchestrator := orchestration.NewDeploymentOrchestrator(queries, logger)
 
+	// Initialize reconciler
+	reconciler := orchestration.NewDeploymentReconciler(queries, db, logger)
+
 	// Initialize event handling
 	eventRegistry := events.NewRegistry(logger)
 
@@ -79,6 +83,7 @@ func NewService(cfg *config.ManagerConfig, logger *slog.Logger) (*Service, error
 		queries:       queries,
 		natsClient:    natsClient,
 		orchestrator:  orchestrator,
+		reconciler:    reconciler,
 		eventRegistry: eventRegistry,
 		instanceID:    instanceID,
 		stopChan:      make(chan struct{}),
@@ -101,6 +106,11 @@ func (s *Service) Start(ctx context.Context) error {
 	// Subscribe to all registered event types
 	if err := s.subscribeToEvents(ctx); err != nil {
 		return fmt.Errorf("failed to subscribe to events: %w", err)
+	}
+
+	// Start the deployment reconciler
+	if err := s.reconciler.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start reconciler: %w", err)
 	}
 
 	s.logger.Info("Manager service started successfully", "instance_id", s.instanceID)
@@ -206,6 +216,12 @@ func (s *Service) handleNATSMessage(ctx context.Context, eventType events.EventT
 // Close closes the manager service and cleans up resources
 func (s *Service) Close() error {
 	s.logger.Info("Closing manager service", "instance_id", s.instanceID)
+
+	// Stop the reconciler
+	if s.reconciler != nil {
+		s.reconciler.Stop()
+		s.logger.Debug("Reconciler stopped", "instance_id", s.instanceID)
+	}
 
 	// Close NATS client
 	if s.natsClient != nil {
