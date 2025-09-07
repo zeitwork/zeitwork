@@ -5,13 +5,18 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
   // if the user is not authenticated, redirect to the login page
 
   // always allow / and /login
-  if (to.path === "/login" || to.path === "/") {
+  if (to.path === "/login") {
     return
   }
 
-  const { loggedIn } = useUserSession()
+  const { loggedIn, session } = useUserSession()
 
   if (!loggedIn.value) {
     return navigateTo("/login")
+  }
+
+  // if logged in, and on / then redirect to the orgs page
+  if (to.path === "/" && loggedIn.value) {
+    return navigateTo(`/${session.value?.username}`)
   }
 })

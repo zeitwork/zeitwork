@@ -12,6 +12,7 @@ const (
 	ImageBuildUpdated EventType = "image_build.updated"
 	DeploymentCreated EventType = "deployment.created"
 	DeploymentUpdated EventType = "deployment.updated"
+	InstanceUpdated   EventType = "instance.updated"
 )
 
 // Handler defines the interface for event handlers

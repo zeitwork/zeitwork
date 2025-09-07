@@ -125,6 +125,81 @@ func (o *DeploymentOrchestrator) HandleDeploymentCreatedByID(ctx context.Context
 	return o.CreateImageBuildForDeployment(ctx, deployment)
 }
 
+// HandleInstanceUpdatedByID processes instance update events and updates project's latest deployment if eligible
+func (o *DeploymentOrchestrator) HandleInstanceUpdatedByID(ctx context.Context, instanceID pgtype.UUID) error {
+	// Map instance -> deployment via deployment_instances
+	di, err := o.db.DeploymentInstancesGetByInstance(ctx, instanceID)
+	if err != nil {
+		return fmt.Errorf("failed to get deployment instance relation: %w", err)
+	}
+
+	// Fetch all instances for the deployment
+	instances, err := o.db.InstancesGetByDeployment(ctx, di.DeploymentID)
+	if err != nil {
+		return fmt.Errorf("failed to get instances for deployment: %w", err)
+	}
+
+	if len(instances) == 0 {
+		return nil
+	}
+
+	// Ensure all instances are running (healthy)
+	allRunning := lo.EveryBy(instances, func(inst *database.InstancesGetByDeploymentRow) bool {
+		return inst.State == "running"
+	})
+	if !allRunning {
+		return nil
+	}
+
+	// Fetch deployment to get project_id and created_at
+	deployment, err := o.db.DeploymentsGetById(ctx, di.DeploymentID)
+	if err != nil {
+		return fmt.Errorf("failed to get deployment: %w", err)
+	}
+
+	// Fetch current project to compare latest_deployment_id
+	project, err := o.db.ProjectsGetById(ctx, deployment.ProjectID)
+	if err != nil {
+		return fmt.Errorf("failed to get project: %w", err)
+	}
+
+	// If already pointing to this deployment, nothing to do
+	if project.LatestDeploymentID.Valid && project.LatestDeploymentID == deployment.ID {
+		return nil
+	}
+
+	// If there is an existing latest_deployment_id, ensure we only advance
+	if project.LatestDeploymentID.Valid {
+		// UUIDv7 is time-ordered; compare lexicographically on raw bytes (same as string order)
+		a := project.LatestDeploymentID.Bytes
+		b := deployment.ID.Bytes
+		// simple tuple comparison
+		for i := 0; i < len(a) && i < len(b); i++ {
+			if a[i] > b[i] {
+				return nil
+			}
+			if a[i] < b[i] {
+				break
+			}
+		}
+	}
+
+	// Update project.latest_deployment_id
+	_, err = o.db.ProjectsUpdateLatestDeployment(ctx, &database.ProjectsUpdateLatestDeploymentParams{
+		ID:                 project.ID,
+		LatestDeploymentID: deployment.ID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to update project's latest_deployment_id: %w", err)
+	}
+
+	o.logger.Info("Updated project's latest deployment",
+		"project_id", project.ID,
+		"latest_deployment_id", deployment.ID)
+
+	return nil
+}
+
 // HandleDeploymentChange processes deployment state changes (legacy method - can be removed)
 func (o *DeploymentOrchestrator) HandleDeploymentChange(ctx context.Context, deploymentID string, status string) error {
 	o.logger.Info("Processing deployment change", "deployment_id", deploymentID, "status", status)

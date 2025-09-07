@@ -73,11 +73,13 @@ func NewService(cfg *config.ManagerConfig, logger *slog.Logger) (*Service, error
 	buildCompletedHandler := handlers.NewBuildCompletedHandler(orchestrator, logger)
 	deploymentCreatedHandler := handlers.NewDeploymentCreatedHandler(orchestrator, logger)
 	deploymentUpdatedHandler := handlers.NewDeploymentUpdatedHandler(orchestrator, logger)
+	instanceUpdatedHandler := handlers.NewInstanceUpdatedHandler(orchestrator, logger)
 
 	eventRegistry.MustRegister(buildCreatedHandler)
 	eventRegistry.MustRegister(buildCompletedHandler)
 	eventRegistry.MustRegister(deploymentCreatedHandler)
 	eventRegistry.MustRegister(deploymentUpdatedHandler)
+	eventRegistry.MustRegister(instanceUpdatedHandler)
 
 	instanceID := uuid.Must(uuid.NewV7()).String()
 
