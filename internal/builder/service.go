@@ -13,6 +13,8 @@ import (
 	"github.com/nats-io/nats.go"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/zeitwork/zeitwork/internal/builder/runtime"
+	"github.com/zeitwork/zeitwork/internal/builder/types"
 	"github.com/zeitwork/zeitwork/internal/database"
 	"github.com/zeitwork/zeitwork/internal/shared/config"
 	natsClient "github.com/zeitwork/zeitwork/internal/shared/nats"
@@ -27,12 +29,13 @@ type Service struct {
 	db           *pgxpool.Pool
 	queries      *database.Queries
 	natsClient   *natsClient.Client
-	imageBuilder ImageBuilder
+	buildRuntime types.BuildRuntime
 
 	// Build processing state
 	buildsMu         sync.RWMutex
 	activeBuildCount int
 	stopChan         chan struct{}
+	buildsWG         sync.WaitGroup
 }
 
 // NewService creates a new image builder service
@@ -60,20 +63,10 @@ func NewService(cfg *config.BuilderConfig, logger *slog.Logger) (*Service, error
 		return nil, fmt.Errorf("failed to connect to NATS: %w", err)
 	}
 
-	// Initialize image builder based on configuration
-	var imageBuilder ImageBuilder
-	switch cfg.BuilderType {
-	case "docker":
-		dockerConfig := DockerBuilderConfig{
-			WorkDir:  cfg.BuildWorkDir,
-			Registry: cfg.ContainerRegistry,
-		}
-		imageBuilder, err = NewDockerBuilder(dockerConfig, logger.With("component", "docker-builder"))
-		if err != nil {
-			return nil, fmt.Errorf("failed to create docker builder: %w", err)
-		}
-	default:
-		return nil, fmt.Errorf("unsupported builder type: %s", cfg.BuilderType)
+	// Initialize build runtime based on configuration
+	buildRuntime, err := runtime.NewBuildRuntime(cfg, logger.With("component", "build-runtime"))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create build runtime: %w", err)
 	}
 
 	s := &Service{
@@ -82,7 +75,7 @@ func NewService(cfg *config.BuilderConfig, logger *slog.Logger) (*Service, error
 		db:               db,
 		queries:          queries,
 		natsClient:       natsClient,
-		imageBuilder:     imageBuilder,
+		buildRuntime:     buildRuntime,
 		activeBuildCount: 0,
 		stopChan:         make(chan struct{}),
 	}
@@ -106,8 +99,27 @@ func (s *Service) Start(ctx context.Context) error {
 	// Wait for context cancellation
 	<-ctx.Done()
 
-	s.logger.Info("Shutting down image builder service")
+	s.logger.Info("Shutting down image builder service: stopping new work and waiting for in-flight builds")
 	close(s.stopChan)
+
+	// Wait for in-flight builds with grace period
+	grace := s.config.ShutdownGracePeriod
+	if grace <= 0 {
+		grace = 30 * time.Second
+	}
+	done := make(chan struct{})
+	go func() {
+		s.buildsWG.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+		s.logger.Info("All in-flight builds completed before shutdown")
+	case <-time.After(grace):
+		s.logger.Warn("Shutdown grace period elapsed; exiting with builds possibly still running",
+			"in_flight", s.getActiveBuilds())
+	}
 	return nil
 }
 
@@ -153,8 +165,11 @@ func (s *Service) subscribeToBuilds(ctx context.Context) {
 	// Use queue groups to ensure only one builder receives each message
 	queueGroup := "builder-workers"
 
+	// Use context-aware NATS client for auto-unsubscribe on cancel
+	ctxNats := s.natsClient.WithContext(ctx)
+
 	// Subscribe to image_build.created events
-	_, err := s.natsClient.QueueSubscribe("image_build.created", queueGroup, func(msg *nats.Msg) {
+	_, err := ctxNats.QueueSubscribe("image_build.created", queueGroup, func(msg *nats.Msg) {
 		s.logger.Debug("Received image build created notification",
 			"data", string(msg.Data),
 			"queue_group", queueGroup)
@@ -171,7 +186,7 @@ func (s *Service) subscribeToBuilds(ctx context.Context) {
 	}
 
 	// Subscribe to image_build.updated events to handle reset builds
-	_, err = s.natsClient.QueueSubscribe("image_build.updated", queueGroup, func(msg *nats.Msg) {
+	_, err = ctxNats.QueueSubscribe("image_build.updated", queueGroup, func(msg *nats.Msg) {
 		s.logger.Debug("Received image build updated notification",
 			"data", string(msg.Data),
 			"queue_group", queueGroup)
@@ -306,6 +321,14 @@ func (s *Service) processAnyPendingBuild(ctx context.Context) error {
 
 // processImageBuildFromRow processes an image build from a database row
 func (s *Service) processImageBuildFromRow(ctx context.Context, imageBuild *database.ImageBuildsDequeuePendingRow) error {
+	// If shutting down, do not start new work
+	select {
+	case <-s.stopChan:
+		s.logger.Info("Service is shutting down; skipping new build", "build_id", imageBuild.ID)
+		return nil
+	default:
+	}
+
 	// Check if we're at capacity
 	s.buildsMu.RLock()
 	atCapacity := s.activeBuildCount >= s.config.MaxConcurrentBuilds
@@ -316,8 +339,7 @@ func (s *Service) processImageBuildFromRow(ctx context.Context, imageBuild *data
 			"active_builds", s.activeBuildCount,
 			"max_concurrent", s.config.MaxConcurrentBuilds,
 			"build_id", imageBuild.ID)
-		// TODO: We should put the build back to pending status
-		// For now, we'll just process it anyway
+		return nil
 	}
 
 	// Enrich the image build with deployment and project information
@@ -333,10 +355,11 @@ func (s *Service) processImageBuildFromRow(ctx context.Context, imageBuild *data
 		"github_repo", enrichedBuild.GithubRepository,
 		"commit_hash", enrichedBuild.CommitHash)
 
-	// Increment active build count
+	// Increment active build count and WG
 	s.buildsMu.Lock()
 	s.activeBuildCount++
 	s.buildsMu.Unlock()
+	s.buildsWG.Add(1)
 
 	// Process the build in a separate goroutine
 	go s.processBuild(ctx, enrichedBuild)
@@ -345,7 +368,7 @@ func (s *Service) processImageBuildFromRow(ctx context.Context, imageBuild *data
 }
 
 // enrichImageBuild enriches an ImageBuild with deployment and project information
-func (s *Service) enrichImageBuild(ctx context.Context, imageBuild *database.ImageBuildsDequeuePendingRow) (*EnrichedBuild, error) {
+func (s *Service) enrichImageBuild(ctx context.Context, imageBuild *database.ImageBuildsDequeuePendingRow) (*types.EnrichedBuild, error) {
 	// Get deployment information
 	deployment, err := s.queries.DeploymentsGetById(ctx, imageBuild.DeploymentID)
 	if err != nil {
@@ -359,7 +382,7 @@ func (s *Service) enrichImageBuild(ctx context.Context, imageBuild *database.Ima
 	}
 
 	// Create enriched build
-	enrichedBuild := &EnrichedBuild{
+	enrichedBuild := &types.EnrichedBuild{
 		// From ImageBuild
 		ID:             imageBuild.ID,
 		Status:         imageBuild.Status,
@@ -384,12 +407,13 @@ func (s *Service) enrichImageBuild(ctx context.Context, imageBuild *database.Ima
 }
 
 // processBuild processes a single build
-func (s *Service) processBuild(ctx context.Context, build *EnrichedBuild) {
+func (s *Service) processBuild(ctx context.Context, build *types.EnrichedBuild) {
 	// Ensure we decrement the active build count when done
 	defer func() {
 		s.buildsMu.Lock()
 		s.activeBuildCount--
 		s.buildsMu.Unlock()
+		s.buildsWG.Done()
 	}()
 
 	buildCtx, cancel := context.WithTimeout(ctx, s.config.BuildTimeout)
@@ -414,8 +438,8 @@ func (s *Service) processBuild(ctx context.Context, build *EnrichedBuild) {
 			"deployment_id", build.DeploymentID)
 	}
 
-	// Execute the build using the configured image builder
-	result := s.imageBuilder.Build(buildCtx, build)
+	// Execute the build using the configured build runtime
+	result := s.buildRuntime.Build(buildCtx, build)
 
 	if result.Success {
 		s.logger.Info("Build completed successfully",
@@ -509,7 +533,7 @@ func (s *Service) processBuild(ctx context.Context, build *EnrichedBuild) {
 }
 
 // createImageRecord creates a new image record in the database
-func (s *Service) createImageRecord(ctx context.Context, result *BuildResult, build *EnrichedBuild) (pgtype.UUID, error) {
+func (s *Service) createImageRecord(ctx context.Context, result *types.BuildResult, build *types.EnrichedBuild) (pgtype.UUID, error) {
 	// Generate a new UUID for the image
 	imageUUID := uuid.GeneratePgUUID()
 
@@ -545,9 +569,9 @@ func (s *Service) createImageRecord(ctx context.Context, result *BuildResult, bu
 
 // Close closes the builder service
 func (s *Service) Close() error {
-	if s.imageBuilder != nil {
-		if err := s.imageBuilder.Cleanup(); err != nil {
-			s.logger.Warn("Failed to cleanup image builder", "error", err)
+	if s.buildRuntime != nil {
+		if err := s.buildRuntime.Cleanup(); err != nil {
+			s.logger.Warn("Failed to cleanup build runtime", "error", err)
 		}
 	}
 	if s.natsClient != nil {
@@ -557,4 +581,10 @@ func (s *Service) Close() error {
 		s.db.Close()
 	}
 	return nil
+}
+
+func (s *Service) getActiveBuilds() int {
+	s.buildsMu.RLock()
+	defer s.buildsMu.RUnlock()
+	return s.activeBuildCount
 }

@@ -37,6 +37,7 @@ type BuilderConfig struct {
 	BuildTimeout        time.Duration // Maximum time for a single build
 	MaxConcurrentBuilds int           // Maximum number of concurrent builds
 	CleanupInterval     time.Duration // How often to check for orphaned builds
+	ShutdownGracePeriod time.Duration // How long to wait for in-flight builds on shutdown
 
 	// Image builder configuration
 	BuilderType       string // Type of builder to use (docker, firecracker, etc.)
@@ -94,6 +95,7 @@ func LoadBuilderConfig() (*BuilderConfig, error) {
 	buildTimeoutMs, _ := strconv.Atoi(getEnvWithPrefix("BUILDER", "BUILD_TIMEOUT_MS", "1800000")) // 30 minutes default
 	maxConcurrentBuilds, _ := strconv.Atoi(getEnvWithPrefix("BUILDER", "MAX_CONCURRENT_BUILDS", "3"))
 	cleanupIntervalMs, _ := strconv.Atoi(getEnvWithPrefix("BUILDER", "CLEANUP_INTERVAL_MS", "300000")) // 5 minutes default
+	shutdownGraceMs, _ := strconv.Atoi(getEnvWithPrefix("BUILDER", "SHUTDOWN_GRACE_MS", "30000"))      // 30 seconds default
 
 	config := &BuilderConfig{
 		BaseConfig:          loadBaseConfigWithPrefix("BUILDER", "builder"),
@@ -102,6 +104,7 @@ func LoadBuilderConfig() (*BuilderConfig, error) {
 		BuildTimeout:        time.Duration(buildTimeoutMs) * time.Millisecond,
 		MaxConcurrentBuilds: maxConcurrentBuilds,
 		CleanupInterval:     time.Duration(cleanupIntervalMs) * time.Millisecond,
+		ShutdownGracePeriod: time.Duration(shutdownGraceMs) * time.Millisecond,
 
 		// Image builder configuration
 		BuilderType:       getEnvWithPrefix("BUILDER", "TYPE", "docker"),
