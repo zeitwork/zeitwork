@@ -236,6 +236,123 @@ func (q *Queries) DomainsGetByName(ctx context.Context, name string) (*DomainsGe
 	return &i, err
 }
 
+const domainsListAll = `-- name: DomainsListAll :many
+SELECT 
+    id,
+    name,
+    verification_token,
+    verified_at,
+    deployment_id,
+    internal,
+    organisation_id,
+    created_at,
+    updated_at
+FROM domains
+WHERE deleted_at IS NULL
+`
+
+type DomainsListAllRow struct {
+	ID                pgtype.UUID        `json:"id"`
+	Name              string             `json:"name"`
+	VerificationToken pgtype.Text        `json:"verification_token"`
+	VerifiedAt        pgtype.Timestamptz `json:"verified_at"`
+	DeploymentID      pgtype.UUID        `json:"deployment_id"`
+	Internal          bool               `json:"internal"`
+	OrganisationID    pgtype.UUID        `json:"organisation_id"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+// List all domains regardless of verification
+func (q *Queries) DomainsListAll(ctx context.Context) ([]*DomainsListAllRow, error) {
+	rows, err := q.db.Query(ctx, domainsListAll)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*DomainsListAllRow
+	for rows.Next() {
+		var i DomainsListAllRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.VerificationToken,
+			&i.VerifiedAt,
+			&i.DeploymentID,
+			&i.Internal,
+			&i.OrganisationID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const domainsListVerified = `-- name: DomainsListVerified :many
+SELECT 
+    id,
+    name,
+    verification_token,
+    verified_at,
+    deployment_id,
+    internal,
+    organisation_id,
+    created_at,
+    updated_at
+FROM domains
+WHERE verified_at IS NOT NULL
+  AND deleted_at IS NULL
+`
+
+type DomainsListVerifiedRow struct {
+	ID                pgtype.UUID        `json:"id"`
+	Name              string             `json:"name"`
+	VerificationToken pgtype.Text        `json:"verification_token"`
+	VerifiedAt        pgtype.Timestamptz `json:"verified_at"`
+	DeploymentID      pgtype.UUID        `json:"deployment_id"`
+	Internal          bool               `json:"internal"`
+	OrganisationID    pgtype.UUID        `json:"organisation_id"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+}
+
+// List all verified domains
+func (q *Queries) DomainsListVerified(ctx context.Context) ([]*DomainsListVerifiedRow, error) {
+	rows, err := q.db.Query(ctx, domainsListVerified)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*DomainsListVerifiedRow
+	for rows.Next() {
+		var i DomainsListVerifiedRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.VerificationToken,
+			&i.VerifiedAt,
+			&i.DeploymentID,
+			&i.Internal,
+			&i.OrganisationID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const domainsVerify = `-- name: DomainsVerify :one
 UPDATE domains 
 SET verified_at = now(), 

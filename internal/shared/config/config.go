@@ -133,10 +133,40 @@ func LoadManagerConfig() (*ManagerConfig, error) {
 	return config, nil
 }
 
+// CertManagerConfig contains configuration for the cert manager service
+type CertManagerConfig struct {
+	BaseConfig
+	DatabaseURL    string
+	PollInterval   time.Duration // How often to reconcile/renew certs
+	RenewBefore    time.Duration // Renew certificates before this remaining validity
+	Provider       string        // local | acme (future)
+	DevBaseDomain  string        // e.g. zeitwork.internal
+	ProdBaseDomain string        // e.g. zeitwork.app
+	LockTimeout    time.Duration // Storage lock timeout/backoff
+}
+
 // LoadCertManagerConfig loads configuration for the certmanager service
-func LoadCertManagerConfig() (*BaseConfig, error) {
-	config := loadBaseConfigWithPrefix("CERTMANAGER", "certmanager")
-	return &config, nil
+func LoadCertManagerConfig() (*CertManagerConfig, error) {
+	pollIntervalMs, _ := strconv.Atoi(getEnvWithPrefix("CERTMANAGER", "POLL_INTERVAL_MS", "900000")) // 15 minutes
+	renewBeforeDays, _ := strconv.Atoi(getEnvWithPrefix("CERTMANAGER", "RENEW_BEFORE_DAYS", "30"))
+	lockTimeoutMs, _ := strconv.Atoi(getEnvWithPrefix("CERTMANAGER", "LOCK_TIMEOUT_MS", "10000"))
+
+	config := &CertManagerConfig{
+		BaseConfig:     loadBaseConfigWithPrefix("CERTMANAGER", "certmanager"),
+		DatabaseURL:    getEnvWithPrefix("CERTMANAGER", "DATABASE_URL", "postgres://localhost/zeitwork"),
+		PollInterval:   time.Duration(pollIntervalMs) * time.Millisecond,
+		RenewBefore:    time.Duration(renewBeforeDays) * 24 * time.Hour,
+		Provider:       getEnvWithPrefix("CERTMANAGER", "PROVIDER", "local"),
+		DevBaseDomain:  getEnvWithPrefix("CERTMANAGER", "DEV_BASE_DOMAIN", "zeitwork.internal"),
+		ProdBaseDomain: getEnvWithPrefix("CERTMANAGER", "PROD_BASE_DOMAIN", "zeitwork.app"),
+		LockTimeout:    time.Duration(lockTimeoutMs) * time.Millisecond,
+	}
+
+	if config.DatabaseURL == "" {
+		return nil, fmt.Errorf("DATABASE_URL is required")
+	}
+
+	return config, nil
 }
 
 // LoadListenerConfig loads configuration for the listener service

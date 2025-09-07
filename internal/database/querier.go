@@ -43,6 +43,10 @@ type Querier interface {
 	DomainsGetById(ctx context.Context, id pgtype.UUID) (*DomainsGetByIdRow, error)
 	// Get domain by name
 	DomainsGetByName(ctx context.Context, name string) (*DomainsGetByNameRow, error)
+	// List all domains regardless of verification
+	DomainsListAll(ctx context.Context) ([]*DomainsListAllRow, error)
+	// List all verified domains
+	DomainsListVerified(ctx context.Context) ([]*DomainsListVerifiedRow, error)
 	// Mark domain as verified
 	DomainsVerify(ctx context.Context, id pgtype.UUID) (*DomainsVerifyRow, error)
 	// Mark an image build as completed
@@ -119,6 +123,15 @@ type Querier interface {
 	RegionsGetByCode(ctx context.Context, code string) (*RegionsGetByCodeRow, error)
 	// Get region by ID
 	RegionsGetById(ctx context.Context, id pgtype.UUID) (*RegionsGetByIdRow, error)
+	SslCertsDelete(ctx context.Context, key string) (int64, error)
+	// SSL certificates and locks queries for CertManager and DB-backed storage
+	SslCertsGetByKey(ctx context.Context, key string) (*SslCertsGetByKeyRow, error)
+	SslCertsListPrefix(ctx context.Context, dollar_1 pgtype.Text) ([]string, error)
+	SslCertsStat(ctx context.Context, key string) (*SslCertsStatRow, error)
+	SslCertsUpsert(ctx context.Context, arg *SslCertsUpsertParams) (*SslCertsUpsertRow, error)
+	SslLocksRelease(ctx context.Context, key string) (int64, error)
+	// Locking helpers
+	SslLocksTryAcquire(ctx context.Context, arg *SslLocksTryAcquireParams) (pgtype.UUID, error)
 }
 
 var _ Querier = (*Queries)(nil)

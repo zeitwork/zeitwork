@@ -5,8 +5,8 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
+	"github.com/zeitwork/zeitwork/internal/certmanager"
 	"github.com/zeitwork/zeitwork/internal/shared/config"
 	"github.com/zeitwork/zeitwork/internal/shared/logging"
 )
@@ -38,22 +38,16 @@ func main() {
 	logger.Info("Starting certmanager service",
 		"environment", cfg.Environment,
 		"log_level", cfg.LogLevel,
+		"provider", cfg.Provider,
 	)
 
-	// Create a ticker that fires every 10 seconds
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
+	svc, err := certmanager.NewService(cfg, logger)
+	if err != nil {
+		panic("Failed to create certmanager service: " + err.Error())
+	}
+	defer svc.Close()
 
-	logger.Warn("CertManager service is not implemented yet - this is a placeholder service")
-
-	// Main service loop
-	for {
-		select {
-		case <-ctx.Done():
-			logger.Info("Shutting down certmanager service")
-			return
-		case <-ticker.C:
-			logger.Warn("CertManager service is not implemented - this is a placeholder service running every 10 seconds")
-		}
+	if err := svc.Start(ctx); err != nil {
+		panic("Certmanager service failed: " + err.Error())
 	}
 }

@@ -53,6 +53,8 @@ func NewSimpleClient() (*Client, error) {
 	return NewClient(cfg)
 }
 
+// NOTE: A no-op WithContext(*Client) was removed to avoid method duplication.
+
 // Publish publishes a message to the given subject
 func (c *Client) Publish(subject string, data []byte) error {
 	return c.conn.Publish(subject, data)
