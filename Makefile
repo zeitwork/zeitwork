@@ -148,12 +148,17 @@ help:
 	@echo "  make lint           - Lint Go code"
 	@echo "  make builder-vm     - Build Firecracker Builder VM (requires sudo)"
 	@echo "  make test-builder-vm - Test Firecracker Builder VM"
-	@echo "  make generate       - Run code generation (protoc)"
+	@echo "  make generate       - Run code generation (protoc: go+gRPC)"
 	@echo "  make help           - Show this help message"
 
 
-.PHONY: generate
+.PHONY: generate proto
 
-generate:
+PROTO_DIR := proto
+
+proto generate:
 	@echo "Running code generation..."
-	protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative proto/*.proto
+	@PATH=$(HOME)/go/bin:$$PATH protoc --go_out=. --go_opt=paths=source_relative $(PROTO_DIR)/*.proto
+	@sh -c 'PATH=$(HOME)/go/bin:$$PATH; command -v protoc-gen-go-grpc >/dev/null 2>&1 && \
+	  protoc --go-grpc_out=. --go-grpc_opt=paths=source_relative $(PROTO_DIR)/*.proto || \
+	  echo "protoc-gen-go-grpc not found; skipping gRPC codegen"'

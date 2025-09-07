@@ -123,8 +123,9 @@ func (s *Service) setupReplication(ctx context.Context) error {
 			deployments, 
 			domains, 
 			instances, 
-			deployment_instances
-	`, s.config.PublicationName)
+			deployment_instances,
+			ssl_certs
+		`, s.config.PublicationName)
 
 	// Drop and recreate publication (for development)
 	dropPubSQL := fmt.Sprintf("DROP PUBLICATION IF EXISTS %s", s.config.PublicationName)

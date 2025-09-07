@@ -1,5 +1,17 @@
 -- SSL certificates and locks queries for CertManager and DB-backed storage
 
+-- name: SslCertsGetById :one
+SELECT 
+    id,
+    "key",
+    value,
+    expires_at,
+    created_at,
+    updated_at
+FROM ssl_certs
+WHERE id = $1
+  AND deleted_at IS NULL;
+
 -- name: SslCertsGetByKey :one
 SELECT 
     id,

@@ -26,8 +26,45 @@ func (q *Queries) SslCertsDelete(ctx context.Context, key string) (int64, error)
 	return result.RowsAffected(), nil
 }
 
-const sslCertsGetByKey = `-- name: SslCertsGetByKey :one
+const sslCertsGetById = `-- name: SslCertsGetById :one
 
+SELECT 
+    id,
+    "key",
+    value,
+    expires_at,
+    created_at,
+    updated_at
+FROM ssl_certs
+WHERE id = $1
+  AND deleted_at IS NULL
+`
+
+type SslCertsGetByIdRow struct {
+	ID        pgtype.UUID        `json:"id"`
+	Key       string             `json:"key"`
+	Value     string             `json:"value"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+// SSL certificates and locks queries for CertManager and DB-backed storage
+func (q *Queries) SslCertsGetById(ctx context.Context, id pgtype.UUID) (*SslCertsGetByIdRow, error) {
+	row := q.db.QueryRow(ctx, sslCertsGetById, id)
+	var i SslCertsGetByIdRow
+	err := row.Scan(
+		&i.ID,
+		&i.Key,
+		&i.Value,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return &i, err
+}
+
+const sslCertsGetByKey = `-- name: SslCertsGetByKey :one
 SELECT 
     id,
     "key",
@@ -49,7 +86,6 @@ type SslCertsGetByKeyRow struct {
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
 
-// SSL certificates and locks queries for CertManager and DB-backed storage
 func (q *Queries) SslCertsGetByKey(ctx context.Context, key string) (*SslCertsGetByKeyRow, error) {
 	row := q.db.QueryRow(ctx, sslCertsGetByKey, key)
 	var i SslCertsGetByKeyRow

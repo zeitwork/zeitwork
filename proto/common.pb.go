@@ -593,6 +593,94 @@ func (x *NodeUpdated) GetId() string {
 	return ""
 }
 
+type SslCertCreated struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SslCertCreated) Reset() {
+	*x = SslCertCreated{}
+	mi := &file_proto_common_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SslCertCreated) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SslCertCreated) ProtoMessage() {}
+
+func (x *SslCertCreated) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_common_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SslCertCreated.ProtoReflect.Descriptor instead.
+func (*SslCertCreated) Descriptor() ([]byte, []int) {
+	return file_proto_common_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *SslCertCreated) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+type SslCertUpdated struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SslCertUpdated) Reset() {
+	*x = SslCertUpdated{}
+	mi := &file_proto_common_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SslCertUpdated) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SslCertUpdated) ProtoMessage() {}
+
+func (x *SslCertUpdated) ProtoReflect() protoreflect.Message {
+	mi := &file_proto_common_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SslCertUpdated.ProtoReflect.Descriptor instead.
+func (*SslCertUpdated) Descriptor() ([]byte, []int) {
+	return file_proto_common_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *SslCertUpdated) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
 var File_proto_common_proto protoreflect.FileDescriptor
 
 const file_proto_common_proto_rawDesc = "" +
@@ -623,6 +711,10 @@ const file_proto_common_proto_rawDesc = "" +
 	"\vNodeCreated\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\"\x1d\n" +
 	"\vNodeUpdated\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\" \n" +
+	"\x0eSslCertCreated\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\" \n" +
+	"\x0eSslCertUpdated\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02idB\x10Z\x0ezeitwork/protob\x06proto3"
 
 var (
@@ -637,7 +729,7 @@ func file_proto_common_proto_rawDescGZIP() []byte {
 	return file_proto_common_proto_rawDescData
 }
 
-var file_proto_common_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_proto_common_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_proto_common_proto_goTypes = []any{
 	(*ProjectCreated)(nil),            // 0: com.zeitwork.ProjectCreated
 	(*DeploymentCreated)(nil),         // 1: com.zeitwork.DeploymentCreated
@@ -652,6 +744,8 @@ var file_proto_common_proto_goTypes = []any{
 	(*InstanceUpdated)(nil),           // 10: com.zeitwork.InstanceUpdated
 	(*NodeCreated)(nil),               // 11: com.zeitwork.NodeCreated
 	(*NodeUpdated)(nil),               // 12: com.zeitwork.NodeUpdated
+	(*SslCertCreated)(nil),            // 13: com.zeitwork.SslCertCreated
+	(*SslCertUpdated)(nil),            // 14: com.zeitwork.SslCertUpdated
 }
 var file_proto_common_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
@@ -672,7 +766,7 @@ func file_proto_common_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_proto_common_proto_rawDesc), len(file_proto_common_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   13,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

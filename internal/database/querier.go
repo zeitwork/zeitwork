@@ -125,6 +125,7 @@ type Querier interface {
 	RegionsGetById(ctx context.Context, id pgtype.UUID) (*RegionsGetByIdRow, error)
 	SslCertsDelete(ctx context.Context, key string) (int64, error)
 	// SSL certificates and locks queries for CertManager and DB-backed storage
+	SslCertsGetById(ctx context.Context, id pgtype.UUID) (*SslCertsGetByIdRow, error)
 	SslCertsGetByKey(ctx context.Context, key string) (*SslCertsGetByKeyRow, error)
 	SslCertsListPrefix(ctx context.Context, dollar_1 pgtype.Text) ([]string, error)
 	SslCertsStat(ctx context.Context, key string) (*SslCertsStatRow, error)

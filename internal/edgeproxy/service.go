@@ -2,10 +2,13 @@ package edgeproxy
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"log/slog"
 	"math/rand"
+	"net"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
@@ -13,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	natsgo "github.com/nats-io/nats.go"
 	"google.golang.org/protobuf/proto"
@@ -54,6 +58,10 @@ type Service struct {
 	portHttp        int
 	portHttps       int
 	templateManager *TemplateManager
+
+	// TLS certificate cache
+	certMu sync.RWMutex
+	certs  map[string]*tls.Certificate
 }
 
 // Config holds the configuration for the edge proxy service
@@ -126,6 +134,7 @@ func NewService(config *Config, logger *slog.Logger) (*Service, error) {
 		portHttp:        config.PortHttp,
 		portHttps:       config.PortHttps,
 		templateManager: templateManager,
+		certs:           make(map[string]*tls.Certificate),
 	}
 
 	return s, nil
@@ -192,9 +201,16 @@ func (s *Service) startHTTPServer(ctx context.Context) {
 		Handler: mux,
 	}
 
+	// HTTPS server with dynamic certificate selection
+	tlsConfig := &tls.Config{
+		GetCertificate: s.getCertificateForClientHello,
+		MinVersion:     tls.VersionTLS12,
+		NextProtos:     []string{"h2", "http/1.1"},
+	}
 	httpsServer := &http.Server{
-		Addr:    fmt.Sprintf(":%d", s.portHttps),
-		Handler: mux,
+		Addr:      fmt.Sprintf(":%d", s.portHttps),
+		Handler:   mux,
+		TLSConfig: tlsConfig,
 	}
 
 	// Start HTTP server
@@ -205,13 +221,18 @@ func (s *Service) startHTTPServer(ctx context.Context) {
 		}
 	}()
 
-	// Start HTTPS server only in production or if certificates are available
-	// TODO: Add proper TLS certificate configuration for production
+	// Start HTTPS server with dynamic certs
 	go func() {
-		s.logger.Info("HTTPS server disabled in development mode", "port", s.portHttps)
-		// if err := httpsServer.ListenAndServeTLS("cert.pem", "key.pem"); err != nil && err != http.ErrServerClosed {
-		// 	s.logger.Error("HTTPS server failed", "error", err)
-		// }
+		s.logger.Info("Starting HTTPS proxy server", "port", s.portHttps)
+		ln, err := net.Listen("tcp", fmt.Sprintf(":%d", s.portHttps))
+		if err != nil {
+			s.logger.Error("HTTPS listen failed", "error", err)
+			return
+		}
+		tlsListener := tls.NewListener(ln, tlsConfig)
+		if err := httpsServer.Serve(tlsListener); err != nil && err != http.ErrServerClosed {
+			s.logger.Error("HTTPS server failed", "error", err)
+		}
 	}()
 
 	// Wait for context cancellation and shutdown
@@ -349,7 +370,7 @@ func normalizeIPAddress(address string, ipVersion int) string {
 
 	if ipVersion == 6 {
 		// Convert IPv6 address format to match what Docker actually assigns
-		// Convert fd00:00:0199:0199:0199 -> fd00::199:199:199
+		// Convert fd00:00:199:199:199 -> fd00::199:199:199
 		if strings.HasPrefix(address, "fd00:00:") {
 			parts := strings.Split(address, ":")
 			if len(parts) >= 5 {
@@ -527,7 +548,15 @@ func (s *Service) routingUpdateSubscriber(ctx context.Context) {
 	}
 	defer deploymentInstanceSub.Unsubscribe()
 
-	s.logger.Info("Subscribed to NATS routing events (deployment, instance, domain, deployment_instance)")
+	// Subscribe to ssl_cert events for prefetch
+	sslCertSub, err := s.natsClient.WithContext(ctx).Subscribe("ssl_cert.>", s.handleRoutingUpdate)
+	if err != nil {
+		s.logger.Error("Failed to subscribe to ssl_cert events", "error", err)
+		return
+	}
+	defer sslCertSub.Unsubscribe()
+
+	s.logger.Info("Subscribed to NATS routing events (deployment, instance, domain, deployment_instance, ssl_cert)")
 
 	// Wait for context cancellation
 	<-ctx.Done()
@@ -592,6 +621,21 @@ func (s *Service) handleRoutingUpdate(msg *natsgo.Msg) {
 		if err = proto.Unmarshal(msg.Data, &event); err == nil {
 			id = event.GetId()
 		}
+	case "ssl_cert.created":
+		var event pb.SslCertCreated
+		if err = proto.Unmarshal(msg.Data, &event); err == nil {
+			id = event.GetId()
+			// Prefetch cert by id
+			s.prefetchCertByID(id)
+			return
+		}
+	case "ssl_cert.updated":
+		var event pb.SslCertUpdated
+		if err = proto.Unmarshal(msg.Data, &event); err == nil {
+			id = event.GetId()
+			s.prefetchCertByID(id)
+			return
+		}
 	default:
 		s.logger.Debug("Ignoring unhandled event", "subject", msg.Subject)
 		return
@@ -646,4 +690,100 @@ func (s *Service) Close() error {
 // TriggerConfigReload triggers an immediate configuration reload
 func (s *Service) TriggerConfigReload() error {
 	return s.loadAndApplyConfig()
+}
+
+// getCertificateForClientHello is called during TLS handshake to provide a certificate for the SNI name
+func (s *Service) getCertificateForClientHello(hello *tls.ClientHelloInfo) (*tls.Certificate, error) {
+	domain := strings.ToLower(hello.ServerName)
+	if domain == "" {
+		return nil, fmt.Errorf("missing SNI domain")
+	}
+
+	// 1) Try exact match
+	s.certMu.RLock()
+	cert, ok := s.certs[domain]
+	s.certMu.RUnlock()
+	if ok {
+		return cert, nil
+	}
+
+	// 2) Try wildcard *.base domain if SNI is subdomain of base
+	baseWildcard := s.getBaseWildcard()
+	if baseWildcard != "" && strings.HasSuffix(domain, strings.TrimPrefix(baseWildcard, "*")) {
+		s.certMu.RLock()
+		cert, ok = s.certs[baseWildcard]
+		s.certMu.RUnlock()
+		if ok {
+			return cert, nil
+		}
+	}
+
+	// 3) Load from DB and cache
+	loaded, err := s.loadCertificateFromDB(domain)
+	if err == nil && loaded != nil {
+		return loaded, nil
+	}
+
+	// 4) Fallback to loading wildcard and cache
+	if baseWildcard != "" {
+		loaded, err = s.loadCertificateFromDB(baseWildcard)
+		if err == nil && loaded != nil {
+			return loaded, nil
+		}
+	}
+
+	return nil, fmt.Errorf("no certificate for domain %s", domain)
+}
+
+func (s *Service) getBaseWildcard() string {
+	// Best-effort: detect from any cached wildcard
+	s.certMu.RLock()
+	defer s.certMu.RUnlock()
+	for name := range s.certs {
+		if strings.HasPrefix(name, "*.") {
+			return name
+		}
+	}
+	return ""
+}
+
+func (s *Service) loadCertificateFromDB(name string) (*tls.Certificate, error) {
+	key := fmt.Sprintf("certs/%s", name)
+	row, err := s.queries.SslCertsGetByKey(context.Background(), key)
+	if err != nil || row == nil {
+		return nil, fmt.Errorf("cert not found")
+	}
+	// The value column stores combined cert+key PEM (as written by certmanager local runtime)
+	block, rest := pem.Decode([]byte(row.Value))
+	if block == nil || len(rest) == 0 {
+		return nil, fmt.Errorf("invalid PEM bundle")
+	}
+	cert, err := tls.X509KeyPair([]byte(row.Value), []byte(row.Value))
+	if err != nil {
+		return nil, err
+	}
+	s.certMu.Lock()
+	s.certs[name] = &cert
+	s.certMu.Unlock()
+	return &cert, nil
+}
+
+func (s *Service) prefetchCertByID(id string) {
+	// Load cert by id (reads key and value), then cache by domain name extracted from key
+	row, err := s.queries.SslCertsGetById(context.Background(), uuid.MustParse(id))
+	if err != nil || row == nil {
+		s.logger.Error("Failed to prefetch cert by id", "id", id, "error", err)
+		return
+	}
+	name := row.Key
+	// stored key is like certs/<domain>
+	parts := strings.SplitN(name, "/", 2)
+	if len(parts) == 2 {
+		name = parts[1]
+	}
+	if _, err := s.loadCertificateFromDB(name); err != nil {
+		s.logger.Error("Prefetch loadCertificateFromDB failed", "name", name, "error", err)
+	} else {
+		s.logger.Info("Prefetched certificate", "name", name)
+	}
 }

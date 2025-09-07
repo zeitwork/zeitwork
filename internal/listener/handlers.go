@@ -39,6 +39,8 @@ func (s *Service) handleDMLOperation(ctx context.Context, relationID uint32, tup
 		return s.handleDeploymentInstanceChange(ctx, tuple, operation, relation)
 	case "image_builds":
 		return s.handleImageBuildChange(ctx, tuple, operation, relation)
+	case "ssl_certs":
+		return s.handleSslCertChange(ctx, tuple, operation, relation)
 	default:
 		s.logger.Debug("Ignoring change for unhandled table", "table", relation.RelationName)
 		return nil

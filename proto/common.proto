@@ -55,3 +55,11 @@ message NodeCreated {
 message NodeUpdated {
   string id = 1;
 }
+
+message SslCertCreated {
+  string id = 1;
+}
+
+message SslCertUpdated {
+  string id = 1;
+}
