@@ -17,7 +17,7 @@ INSERT INTO projects (
     name,
     slug,
     github_repository,
-    default_branch,
+    github_installation_id,
     organisation_id
 ) VALUES (
     $1,
@@ -32,32 +32,30 @@ RETURNING
     name,
     slug,
     github_repository,
-    default_branch,
-    latest_deployment_id,
+    github_installation_id,
     organisation_id,
     created_at,
     updated_at
 `
 
 type ProjectsCreateParams struct {
-	ID               pgtype.UUID `json:"id"`
-	Name             string      `json:"name"`
-	Slug             string      `json:"slug"`
-	GithubRepository string      `json:"github_repository"`
-	DefaultBranch    string      `json:"default_branch"`
-	OrganisationID   pgtype.UUID `json:"organisation_id"`
+	ID                   pgtype.UUID `json:"id"`
+	Name                 string      `json:"name"`
+	Slug                 string      `json:"slug"`
+	GithubRepository     string      `json:"github_repository"`
+	GithubInstallationID pgtype.UUID `json:"github_installation_id"`
+	OrganisationID       pgtype.UUID `json:"organisation_id"`
 }
 
 type ProjectsCreateRow struct {
-	ID                 pgtype.UUID        `json:"id"`
-	Name               string             `json:"name"`
-	Slug               string             `json:"slug"`
-	GithubRepository   string             `json:"github_repository"`
-	DefaultBranch      string             `json:"default_branch"`
-	LatestDeploymentID pgtype.UUID        `json:"latest_deployment_id"`
-	OrganisationID     pgtype.UUID        `json:"organisation_id"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	ID                   pgtype.UUID        `json:"id"`
+	Name                 string             `json:"name"`
+	Slug                 string             `json:"slug"`
+	GithubRepository     string             `json:"github_repository"`
+	GithubInstallationID pgtype.UUID        `json:"github_installation_id"`
+	OrganisationID       pgtype.UUID        `json:"organisation_id"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
 // Create a new project
@@ -67,7 +65,7 @@ func (q *Queries) ProjectsCreate(ctx context.Context, arg *ProjectsCreateParams)
 		arg.Name,
 		arg.Slug,
 		arg.GithubRepository,
-		arg.DefaultBranch,
+		arg.GithubInstallationID,
 		arg.OrganisationID,
 	)
 	var i ProjectsCreateRow
@@ -76,8 +74,7 @@ func (q *Queries) ProjectsCreate(ctx context.Context, arg *ProjectsCreateParams)
 		&i.Name,
 		&i.Slug,
 		&i.GithubRepository,
-		&i.DefaultBranch,
-		&i.LatestDeploymentID,
+		&i.GithubInstallationID,
 		&i.OrganisationID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -91,8 +88,7 @@ SELECT
     name,
     slug,
     github_repository,
-    default_branch,
-    latest_deployment_id,
+    github_installation_id,
     organisation_id,
     created_at,
     updated_at
@@ -102,15 +98,14 @@ WHERE id = $1
 `
 
 type ProjectsGetByIdRow struct {
-	ID                 pgtype.UUID        `json:"id"`
-	Name               string             `json:"name"`
-	Slug               string             `json:"slug"`
-	GithubRepository   string             `json:"github_repository"`
-	DefaultBranch      string             `json:"default_branch"`
-	LatestDeploymentID pgtype.UUID        `json:"latest_deployment_id"`
-	OrganisationID     pgtype.UUID        `json:"organisation_id"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	ID                   pgtype.UUID        `json:"id"`
+	Name                 string             `json:"name"`
+	Slug                 string             `json:"slug"`
+	GithubRepository     string             `json:"github_repository"`
+	GithubInstallationID pgtype.UUID        `json:"github_installation_id"`
+	OrganisationID       pgtype.UUID        `json:"organisation_id"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
 // Get project by ID
@@ -122,8 +117,7 @@ func (q *Queries) ProjectsGetById(ctx context.Context, id pgtype.UUID) (*Project
 		&i.Name,
 		&i.Slug,
 		&i.GithubRepository,
-		&i.DefaultBranch,
-		&i.LatestDeploymentID,
+		&i.GithubInstallationID,
 		&i.OrganisationID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -137,8 +131,7 @@ SELECT
     name,
     slug,
     github_repository,
-    default_branch,
-    latest_deployment_id,
+    github_installation_id,
     organisation_id,
     created_at,
     updated_at
@@ -149,15 +142,14 @@ ORDER BY created_at DESC
 `
 
 type ProjectsGetByOrganisationRow struct {
-	ID                 pgtype.UUID        `json:"id"`
-	Name               string             `json:"name"`
-	Slug               string             `json:"slug"`
-	GithubRepository   string             `json:"github_repository"`
-	DefaultBranch      string             `json:"default_branch"`
-	LatestDeploymentID pgtype.UUID        `json:"latest_deployment_id"`
-	OrganisationID     pgtype.UUID        `json:"organisation_id"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	ID                   pgtype.UUID        `json:"id"`
+	Name                 string             `json:"name"`
+	Slug                 string             `json:"slug"`
+	GithubRepository     string             `json:"github_repository"`
+	GithubInstallationID pgtype.UUID        `json:"github_installation_id"`
+	OrganisationID       pgtype.UUID        `json:"organisation_id"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
 // Get projects by organisation
@@ -175,8 +167,7 @@ func (q *Queries) ProjectsGetByOrganisation(ctx context.Context, organisationID 
 			&i.Name,
 			&i.Slug,
 			&i.GithubRepository,
-			&i.DefaultBranch,
-			&i.LatestDeploymentID,
+			&i.GithubInstallationID,
 			&i.OrganisationID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -197,8 +188,7 @@ SELECT
     name,
     slug,
     github_repository,
-    default_branch,
-    latest_deployment_id,
+    github_installation_id,
     organisation_id,
     created_at,
     updated_at
@@ -214,15 +204,14 @@ type ProjectsGetBySlugAndOrgParams struct {
 }
 
 type ProjectsGetBySlugAndOrgRow struct {
-	ID                 pgtype.UUID        `json:"id"`
-	Name               string             `json:"name"`
-	Slug               string             `json:"slug"`
-	GithubRepository   string             `json:"github_repository"`
-	DefaultBranch      string             `json:"default_branch"`
-	LatestDeploymentID pgtype.UUID        `json:"latest_deployment_id"`
-	OrganisationID     pgtype.UUID        `json:"organisation_id"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	ID                   pgtype.UUID        `json:"id"`
+	Name                 string             `json:"name"`
+	Slug                 string             `json:"slug"`
+	GithubRepository     string             `json:"github_repository"`
+	GithubInstallationID pgtype.UUID        `json:"github_installation_id"`
+	OrganisationID       pgtype.UUID        `json:"organisation_id"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
 // Get project by slug and organisation
@@ -234,60 +223,7 @@ func (q *Queries) ProjectsGetBySlugAndOrg(ctx context.Context, arg *ProjectsGetB
 		&i.Name,
 		&i.Slug,
 		&i.GithubRepository,
-		&i.DefaultBranch,
-		&i.LatestDeploymentID,
-		&i.OrganisationID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return &i, err
-}
-
-const projectsUpdateLatestDeployment = `-- name: ProjectsUpdateLatestDeployment :one
-UPDATE projects 
-SET latest_deployment_id = $2, 
-    updated_at = now()
-WHERE id = $1
-RETURNING 
-    id,
-    name,
-    slug,
-    github_repository,
-    default_branch,
-    latest_deployment_id,
-    organisation_id,
-    created_at,
-    updated_at
-`
-
-type ProjectsUpdateLatestDeploymentParams struct {
-	ID                 pgtype.UUID `json:"id"`
-	LatestDeploymentID pgtype.UUID `json:"latest_deployment_id"`
-}
-
-type ProjectsUpdateLatestDeploymentRow struct {
-	ID                 pgtype.UUID        `json:"id"`
-	Name               string             `json:"name"`
-	Slug               string             `json:"slug"`
-	GithubRepository   string             `json:"github_repository"`
-	DefaultBranch      string             `json:"default_branch"`
-	LatestDeploymentID pgtype.UUID        `json:"latest_deployment_id"`
-	OrganisationID     pgtype.UUID        `json:"organisation_id"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
-}
-
-// Update project's latest deployment
-func (q *Queries) ProjectsUpdateLatestDeployment(ctx context.Context, arg *ProjectsUpdateLatestDeploymentParams) (*ProjectsUpdateLatestDeploymentRow, error) {
-	row := q.db.QueryRow(ctx, projectsUpdateLatestDeployment, arg.ID, arg.LatestDeploymentID)
-	var i ProjectsUpdateLatestDeploymentRow
-	err := row.Scan(
-		&i.ID,
-		&i.Name,
-		&i.Slug,
-		&i.GithubRepository,
-		&i.DefaultBranch,
-		&i.LatestDeploymentID,
+		&i.GithubInstallationID,
 		&i.OrganisationID,
 		&i.CreatedAt,
 		&i.UpdatedAt,

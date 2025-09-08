@@ -261,8 +261,7 @@ func (s *Service) performCleanup(ctx context.Context) {
 		// Log each reset build for debugging
 		for _, build := range resetBuilds {
 			s.logger.Warn("Reset stale build",
-				"build_id", build.ID,
-				"deployment_id", build.DeploymentID)
+				"build_id", build.ID)
 		}
 
 		// Note: We don't republish events here - the listener will detect
@@ -342,18 +341,10 @@ func (s *Service) processImageBuildFromRow(ctx context.Context, imageBuild *data
 		return nil
 	}
 
-	// Enrich the image build with deployment and project information
-	enrichedBuild, err := s.enrichImageBuild(ctx, imageBuild)
-	if err != nil {
-		s.logger.Error("Failed to enrich image build", "build_id", imageBuild.ID, "error", err)
-		return err
-	}
-
 	s.logger.Info("Starting build processing",
-		"build_id", enrichedBuild.ID,
-		"project_id", enrichedBuild.ProjectID,
-		"github_repo", enrichedBuild.GithubRepository,
-		"commit_hash", enrichedBuild.CommitHash)
+		"build_id", imageBuild.ID,
+		"github_repo", imageBuild.GithubRepository,
+		"commit_hash", imageBuild.GithubCommit)
 
 	// Increment active build count and WG
 	s.buildsMu.Lock()
@@ -362,52 +353,26 @@ func (s *Service) processImageBuildFromRow(ctx context.Context, imageBuild *data
 	s.buildsWG.Add(1)
 
 	// Process the build in a separate goroutine
-	go s.processBuild(ctx, enrichedBuild)
+	go s.processBuild(ctx, &database.ImageBuild{
+		ID:               imageBuild.ID,
+		Status:           imageBuild.Status,
+		GithubRepository: imageBuild.GithubRepository,
+		GithubCommit:     imageBuild.GithubCommit,
+		ImageID:          imageBuild.ImageID,
+		StartedAt:        imageBuild.StartedAt,
+		CompletedAt:      imageBuild.CompletedAt,
+		FailedAt:         imageBuild.FailedAt,
+		CreatedAt:        imageBuild.CreatedAt,
+		UpdatedAt:        imageBuild.UpdatedAt,
+	})
 
 	return nil
 }
 
-// enrichImageBuild enriches an ImageBuild with deployment and project information
-func (s *Service) enrichImageBuild(ctx context.Context, imageBuild *database.ImageBuildsDequeuePendingRow) (*types.EnrichedBuild, error) {
-	// Get deployment information
-	deployment, err := s.queries.DeploymentsGetById(ctx, imageBuild.DeploymentID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get deployment: %w", err)
-	}
-
-	// Get project information
-	project, err := s.queries.ProjectsGetById(ctx, deployment.ProjectID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get project: %w", err)
-	}
-
-	// Create enriched build
-	enrichedBuild := &types.EnrichedBuild{
-		// From ImageBuild
-		ID:             imageBuild.ID,
-		Status:         imageBuild.Status,
-		DeploymentID:   imageBuild.DeploymentID,
-		StartedAt:      imageBuild.StartedAt,
-		CompletedAt:    imageBuild.CompletedAt,
-		FailedAt:       imageBuild.FailedAt,
-		OrganisationID: imageBuild.OrganisationID,
-		CreatedAt:      imageBuild.CreatedAt,
-		UpdatedAt:      imageBuild.UpdatedAt,
-
-		// From Deployment
-		CommitHash: deployment.CommitHash,
-		ProjectID:  deployment.ProjectID,
-
-		// From Project
-		GithubRepository: project.GithubRepository,
-		DefaultBranch:    project.DefaultBranch,
-	}
-
-	return enrichedBuild, nil
-}
+// enrichImageBuild removed; no longer needed
 
 // processBuild processes a single build
-func (s *Service) processBuild(ctx context.Context, build *types.EnrichedBuild) {
+func (s *Service) processBuild(ctx context.Context, build *database.ImageBuild) {
 	// Ensure we decrement the active build count when done
 	defer func() {
 		s.buildsMu.Lock()
@@ -421,23 +386,6 @@ func (s *Service) processBuild(ctx context.Context, build *types.EnrichedBuild) 
 
 	s.logger.Info("Processing build", "build_id", build.ID)
 
-	// Update deployment status to "building" when we start the build
-	_, err := s.queries.DeploymentsUpdateStatus(buildCtx, &database.DeploymentsUpdateStatusParams{
-		ID:     build.DeploymentID,
-		Status: "building",
-	})
-	if err != nil {
-		s.logger.Error("Failed to update deployment status to building",
-			"build_id", build.ID,
-			"deployment_id", build.DeploymentID,
-			"error", err)
-		// Continue with build even if status update fails
-	} else {
-		s.logger.Info("Updated deployment status to building",
-			"build_id", build.ID,
-			"deployment_id", build.DeploymentID)
-	}
-
 	// Execute the build using the configured build runtime
 	result := s.buildRuntime.Build(buildCtx, build)
 
@@ -450,35 +398,12 @@ func (s *Service) processBuild(ctx context.Context, build *types.EnrichedBuild) 
 			"duration", result.Duration)
 
 		// Create image record in database
-		imageID, err := s.createImageRecord(buildCtx, result, build)
+		imageID, err := s.createImageRecord(buildCtx, result)
 		if err != nil {
 			s.logger.Error("Failed to create image record", "build_id", build.ID, "error", err)
 			// Mark build as failed since we couldn't create the image record
 			s.queries.ImageBuildsFail(buildCtx, build.ID)
-			s.queries.DeploymentsUpdateStatus(buildCtx, &database.DeploymentsUpdateStatusParams{
-				ID:     build.DeploymentID,
-				Status: "failed",
-			})
 			return
-		}
-
-		// Update deployment with the created image_id
-		_, err = s.queries.DeploymentsUpdateImageId(buildCtx, &database.DeploymentsUpdateImageIdParams{
-			ID:      build.DeploymentID,
-			ImageID: imageID,
-		})
-		if err != nil {
-			s.logger.Error("Failed to update deployment image_id",
-				"build_id", build.ID,
-				"deployment_id", build.DeploymentID,
-				"image_id", imageID,
-				"error", err)
-			// Continue anyway - the image was created successfully
-		} else {
-			s.logger.Info("Updated deployment with image_id",
-				"build_id", build.ID,
-				"deployment_id", build.DeploymentID,
-				"image_id", imageID)
 		}
 
 		// Mark build as completed
@@ -487,21 +412,7 @@ func (s *Service) processBuild(ctx context.Context, build *types.EnrichedBuild) 
 			s.logger.Error("Failed to mark build as completed", "build_id", build.ID, "error", err)
 		}
 
-		// Update deployment status to "deploying" when build succeeds
-		_, err = s.queries.DeploymentsUpdateStatus(buildCtx, &database.DeploymentsUpdateStatusParams{
-			ID:     build.DeploymentID,
-			Status: "deploying",
-		})
-		if err != nil {
-			s.logger.Error("Failed to update deployment status to deploying",
-				"build_id", build.ID,
-				"deployment_id", build.DeploymentID,
-				"error", err)
-		} else {
-			s.logger.Info("Updated deployment status to deploying",
-				"build_id", build.ID,
-				"deployment_id", build.DeploymentID)
-		}
+		_ = imageID // image linking to build may be handled elsewhere
 	} else {
 		s.logger.Error("Build failed",
 			"build_id", build.ID,
@@ -513,27 +424,11 @@ func (s *Service) processBuild(ctx context.Context, build *types.EnrichedBuild) 
 		if err != nil {
 			s.logger.Error("Failed to mark build as failed", "build_id", build.ID, "error", err)
 		}
-
-		// Update deployment status to "failed" when build fails
-		_, err = s.queries.DeploymentsUpdateStatus(buildCtx, &database.DeploymentsUpdateStatusParams{
-			ID:     build.DeploymentID,
-			Status: "failed",
-		})
-		if err != nil {
-			s.logger.Error("Failed to update deployment status to failed",
-				"build_id", build.ID,
-				"deployment_id", build.DeploymentID,
-				"error", err)
-		} else {
-			s.logger.Info("Updated deployment status to failed",
-				"build_id", build.ID,
-				"deployment_id", build.DeploymentID)
-		}
 	}
 }
 
 // createImageRecord creates a new image record in the database
-func (s *Service) createImageRecord(ctx context.Context, result *types.BuildResult, build *types.EnrichedBuild) (pgtype.UUID, error) {
+func (s *Service) createImageRecord(ctx context.Context, result *types.BuildResult) (pgtype.UUID, error) {
 	// Generate a new UUID for the image
 	imageUUID := uuid.GeneratePgUUID()
 

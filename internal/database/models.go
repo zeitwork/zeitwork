@@ -5,19 +5,66 @@
 package database
 
 import (
+	"database/sql/driver"
 	"encoding/json"
+	"fmt"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+type ImageBuildStatus string
+
+const (
+	ImageBuildStatusPending   ImageBuildStatus = "pending"
+	ImageBuildStatusBuilding  ImageBuildStatus = "building"
+	ImageBuildStatusCompleted ImageBuildStatus = "completed"
+	ImageBuildStatusFailed    ImageBuildStatus = "failed"
+)
+
+func (e *ImageBuildStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ImageBuildStatus(s)
+	case string:
+		*e = ImageBuildStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ImageBuildStatus: %T", src)
+	}
+	return nil
+}
+
+type NullImageBuildStatus struct {
+	ImageBuildStatus ImageBuildStatus `json:"image_build_status"`
+	Valid            bool             `json:"valid"` // Valid is true if ImageBuildStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullImageBuildStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.ImageBuildStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ImageBuildStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullImageBuildStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ImageBuildStatus), nil
+}
 
 type Deployment struct {
 	ID             pgtype.UUID        `json:"id"`
 	DeploymentID   string             `json:"deployment_id"`
 	Status         string             `json:"status"`
-	CommitHash     string             `json:"commit_hash"`
+	GithubCommit   string             `json:"github_commit"`
 	ProjectID      pgtype.UUID        `json:"project_id"`
 	EnvironmentID  pgtype.UUID        `json:"environment_id"`
 	ImageID        pgtype.UUID        `json:"image_id"`
+	ImageBuildID   pgtype.UUID        `json:"image_build_id"`
 	OrganisationID pgtype.UUID        `json:"organisation_id"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
@@ -47,6 +94,29 @@ type Domain struct {
 	DeletedAt         pgtype.Timestamptz `json:"deleted_at"`
 }
 
+type EnvironmentDomain struct {
+	ID             pgtype.UUID        `json:"id"`
+	DomainID       pgtype.UUID        `json:"domain_id"`
+	ProjectID      pgtype.UUID        `json:"project_id"`
+	EnvironmentID  pgtype.UUID        `json:"environment_id"`
+	OrganisationID pgtype.UUID        `json:"organisation_id"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
+}
+
+type EnvironmentVariable struct {
+	ID             pgtype.UUID        `json:"id"`
+	Name           string             `json:"name"`
+	Value          string             `json:"value"`
+	ProjectID      pgtype.UUID        `json:"project_id"`
+	EnvironmentID  pgtype.UUID        `json:"environment_id"`
+	OrganisationID pgtype.UUID        `json:"organisation_id"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
+}
+
 type GithubInstallation struct {
 	ID                   pgtype.UUID        `json:"id"`
 	UserID               pgtype.UUID        `json:"user_id"`
@@ -69,16 +139,18 @@ type Image struct {
 }
 
 type ImageBuild struct {
-	ID             pgtype.UUID        `json:"id"`
-	Status         string             `json:"status"`
-	DeploymentID   pgtype.UUID        `json:"deployment_id"`
-	StartedAt      pgtype.Timestamptz `json:"started_at"`
-	CompletedAt    pgtype.Timestamptz `json:"completed_at"`
-	FailedAt       pgtype.Timestamptz `json:"failed_at"`
-	OrganisationID pgtype.UUID        `json:"organisation_id"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
+	ID               pgtype.UUID        `json:"id"`
+	Status           ImageBuildStatus   `json:"status"`
+	GithubRepository string             `json:"github_repository"`
+	GithubBranch     string             `json:"github_branch"`
+	GithubCommit     string             `json:"github_commit"`
+	ImageID          pgtype.UUID        `json:"image_id"`
+	StartedAt        pgtype.Timestamptz `json:"started_at"`
+	CompletedAt      pgtype.Timestamptz `json:"completed_at"`
+	FailedAt         pgtype.Timestamptz `json:"failed_at"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt        pgtype.Timestamptz `json:"deleted_at"`
 }
 
 type Instance struct {
@@ -132,9 +204,7 @@ type Project struct {
 	Name                 string             `json:"name"`
 	Slug                 string             `json:"slug"`
 	GithubRepository     string             `json:"github_repository"`
-	DefaultBranch        string             `json:"default_branch"`
-	GithubInstallationID int32              `json:"github_installation_id"`
-	LatestDeploymentID   pgtype.UUID        `json:"latest_deployment_id"`
+	GithubInstallationID pgtype.UUID        `json:"github_installation_id"`
 	OrganisationID       pgtype.UUID        `json:"organisation_id"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
@@ -144,19 +214,8 @@ type Project struct {
 type ProjectEnvironment struct {
 	ID             pgtype.UUID        `json:"id"`
 	Name           string             `json:"name"`
+	Branch         string             `json:"branch"`
 	ProjectID      pgtype.UUID        `json:"project_id"`
-	OrganisationID pgtype.UUID        `json:"organisation_id"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
-}
-
-type ProjectSecret struct {
-	ID             pgtype.UUID        `json:"id"`
-	Name           string             `json:"name"`
-	Value          string             `json:"value"`
-	ProjectID      pgtype.UUID        `json:"project_id"`
-	EnvironmentID  pgtype.UUID        `json:"environment_id"`
 	OrganisationID pgtype.UUID        `json:"organisation_id"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`

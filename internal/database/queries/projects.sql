@@ -5,8 +5,7 @@ SELECT
     name,
     slug,
     github_repository,
-    default_branch,
-    latest_deployment_id,
+    github_installation_id,
     organisation_id,
     created_at,
     updated_at
@@ -21,8 +20,7 @@ SELECT
     name,
     slug,
     github_repository,
-    default_branch,
-    latest_deployment_id,
+    github_installation_id,
     organisation_id,
     created_at,
     updated_at
@@ -38,8 +36,7 @@ SELECT
     name,
     slug,
     github_repository,
-    default_branch,
-    latest_deployment_id,
+    github_installation_id,
     organisation_id,
     created_at,
     updated_at
@@ -55,7 +52,7 @@ INSERT INTO projects (
     name,
     slug,
     github_repository,
-    default_branch,
+    github_installation_id,
     organisation_id
 ) VALUES (
     $1,
@@ -70,25 +67,8 @@ RETURNING
     name,
     slug,
     github_repository,
-    default_branch,
-    latest_deployment_id,
+    github_installation_id,
     organisation_id,
     created_at,
     updated_at;
 
--- name: ProjectsUpdateLatestDeployment :one
--- Update project's latest deployment
-UPDATE projects 
-SET latest_deployment_id = $2, 
-    updated_at = now()
-WHERE id = $1
-RETURNING 
-    id,
-    name,
-    slug,
-    github_repository,
-    default_branch,
-    latest_deployment_id,
-    organisation_id,
-    created_at,
-    updated_at;

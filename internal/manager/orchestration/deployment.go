@@ -108,16 +108,11 @@ func (o *DeploymentOrchestrator) HandleDeploymentCreatedByID(ctx context.Context
 		return nil
 	}
 
-	// Check if this deployment already has a build
-	existingBuilds, err := o.db.ImageBuildsGetByDeployment(ctx, deploymentID)
-	if err != nil {
-		return fmt.Errorf("failed to check existing builds: %w", err)
-	}
-
-	if len(existingBuilds) > 0 {
-		o.logger.Debug("Skipping deployment - already has builds",
+	// Check if this deployment already has an image build ID assigned
+	if deployment.ImageBuildID.Valid {
+		o.logger.Debug("Skipping deployment - already has image build",
 			"deployment_id", deploymentID,
-			"existing_builds", len(existingBuilds))
+			"image_build_id", deployment.ImageBuildID)
 		return nil
 	}
 
@@ -190,45 +185,9 @@ func (o *DeploymentOrchestrator) HandleInstanceUpdatedByID(ctx context.Context, 
 		return fmt.Errorf("failed to get deployment: %w", err)
 	}
 
-	// Fetch current project to compare latest_deployment_id
-	project, err := o.db.ProjectsGetById(ctx, deployment.ProjectID)
-	if err != nil {
-		return fmt.Errorf("failed to get project: %w", err)
-	}
-
-	// If already pointing to this deployment, nothing to do
-	if project.LatestDeploymentID.Valid && project.LatestDeploymentID == deployment.ID {
-		return nil
-	}
-
-	// If there is an existing latest_deployment_id, ensure we only advance
-	if project.LatestDeploymentID.Valid {
-		// UUIDv7 is time-ordered; compare lexicographically on raw bytes (same as string order)
-		a := project.LatestDeploymentID.Bytes
-		b := deployment.ID.Bytes
-		// simple tuple comparison
-		for i := 0; i < len(a) && i < len(b); i++ {
-			if a[i] > b[i] {
-				return nil
-			}
-			if a[i] < b[i] {
-				break
-			}
-		}
-	}
-
-	// Update project.latest_deployment_id
-	_, err = o.db.ProjectsUpdateLatestDeployment(ctx, &database.ProjectsUpdateLatestDeploymentParams{
-		ID:                 project.ID,
-		LatestDeploymentID: deployment.ID,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to update project's latest_deployment_id: %w", err)
-	}
-
-	o.logger.Info("Updated project's latest deployment",
-		"project_id", project.ID,
-		"latest_deployment_id", deployment.ID)
+	o.logger.Info("Deployment activated",
+		"project_id", deployment.ProjectID,
+		"deployment_id", deployment.ID)
 
 	return nil
 }
@@ -318,11 +277,21 @@ func (o *DeploymentOrchestrator) CreateImageBuildForDeployment(ctx context.Conte
 	// Generate a new UUID for the image build
 	buildUUID := uuid.GeneratePgUUID()
 
+	// Get project information to fill in GitHub fields
+	project, err := o.db.ProjectsGetById(ctx, deployment.ProjectID)
+	if err != nil {
+		return fmt.Errorf("failed to get project: %w", err)
+	}
+
+	// For now, use a default branch - we'll need to add proper environment queries later
+	// TODO: Create project_environments.sql with proper queries
+	// defaultBranch := "main"
+
 	// Create image build in database
 	createParams := &database.ImageBuildsCreateParams{
-		ID:             buildUUID,
-		DeploymentID:   deployment.ID,
-		OrganisationID: deployment.OrganisationID,
+		ID:               buildUUID,
+		GithubRepository: project.GithubRepository,
+		GithubCommit:     deployment.GithubCommit,
 	}
 
 	build, err := o.db.ImageBuildsCreate(ctx, createParams)
@@ -330,9 +299,19 @@ func (o *DeploymentOrchestrator) CreateImageBuildForDeployment(ctx context.Conte
 		return fmt.Errorf("failed to create image build: %w", err)
 	}
 
+	// Link the created image build to the deployment
+	_, err = o.db.DeploymentsUpdateImageBuildId(ctx, &database.DeploymentsUpdateImageBuildIdParams{
+		ID:           deployment.ID,
+		ImageBuildID: pgtype.UUID{Valid: true, Bytes: buildUUID.Bytes},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to set deployment image_build_id: %w", err)
+	}
+
 	o.logger.Info("Created image build for deployment",
 		"build_id", build.ID,
-		"deployment_id", build.DeploymentID,
+		"github_repository", build.GithubRepository,
+		"github_commit", build.GithubCommit,
 		"status", build.Status)
 
 	// The listener service will automatically detect this database change

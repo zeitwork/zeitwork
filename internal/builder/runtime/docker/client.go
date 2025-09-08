@@ -10,6 +10,7 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/zeitwork/zeitwork/internal/builder/config"
 	"github.com/zeitwork/zeitwork/internal/builder/types"
+	"github.com/zeitwork/zeitwork/internal/database"
 )
 
 // DockerBuildRuntime implements BuildRuntime using direct Docker builds
@@ -58,7 +59,7 @@ func (d *DockerBuildRuntime) Name() string {
 }
 
 // Build executes a build using direct Docker on the host
-func (d *DockerBuildRuntime) Build(ctx context.Context, build *types.EnrichedBuild) *types.BuildResult {
+func (d *DockerBuildRuntime) Build(ctx context.Context, build *database.ImageBuild) *types.BuildResult {
 	startTime := time.Now()
 
 	result := &types.BuildResult{
@@ -68,8 +69,7 @@ func (d *DockerBuildRuntime) Build(ctx context.Context, build *types.EnrichedBui
 	d.logger.Info("Starting Docker build",
 		"build_id", build.ID,
 		"repo", build.GithubRepository,
-		"commit", build.CommitHash,
-		"branch", build.DefaultBranch)
+		"commit", build.GithubCommit)
 
 	// Create build directory
 	buildDir, cleanup, err := d.createBuildDirectory(build)

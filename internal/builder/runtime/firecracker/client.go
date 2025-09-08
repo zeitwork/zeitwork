@@ -8,6 +8,7 @@ import (
 
 	"github.com/zeitwork/zeitwork/internal/builder/config"
 	"github.com/zeitwork/zeitwork/internal/builder/types"
+	"github.com/zeitwork/zeitwork/internal/database"
 )
 
 // FirecrackerBuildRuntime implements BuildRuntime using Firecracker VMs for secure isolation
@@ -36,7 +37,7 @@ func (f *FirecrackerBuildRuntime) Name() string {
 }
 
 // Build executes a build inside a secure Firecracker VM
-func (f *FirecrackerBuildRuntime) Build(ctx context.Context, build *types.EnrichedBuild) *types.BuildResult {
+func (f *FirecrackerBuildRuntime) Build(ctx context.Context, build *database.ImageBuild) *types.BuildResult {
 	startTime := time.Now()
 
 	result := &types.BuildResult{
@@ -46,7 +47,7 @@ func (f *FirecrackerBuildRuntime) Build(ctx context.Context, build *types.Enrich
 	f.logger.Info("Starting Firecracker build",
 		"build_id", build.ID,
 		"repo", build.GithubRepository,
-		"commit", build.CommitHash)
+		"commit", build.GithubCommit)
 
 	// TODO: Implement Firecracker build logic
 	//

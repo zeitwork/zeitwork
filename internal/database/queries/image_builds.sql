@@ -15,11 +15,12 @@ WHERE id = (
 RETURNING 
     id,
     status,
-    deployment_id,
+    github_repository,
+    github_commit,
+    image_id,
     started_at,
     completed_at,
     failed_at,
-    organisation_id,
     created_at,
     updated_at;
 
@@ -33,11 +34,12 @@ WHERE id = $1
 RETURNING 
     id,
     status,
-    deployment_id,
+    github_repository,
+    github_commit,
+    image_id,
     started_at,
     completed_at,
     failed_at,
-    organisation_id,
     created_at,
     updated_at;
 
@@ -51,37 +53,38 @@ WHERE id = $1
 RETURNING 
     id,
     status,
-    deployment_id,
+    github_repository,
+    github_commit,
+    image_id,
     started_at,
     completed_at,
     failed_at,
-    organisation_id,
     created_at,
     updated_at;
 
--- name: ImageBuildsGetByDeployment :many
--- Get image builds for a deployment
+-- name: ImageBuildsGetById :one
+-- Get image build by ID
 SELECT 
     id,
     status,
-    deployment_id,
+    github_repository,
+    github_commit,
+    image_id,
     started_at,
     completed_at,
     failed_at,
-    organisation_id,
     created_at,
     updated_at
 FROM image_builds 
-WHERE deployment_id = $1
-ORDER BY created_at DESC;
+WHERE id = $1;
 
 -- name: ImageBuildsCreate :one
 -- Create a new image build
 INSERT INTO image_builds (
     id,
     status,
-    deployment_id,
-    organisation_id
+    github_repository,
+    github_commit
 ) VALUES (
     $1,
     'pending',
@@ -91,11 +94,12 @@ INSERT INTO image_builds (
 RETURNING 
     id,
     status,
-    deployment_id,
+    github_repository,
+    github_commit,
+    image_id,
     started_at,
     completed_at,
     failed_at,
-    organisation_id,
     created_at,
     updated_at;
 
@@ -110,10 +114,11 @@ WHERE status = 'building'
 RETURNING 
     id,
     status,
-    deployment_id,
+    github_repository,
+    github_commit,
+    image_id,
     started_at,
     completed_at,
     failed_at,
-    organisation_id,
     created_at,
     updated_at;

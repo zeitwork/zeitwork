@@ -16,10 +16,11 @@ INSERT INTO deployments (
     id,
     deployment_id,
     status,
-    commit_hash,
+    github_commit,
     project_id,
     environment_id,
     image_id,
+    image_build_id,
     organisation_id
 ) VALUES (
     $1,
@@ -29,16 +30,18 @@ INSERT INTO deployments (
     $5,
     $6,
     $7,
-    $8
+    $8,
+    $9
 )
 RETURNING 
     id,
     deployment_id,
     status,
-    commit_hash,
+    github_commit,
     project_id,
     environment_id,
     image_id,
+    image_build_id,
     organisation_id,
     created_at,
     updated_at
@@ -48,10 +51,11 @@ type DeploymentsCreateParams struct {
 	ID             pgtype.UUID `json:"id"`
 	DeploymentID   string      `json:"deployment_id"`
 	Status         string      `json:"status"`
-	CommitHash     string      `json:"commit_hash"`
+	GithubCommit   string      `json:"github_commit"`
 	ProjectID      pgtype.UUID `json:"project_id"`
 	EnvironmentID  pgtype.UUID `json:"environment_id"`
 	ImageID        pgtype.UUID `json:"image_id"`
+	ImageBuildID   pgtype.UUID `json:"image_build_id"`
 	OrganisationID pgtype.UUID `json:"organisation_id"`
 }
 
@@ -59,10 +63,11 @@ type DeploymentsCreateRow struct {
 	ID             pgtype.UUID        `json:"id"`
 	DeploymentID   string             `json:"deployment_id"`
 	Status         string             `json:"status"`
-	CommitHash     string             `json:"commit_hash"`
+	GithubCommit   string             `json:"github_commit"`
 	ProjectID      pgtype.UUID        `json:"project_id"`
 	EnvironmentID  pgtype.UUID        `json:"environment_id"`
 	ImageID        pgtype.UUID        `json:"image_id"`
+	ImageBuildID   pgtype.UUID        `json:"image_build_id"`
 	OrganisationID pgtype.UUID        `json:"organisation_id"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
@@ -74,10 +79,11 @@ func (q *Queries) DeploymentsCreate(ctx context.Context, arg *DeploymentsCreateP
 		arg.ID,
 		arg.DeploymentID,
 		arg.Status,
-		arg.CommitHash,
+		arg.GithubCommit,
 		arg.ProjectID,
 		arg.EnvironmentID,
 		arg.ImageID,
+		arg.ImageBuildID,
 		arg.OrganisationID,
 	)
 	var i DeploymentsCreateRow
@@ -85,10 +91,11 @@ func (q *Queries) DeploymentsCreate(ctx context.Context, arg *DeploymentsCreateP
 		&i.ID,
 		&i.DeploymentID,
 		&i.Status,
-		&i.CommitHash,
+		&i.GithubCommit,
 		&i.ProjectID,
 		&i.EnvironmentID,
 		&i.ImageID,
+		&i.ImageBuildID,
 		&i.OrganisationID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -164,10 +171,11 @@ SELECT
     id,
     deployment_id,
     status,
-    commit_hash,
+    github_commit,
     project_id,
     environment_id,
     image_id,
+    image_build_id,
     organisation_id,
     created_at,
     updated_at
@@ -180,10 +188,11 @@ type DeploymentsGetByIdRow struct {
 	ID             pgtype.UUID        `json:"id"`
 	DeploymentID   string             `json:"deployment_id"`
 	Status         string             `json:"status"`
-	CommitHash     string             `json:"commit_hash"`
+	GithubCommit   string             `json:"github_commit"`
 	ProjectID      pgtype.UUID        `json:"project_id"`
 	EnvironmentID  pgtype.UUID        `json:"environment_id"`
 	ImageID        pgtype.UUID        `json:"image_id"`
+	ImageBuildID   pgtype.UUID        `json:"image_build_id"`
 	OrganisationID pgtype.UUID        `json:"organisation_id"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
@@ -197,10 +206,63 @@ func (q *Queries) DeploymentsGetById(ctx context.Context, id pgtype.UUID) (*Depl
 		&i.ID,
 		&i.DeploymentID,
 		&i.Status,
-		&i.CommitHash,
+		&i.GithubCommit,
 		&i.ProjectID,
 		&i.EnvironmentID,
 		&i.ImageID,
+		&i.ImageBuildID,
+		&i.OrganisationID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return &i, err
+}
+
+const deploymentsGetByImageBuildId = `-- name: DeploymentsGetByImageBuildId :one
+SELECT 
+    id,
+    deployment_id,
+    status,
+    github_commit,
+    project_id,
+    environment_id,
+    image_id,
+    image_build_id,
+    organisation_id,
+    created_at,
+    updated_at
+FROM deployments 
+WHERE image_build_id = $1
+  AND deleted_at IS NULL
+`
+
+type DeploymentsGetByImageBuildIdRow struct {
+	ID             pgtype.UUID        `json:"id"`
+	DeploymentID   string             `json:"deployment_id"`
+	Status         string             `json:"status"`
+	GithubCommit   string             `json:"github_commit"`
+	ProjectID      pgtype.UUID        `json:"project_id"`
+	EnvironmentID  pgtype.UUID        `json:"environment_id"`
+	ImageID        pgtype.UUID        `json:"image_id"`
+	ImageBuildID   pgtype.UUID        `json:"image_build_id"`
+	OrganisationID pgtype.UUID        `json:"organisation_id"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Get deployment by linked image_build_id
+func (q *Queries) DeploymentsGetByImageBuildId(ctx context.Context, imageBuildID pgtype.UUID) (*DeploymentsGetByImageBuildIdRow, error) {
+	row := q.db.QueryRow(ctx, deploymentsGetByImageBuildId, imageBuildID)
+	var i DeploymentsGetByImageBuildIdRow
+	err := row.Scan(
+		&i.ID,
+		&i.DeploymentID,
+		&i.Status,
+		&i.GithubCommit,
+		&i.ProjectID,
+		&i.EnvironmentID,
+		&i.ImageID,
+		&i.ImageBuildID,
 		&i.OrganisationID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -213,10 +275,11 @@ SELECT
     id,
     deployment_id,
     status,
-    commit_hash,
+    github_commit,
     project_id,
     environment_id,
     image_id,
+    image_build_id,
     organisation_id,
     created_at,
     updated_at
@@ -230,10 +293,11 @@ type DeploymentsGetByProjectRow struct {
 	ID             pgtype.UUID        `json:"id"`
 	DeploymentID   string             `json:"deployment_id"`
 	Status         string             `json:"status"`
-	CommitHash     string             `json:"commit_hash"`
+	GithubCommit   string             `json:"github_commit"`
 	ProjectID      pgtype.UUID        `json:"project_id"`
 	EnvironmentID  pgtype.UUID        `json:"environment_id"`
 	ImageID        pgtype.UUID        `json:"image_id"`
+	ImageBuildID   pgtype.UUID        `json:"image_build_id"`
 	OrganisationID pgtype.UUID        `json:"organisation_id"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
@@ -253,10 +317,11 @@ func (q *Queries) DeploymentsGetByProject(ctx context.Context, projectID pgtype.
 			&i.ID,
 			&i.DeploymentID,
 			&i.Status,
-			&i.CommitHash,
+			&i.GithubCommit,
 			&i.ProjectID,
 			&i.EnvironmentID,
 			&i.ImageID,
+			&i.ImageBuildID,
 			&i.OrganisationID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -276,22 +341,21 @@ SELECT
     d.id,
     d.deployment_id,
     d.status,
-    d.commit_hash,
+    d.github_commit,
     d.project_id,
     d.environment_id,
     d.image_id,
+    d.image_build_id,
     d.organisation_id,
     d.created_at,
     d.updated_at,
-    p.github_repository,
-    p.default_branch
+    p.github_repository
 FROM deployments d
 JOIN projects p ON p.id = d.project_id
-LEFT JOIN image_builds ib ON ib.deployment_id = d.id
 WHERE d.status = 'pending' 
     AND d.deleted_at IS NULL
     AND p.deleted_at IS NULL
-    AND ib.id IS NULL
+    AND d.image_build_id IS NULL
 ORDER BY d.created_at ASC
 `
 
@@ -299,15 +363,15 @@ type DeploymentsGetPendingWithoutBuildsRow struct {
 	ID               pgtype.UUID        `json:"id"`
 	DeploymentID     string             `json:"deployment_id"`
 	Status           string             `json:"status"`
-	CommitHash       string             `json:"commit_hash"`
+	GithubCommit     string             `json:"github_commit"`
 	ProjectID        pgtype.UUID        `json:"project_id"`
 	EnvironmentID    pgtype.UUID        `json:"environment_id"`
 	ImageID          pgtype.UUID        `json:"image_id"`
+	ImageBuildID     pgtype.UUID        `json:"image_build_id"`
 	OrganisationID   pgtype.UUID        `json:"organisation_id"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 	GithubRepository string             `json:"github_repository"`
-	DefaultBranch    string             `json:"default_branch"`
 }
 
 // Get pending deployments that don't have any image builds yet
@@ -324,15 +388,15 @@ func (q *Queries) DeploymentsGetPendingWithoutBuilds(ctx context.Context) ([]*De
 			&i.ID,
 			&i.DeploymentID,
 			&i.Status,
-			&i.CommitHash,
+			&i.GithubCommit,
 			&i.ProjectID,
 			&i.EnvironmentID,
 			&i.ImageID,
+			&i.ImageBuildID,
 			&i.OrganisationID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.GithubRepository,
-			&i.DefaultBranch,
 		); err != nil {
 			return nil, err
 		}
@@ -349,16 +413,17 @@ SELECT
     d.id,
     d.deployment_id,
     d.status,
-    d.commit_hash,
+    d.github_commit,
     d.project_id,
     d.environment_id,
     d.image_id,
+    d.image_build_id,
     d.organisation_id,
     d.created_at,
     d.updated_at,
     ib.id as build_id
 FROM deployments d
-JOIN image_builds ib ON ib.deployment_id = d.id
+JOIN image_builds ib ON ib.id = d.image_build_id
 LEFT JOIN deployment_instances di ON di.deployment_id = d.id
 WHERE d.status = 'deploying'
     AND ib.status = 'completed'
@@ -371,10 +436,11 @@ type DeploymentsGetReadyForDeploymentRow struct {
 	ID             pgtype.UUID        `json:"id"`
 	DeploymentID   string             `json:"deployment_id"`
 	Status         string             `json:"status"`
-	CommitHash     string             `json:"commit_hash"`
+	GithubCommit   string             `json:"github_commit"`
 	ProjectID      pgtype.UUID        `json:"project_id"`
 	EnvironmentID  pgtype.UUID        `json:"environment_id"`
 	ImageID        pgtype.UUID        `json:"image_id"`
+	ImageBuildID   pgtype.UUID        `json:"image_build_id"`
 	OrganisationID pgtype.UUID        `json:"organisation_id"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
@@ -395,10 +461,11 @@ func (q *Queries) DeploymentsGetReadyForDeployment(ctx context.Context) ([]*Depl
 			&i.ID,
 			&i.DeploymentID,
 			&i.Status,
-			&i.CommitHash,
+			&i.GithubCommit,
 			&i.ProjectID,
 			&i.EnvironmentID,
 			&i.ImageID,
+			&i.ImageBuildID,
 			&i.OrganisationID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
@@ -414,6 +481,64 @@ func (q *Queries) DeploymentsGetReadyForDeployment(ctx context.Context) ([]*Depl
 	return items, nil
 }
 
+const deploymentsUpdateImageBuildId = `-- name: DeploymentsUpdateImageBuildId :one
+UPDATE deployments 
+SET image_build_id = $2, 
+    updated_at = now()
+WHERE id = $1
+RETURNING 
+    id,
+    deployment_id,
+    status,
+    github_commit,
+    project_id,
+    environment_id,
+    image_id,
+    image_build_id,
+    organisation_id,
+    created_at,
+    updated_at
+`
+
+type DeploymentsUpdateImageBuildIdParams struct {
+	ID           pgtype.UUID `json:"id"`
+	ImageBuildID pgtype.UUID `json:"image_build_id"`
+}
+
+type DeploymentsUpdateImageBuildIdRow struct {
+	ID             pgtype.UUID        `json:"id"`
+	DeploymentID   string             `json:"deployment_id"`
+	Status         string             `json:"status"`
+	GithubCommit   string             `json:"github_commit"`
+	ProjectID      pgtype.UUID        `json:"project_id"`
+	EnvironmentID  pgtype.UUID        `json:"environment_id"`
+	ImageID        pgtype.UUID        `json:"image_id"`
+	ImageBuildID   pgtype.UUID        `json:"image_build_id"`
+	OrganisationID pgtype.UUID        `json:"organisation_id"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+// Update deployment image_build_id after creating build
+func (q *Queries) DeploymentsUpdateImageBuildId(ctx context.Context, arg *DeploymentsUpdateImageBuildIdParams) (*DeploymentsUpdateImageBuildIdRow, error) {
+	row := q.db.QueryRow(ctx, deploymentsUpdateImageBuildId, arg.ID, arg.ImageBuildID)
+	var i DeploymentsUpdateImageBuildIdRow
+	err := row.Scan(
+		&i.ID,
+		&i.DeploymentID,
+		&i.Status,
+		&i.GithubCommit,
+		&i.ProjectID,
+		&i.EnvironmentID,
+		&i.ImageID,
+		&i.ImageBuildID,
+		&i.OrganisationID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return &i, err
+}
+
 const deploymentsUpdateImageId = `-- name: DeploymentsUpdateImageId :one
 UPDATE deployments 
 SET image_id = $2, 
@@ -423,10 +548,11 @@ RETURNING
     id,
     deployment_id,
     status,
-    commit_hash,
+    github_commit,
     project_id,
     environment_id,
     image_id,
+    image_build_id,
     organisation_id,
     created_at,
     updated_at
@@ -441,10 +567,11 @@ type DeploymentsUpdateImageIdRow struct {
 	ID             pgtype.UUID        `json:"id"`
 	DeploymentID   string             `json:"deployment_id"`
 	Status         string             `json:"status"`
-	CommitHash     string             `json:"commit_hash"`
+	GithubCommit   string             `json:"github_commit"`
 	ProjectID      pgtype.UUID        `json:"project_id"`
 	EnvironmentID  pgtype.UUID        `json:"environment_id"`
 	ImageID        pgtype.UUID        `json:"image_id"`
+	ImageBuildID   pgtype.UUID        `json:"image_build_id"`
 	OrganisationID pgtype.UUID        `json:"organisation_id"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
@@ -458,10 +585,11 @@ func (q *Queries) DeploymentsUpdateImageId(ctx context.Context, arg *Deployments
 		&i.ID,
 		&i.DeploymentID,
 		&i.Status,
-		&i.CommitHash,
+		&i.GithubCommit,
 		&i.ProjectID,
 		&i.EnvironmentID,
 		&i.ImageID,
+		&i.ImageBuildID,
 		&i.OrganisationID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -478,10 +606,11 @@ RETURNING
     id,
     deployment_id,
     status,
-    commit_hash,
+    github_commit,
     project_id,
     environment_id,
     image_id,
+    image_build_id,
     organisation_id,
     created_at,
     updated_at
@@ -496,10 +625,11 @@ type DeploymentsUpdateStatusRow struct {
 	ID             pgtype.UUID        `json:"id"`
 	DeploymentID   string             `json:"deployment_id"`
 	Status         string             `json:"status"`
-	CommitHash     string             `json:"commit_hash"`
+	GithubCommit   string             `json:"github_commit"`
 	ProjectID      pgtype.UUID        `json:"project_id"`
 	EnvironmentID  pgtype.UUID        `json:"environment_id"`
 	ImageID        pgtype.UUID        `json:"image_id"`
+	ImageBuildID   pgtype.UUID        `json:"image_build_id"`
 	OrganisationID pgtype.UUID        `json:"organisation_id"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
@@ -513,10 +643,11 @@ func (q *Queries) DeploymentsUpdateStatus(ctx context.Context, arg *DeploymentsU
 		&i.ID,
 		&i.DeploymentID,
 		&i.Status,
-		&i.CommitHash,
+		&i.GithubCommit,
 		&i.ProjectID,
 		&i.EnvironmentID,
 		&i.ImageID,
+		&i.ImageBuildID,
 		&i.OrganisationID,
 		&i.CreatedAt,
 		&i.UpdatedAt,

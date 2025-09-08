@@ -72,7 +72,6 @@ export const imageBuilds = pgTable("image_builds", {
   status: imageBuildStatus().notNull().default("pending"),
   //
   githubRepository: text().notNull(),
-  githubBranch: text().notNull(),
   githubCommit: text().notNull(),
   //
   imageId: uuid().references(() => images.id),

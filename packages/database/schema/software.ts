@@ -6,6 +6,7 @@ import {
   timestamp,
   unique,
   uuid,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { timestamps } from "../utils/timestamps";
 import { imageBuilds, images, instances } from "./platform";
@@ -103,6 +104,7 @@ export const projectEnvironments = pgTable(
     projectId: uuid()
       .notNull()
       .references(() => projects.id),
+    // latestDeploymentId: uuid().references((): AnyPgColumn => deployments.id),
     ...organisationId,
     ...timestamps,
   },

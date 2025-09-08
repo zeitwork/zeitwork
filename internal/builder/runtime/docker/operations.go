@@ -14,11 +14,11 @@ import (
 	"github.com/go-git/go-git/v5"
 	"github.com/go-git/go-git/v5/plumbing"
 	"github.com/moby/go-archive"
-	"github.com/zeitwork/zeitwork/internal/builder/types"
+	"github.com/zeitwork/zeitwork/internal/database"
 )
 
 // createBuildDirectory creates a unique build directory and returns cleanup function
-func (d *DockerBuildRuntime) createBuildDirectory(build *types.EnrichedBuild) (string, func(), error) {
+func (d *DockerBuildRuntime) createBuildDirectory(build *database.ImageBuild) (string, func(), error) {
 	buildDir := filepath.Join(d.config.WorkDir, fmt.Sprintf("build-%x-%d", build.ID.Bytes, time.Now().Unix()))
 	if err := os.MkdirAll(buildDir, 0755); err != nil {
 		return "", nil, err
@@ -34,16 +34,16 @@ func (d *DockerBuildRuntime) createBuildDirectory(build *types.EnrichedBuild) (s
 }
 
 // cloneRepository clones the Git repository to the build directory using go-git
-func (d *DockerBuildRuntime) cloneRepository(ctx context.Context, build *types.EnrichedBuild, buildDir string) error {
+func (d *DockerBuildRuntime) cloneRepository(ctx context.Context, build *database.ImageBuild, buildDir string) error {
 	repoURL := fmt.Sprintf("https://github.com/%s.git", build.GithubRepository)
 
-	d.logger.Debug("Cloning repository", "url", repoURL, "commit", build.CommitHash)
+	d.logger.Debug("Cloning repository", "url", repoURL, "commit", build.GithubCommit)
 
 	// Clone the repository
 	repo, err := git.PlainCloneContext(ctx, buildDir, false, &git.CloneOptions{
 		URL:      repoURL,
 		Progress: nil, // Could add progress logging here if needed
-		Auth:     nil, // For public repos, no auth needed. For private repos, would need token
+		Auth:     nil, // TODO: For public repos, no auth needed. For private repos, would need token
 	})
 	if err != nil {
 		return fmt.Errorf("git clone failed: %w", err)
@@ -56,7 +56,7 @@ func (d *DockerBuildRuntime) cloneRepository(ctx context.Context, build *types.E
 	}
 
 	// Checkout the specific commit
-	commitHash := plumbing.NewHash(build.CommitHash)
+	commitHash := plumbing.NewHash(build.GithubCommit)
 	err = worktree.Checkout(&git.CheckoutOptions{
 		Hash: commitHash,
 	})
@@ -64,23 +64,23 @@ func (d *DockerBuildRuntime) cloneRepository(ctx context.Context, build *types.E
 		return fmt.Errorf("git checkout failed: %w", err)
 	}
 
-	d.logger.Debug("Repository cloned and checked out successfully", "commit", build.CommitHash)
+	d.logger.Debug("Repository cloned and checked out successfully", "commit", build.GithubCommit)
 	return nil
 }
 
 // generateImageTag generates a unique image tag for the build
-func (d *DockerBuildRuntime) generateImageTag(build *types.EnrichedBuild) string {
+func (d *DockerBuildRuntime) generateImageTag(build *database.ImageBuild) string {
 	// Extract repository name from github_repository (owner/repo -> repo)
 	repoParts := strings.Split(build.GithubRepository, "/")
 	repoName := repoParts[len(repoParts)-1]
 
-	// Create tag with project ID and short commit hash
-	shortCommit := build.CommitHash
+	// Create tag with short commit hash
+	shortCommit := build.GithubCommit
 	if len(shortCommit) > 7 {
 		shortCommit = shortCommit[:7]
 	}
 
-	tag := fmt.Sprintf("%s:%x-%s", repoName, build.ProjectID.Bytes, shortCommit)
+	tag := fmt.Sprintf("%s:%s", repoName, shortCommit)
 
 	// Use distribution registry from docker-compose (localhost:5001)
 	// This overrides the configured registry to ensure we use the distribution registry

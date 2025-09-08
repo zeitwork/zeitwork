@@ -28,10 +28,11 @@ SELECT
     id,
     deployment_id,
     status,
-    commit_hash,
+    github_commit,
     project_id,
     environment_id,
     image_id,
+    image_build_id,
     organisation_id,
     created_at,
     updated_at
@@ -45,10 +46,11 @@ SELECT
     id,
     deployment_id,
     status,
-    commit_hash,
+    github_commit,
     project_id,
     environment_id,
     image_id,
+    image_build_id,
     organisation_id,
     created_at,
     updated_at
@@ -63,10 +65,11 @@ INSERT INTO deployments (
     id,
     deployment_id,
     status,
-    commit_hash,
+    github_commit,
     project_id,
     environment_id,
     image_id,
+    image_build_id,
     organisation_id
 ) VALUES (
     $1,
@@ -76,16 +79,37 @@ INSERT INTO deployments (
     $5,
     $6,
     $7,
-    $8
+    $8,
+    $9
 )
 RETURNING 
     id,
     deployment_id,
     status,
-    commit_hash,
+    github_commit,
     project_id,
     environment_id,
     image_id,
+    image_build_id,
+    organisation_id,
+    created_at,
+    updated_at;
+
+-- name: DeploymentsUpdateImageBuildId :one
+-- Update deployment image_build_id after creating build
+UPDATE deployments 
+SET image_build_id = $2, 
+    updated_at = now()
+WHERE id = $1
+RETURNING 
+    id,
+    deployment_id,
+    status,
+    github_commit,
+    project_id,
+    environment_id,
+    image_id,
+    image_build_id,
     organisation_id,
     created_at,
     updated_at;
@@ -100,10 +124,11 @@ RETURNING
     id,
     deployment_id,
     status,
-    commit_hash,
+    github_commit,
     project_id,
     environment_id,
     image_id,
+    image_build_id,
     organisation_id,
     created_at,
     updated_at;
@@ -114,23 +139,40 @@ SELECT
     d.id,
     d.deployment_id,
     d.status,
-    d.commit_hash,
+    d.github_commit,
     d.project_id,
     d.environment_id,
     d.image_id,
+    d.image_build_id,
     d.organisation_id,
     d.created_at,
     d.updated_at,
-    p.github_repository,
-    p.default_branch
+    p.github_repository
 FROM deployments d
 JOIN projects p ON p.id = d.project_id
-LEFT JOIN image_builds ib ON ib.deployment_id = d.id
 WHERE d.status = 'pending' 
     AND d.deleted_at IS NULL
     AND p.deleted_at IS NULL
-    AND ib.id IS NULL
+    AND d.image_build_id IS NULL
 ORDER BY d.created_at ASC;
+
+-- name: DeploymentsGetByImageBuildId :one
+-- Get deployment by linked image_build_id
+SELECT 
+    id,
+    deployment_id,
+    status,
+    github_commit,
+    project_id,
+    environment_id,
+    image_id,
+    image_build_id,
+    organisation_id,
+    created_at,
+    updated_at
+FROM deployments 
+WHERE image_build_id = $1
+  AND deleted_at IS NULL;
 
 -- name: DeploymentsGetReadyForDeployment :many
 -- Get deployments that have completed builds but no instances yet (ready for deployment)
@@ -138,16 +180,17 @@ SELECT
     d.id,
     d.deployment_id,
     d.status,
-    d.commit_hash,
+    d.github_commit,
     d.project_id,
     d.environment_id,
     d.image_id,
+    d.image_build_id,
     d.organisation_id,
     d.created_at,
     d.updated_at,
     ib.id as build_id
 FROM deployments d
-JOIN image_builds ib ON ib.deployment_id = d.id
+JOIN image_builds ib ON ib.id = d.image_build_id
 LEFT JOIN deployment_instances di ON di.deployment_id = d.id
 WHERE d.status = 'deploying'
     AND ib.status = 'completed'
@@ -165,10 +208,11 @@ RETURNING
     id,
     deployment_id,
     status,
-    commit_hash,
+    github_commit,
     project_id,
     environment_id,
     image_id,
+    image_build_id,
     organisation_id,
     created_at,
     updated_at;

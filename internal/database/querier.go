@@ -25,12 +25,16 @@ type Querier interface {
 	DeploymentsGetActiveRoutes(ctx context.Context) ([]*DeploymentsGetActiveRoutesRow, error)
 	// Get deployment by ID
 	DeploymentsGetById(ctx context.Context, id pgtype.UUID) (*DeploymentsGetByIdRow, error)
+	// Get deployment by linked image_build_id
+	DeploymentsGetByImageBuildId(ctx context.Context, imageBuildID pgtype.UUID) (*DeploymentsGetByImageBuildIdRow, error)
 	// Get deployments by project ID
 	DeploymentsGetByProject(ctx context.Context, projectID pgtype.UUID) ([]*DeploymentsGetByProjectRow, error)
 	// Get pending deployments that don't have any image builds yet
 	DeploymentsGetPendingWithoutBuilds(ctx context.Context) ([]*DeploymentsGetPendingWithoutBuildsRow, error)
 	// Get deployments that have completed builds but no instances yet (ready for deployment)
 	DeploymentsGetReadyForDeployment(ctx context.Context) ([]*DeploymentsGetReadyForDeploymentRow, error)
+	// Update deployment image_build_id after creating build
+	DeploymentsUpdateImageBuildId(ctx context.Context, arg *DeploymentsUpdateImageBuildIdParams) (*DeploymentsUpdateImageBuildIdRow, error)
 	// Update deployment image_id after successful build
 	DeploymentsUpdateImageId(ctx context.Context, arg *DeploymentsUpdateImageIdParams) (*DeploymentsUpdateImageIdRow, error)
 	// Update deployment status
@@ -57,8 +61,8 @@ type Querier interface {
 	ImageBuildsDequeuePending(ctx context.Context) (*ImageBuildsDequeuePendingRow, error)
 	// Mark an image build as failed
 	ImageBuildsFail(ctx context.Context, id pgtype.UUID) (*ImageBuildsFailRow, error)
-	// Get image builds for a deployment
-	ImageBuildsGetByDeployment(ctx context.Context, deploymentID pgtype.UUID) ([]*ImageBuildsGetByDeploymentRow, error)
+	// Get image build by ID
+	ImageBuildsGetById(ctx context.Context, id pgtype.UUID) (*ImageBuildsGetByIdRow, error)
 	// Reset builds that have been "building" for too long (using minutes parameter)
 	ImageBuildsResetStale(ctx context.Context, dollar_1 pgtype.Text) ([]*ImageBuildsResetStaleRow, error)
 	// Create a new image
@@ -113,8 +117,6 @@ type Querier interface {
 	ProjectsGetByOrganisation(ctx context.Context, organisationID pgtype.UUID) ([]*ProjectsGetByOrganisationRow, error)
 	// Get project by slug and organisation
 	ProjectsGetBySlugAndOrg(ctx context.Context, arg *ProjectsGetBySlugAndOrgParams) (*ProjectsGetBySlugAndOrgRow, error)
-	// Update project's latest deployment
-	ProjectsUpdateLatestDeployment(ctx context.Context, arg *ProjectsUpdateLatestDeploymentParams) (*ProjectsUpdateLatestDeploymentRow, error)
 	// Create a new region
 	RegionsCreate(ctx context.Context, arg *RegionsCreateParams) (*RegionsCreateRow, error)
 	// Get all regions
