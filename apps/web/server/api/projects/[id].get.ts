@@ -1,4 +1,4 @@
-import { deployments, domains, projects } from "@zeitwork/database/schema"
+import { deployments, domains, projectDomains, projects } from "@zeitwork/database/schema"
 import { eq, and, inArray } from "drizzle-orm"
 import { z } from "zod"
 
@@ -16,8 +16,13 @@ export default defineEventHandler(async (event) => {
     domains?: (typeof domains.$inferSelect)[]
   }
 
+  type ProjectDomain = typeof projectDomains.$inferSelect & {
+    domain?: typeof domains.$inferSelect | null
+  }
+
   type Project = typeof projects.$inferSelect & {
     latestDeployment?: LatestDeployment | null
+    domains?: ProjectDomain[]
   }
 
   let project: Project | null = null
@@ -63,6 +68,13 @@ export default defineEventHandler(async (event) => {
       .where(eq(domains.deploymentId, project.latestDeployment.id))
     project.latestDeployment.domains = results
   }
+
+  // project domains
+  const projectDomainList = await useDrizzle()
+    .select()
+    .from(projectDomains)
+    .where(eq(projectDomains.projectId, project.id))
+  project.domains = projectDomainList
 
   return project
 })

@@ -82,12 +82,20 @@ export const projects = pgTable(
   (t) => [unique().on(t.slug, t.organisationId)]
 );
 
+export const projectDomains = pgTable("project_domains", {
+  id: uuid().primaryKey().$defaultFn(uuidv7),
+  projectId: uuid().references(() => projects.id),
+  domainId: uuid().references(() => domains.id),
+  ...organisationId,
+  ...timestamps,
+});
+
 export const domains = pgTable("domains", {
   id: uuid().primaryKey().$defaultFn(uuidv7),
   name: text().notNull(), // e.g. app.example.com
   verificationToken: text(),
   verifiedAt: timestamp({ withTimezone: true }),
-  deploymentId: uuid().references(() => deployments.id),
+  // deploymentId: uuid().references(() => deployments.id),
   internal: boolean().notNull().default(false),
   ...organisationId,
   ...timestamps,
@@ -127,6 +135,14 @@ export const deployments = pgTable("deployments", {
   projectId: uuid().references(() => projects.id),
   environmentId: uuid().references(() => projectEnvironments.id),
   imageId: uuid().references(() => images.id),
+  ...organisationId,
+  ...timestamps,
+});
+
+export const deploymentDomains = pgTable("deployment_domains", {
+  id: uuid().primaryKey().$defaultFn(uuidv7),
+  deploymentId: uuid().references(() => deployments.id),
+  domainId: uuid().references(() => domains.id),
   ...organisationId,
   ...timestamps,
 });
