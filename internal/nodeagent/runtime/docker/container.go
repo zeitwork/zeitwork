@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/api/types/network"
@@ -200,8 +199,8 @@ func (d *DockerRuntime) containerToInstance(ctx context.Context, container conta
 	return instance, nil
 }
 
-// extractNetworkInfo extracts network information from container JSON
-func (d *DockerRuntime) extractNetworkInfo(containerJSON types.ContainerJSON) *runtimeTypes.NetworkInfo {
+// extractNetworkInfo extracts network information from container inspect response
+func (d *DockerRuntime) extractNetworkInfo(containerJSON container.InspectResponse) *runtimeTypes.NetworkInfo {
 	networkInfo := &runtimeTypes.NetworkInfo{
 		PortMappings: make(map[int32]int32),
 	}

@@ -187,6 +187,7 @@ func (d *DockerRuntime) IsInstanceRunning(ctx context.Context, instance *runtime
 }
 
 // ListInstances lists all Docker containers managed by this node agent
+
 func (d *DockerRuntime) ListInstances(ctx context.Context) ([]*runtimeTypes.Instance, error) {
 	containers, err := d.client.ContainerList(ctx, container.ListOptions{
 		All: true,
@@ -196,16 +197,16 @@ func (d *DockerRuntime) ListInstances(ctx context.Context) ([]*runtimeTypes.Inst
 	}
 
 	var instances []*runtimeTypes.Instance
-	for _, container := range containers {
+	for _, ctr := range containers {
 		// Only include containers managed by zeitwork
-		if !d.isZeitworkContainer(container) {
+		if !d.isZeitworkContainer(ctr) {
 			continue
 		}
 
-		instance, err := d.containerToInstance(ctx, container)
+		instance, err := d.containerToInstance(ctx, ctr)
 		if err != nil {
 			d.logger.Warn("Failed to convert container to instance",
-				"container_id", container.ID[:12], "error", err)
+				"container_id", ctr.ID[:12], "error", err)
 			continue
 		}
 

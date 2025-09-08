@@ -158,8 +158,8 @@ func (l *Loader) dbInstanceToRuntime(ctx context.Context, dbInstance *database.I
 		imageTag = fmt.Sprintf("%s/zeitwork/%s:latest", registry, imageID[:8])
 	}
 
-	// Map database state to runtime state
-	runtimeState := l.mapDatabaseState(dbInstance.State)
+	// Use database enum directly as runtime state
+	runtimeState := types.InstanceState(dbInstance.State)
 
 	// Create resource specification
 	resources := &types.ResourceSpec{
@@ -215,8 +215,8 @@ func (l *Loader) dbInstanceToRuntimeFromGetById(ctx context.Context, dbInstance 
 		imageTag = fmt.Sprintf("%s/zeitwork/%s:latest", registry, imageID[:8])
 	}
 
-	// Map database state to runtime state
-	runtimeState := l.mapDatabaseState(dbInstance.State)
+	// Use database enum directly as runtime state
+	runtimeState := types.InstanceState(dbInstance.State)
 
 	// Create resource specification
 	resources := &types.ResourceSpec{
@@ -239,29 +239,6 @@ func (l *Loader) dbInstanceToRuntimeFromGetById(ctx context.Context, dbInstance 
 	}
 
 	return instance
-}
-
-// mapDatabaseState maps database instance state to runtime state
-func (l *Loader) mapDatabaseState(dbState string) types.InstanceState {
-	switch dbState {
-	case "pending":
-		return types.InstanceStatePending
-	case "starting":
-		return types.InstanceStateStarting
-	case "running":
-		return types.InstanceStateRunning
-	case "stopping":
-		return types.InstanceStateStopping
-	case "stopped":
-		return types.InstanceStateStopped
-	case "failed":
-		return types.InstanceStateFailed
-	case "terminated":
-		return types.InstanceStateTerminated
-	default:
-		l.logger.Warn("Unknown database state", "state", dbState)
-		return types.InstanceStatePending
-	}
 }
 
 // getImageTag queries the images table to get the actual image tag

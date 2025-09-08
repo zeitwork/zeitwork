@@ -179,7 +179,7 @@ func (r *Reporter) reportInstanceStatus(ctx context.Context, instanceID string, 
 			"instance_id", instanceID,
 			"error", err)
 		// Continue with update anyway
-	} else if currentInstance.State == instanceState {
+	} else if string(currentInstance.State) == instanceState {
 		// State hasn't changed, skip update to avoid triggering events
 		return nil
 	}
@@ -187,7 +187,7 @@ func (r *Reporter) reportInstanceStatus(ctx context.Context, instanceID string, 
 	// Update instance state in database
 	_, err = r.db.Queries().InstancesUpdateState(ctx, &database.InstancesUpdateStateParams{
 		ID:    pgInstanceID,
-		State: instanceState,
+		State: database.InstanceStatuses(instanceState),
 	})
 
 	if err != nil {
@@ -223,7 +223,7 @@ func (r *Reporter) ReportInstanceStateChange(ctx context.Context, instanceID, ne
 	// Update instance state in database
 	_, err = r.db.Queries().InstancesUpdateState(ctx, &database.InstancesUpdateStateParams{
 		ID:    pgInstanceID,
-		State: newState,
+		State: database.InstanceStatuses(newState),
 	})
 
 	if err != nil {
