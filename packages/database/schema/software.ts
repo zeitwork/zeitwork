@@ -1,6 +1,7 @@
 import {
   boolean,
   integer,
+  pgEnum,
   pgTable,
   text,
   timestamp,
@@ -151,10 +152,19 @@ export const environmentVariables = pgTable(
   ]
 );
 
+export const deploymentStatuses = pgEnum("deployment_statuses", [
+  "pending",
+  "building",
+  "deploying",
+  "active",
+  "inactive",
+  "failed",
+]);
+
 export const deployments = pgTable("deployments", {
   id: uuid().primaryKey().$defaultFn(uuidv7),
   deploymentId: text().unique().notNull(),
-  status: text().notNull(), // pending, building, deploying, active, inactive, failed
+  status: deploymentStatuses().notNull().default("pending"),
   githubCommit: text().notNull(),
   projectId: uuid()
     .notNull()

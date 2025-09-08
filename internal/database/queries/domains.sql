@@ -121,3 +121,16 @@ RETURNING
     organisation_id,
     created_at,
     updated_at;
+
+-- name: DomainsRepointToDeploymentForProjectEnv :execrows
+-- Repoint all verified, non-internal domains for a project+env to a deployment
+UPDATE domains AS d
+SET deployment_id = $3,
+    updated_at = now()
+FROM deployments AS dep
+WHERE d.deployment_id = dep.id
+  AND dep.project_id = $1
+  AND dep.environment_id = $2
+  AND d.internal = false
+  AND d.verified_at IS NOT NULL
+  AND d.deleted_at IS NULL;

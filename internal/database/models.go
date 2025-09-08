@@ -12,6 +12,52 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type DeploymentStatuses string
+
+const (
+	DeploymentStatusesPending   DeploymentStatuses = "pending"
+	DeploymentStatusesBuilding  DeploymentStatuses = "building"
+	DeploymentStatusesDeploying DeploymentStatuses = "deploying"
+	DeploymentStatusesActive    DeploymentStatuses = "active"
+	DeploymentStatusesInactive  DeploymentStatuses = "inactive"
+	DeploymentStatusesFailed    DeploymentStatuses = "failed"
+)
+
+func (e *DeploymentStatuses) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = DeploymentStatuses(s)
+	case string:
+		*e = DeploymentStatuses(s)
+	default:
+		return fmt.Errorf("unsupported scan type for DeploymentStatuses: %T", src)
+	}
+	return nil
+}
+
+type NullDeploymentStatuses struct {
+	DeploymentStatuses DeploymentStatuses `json:"deployment_statuses"`
+	Valid              bool               `json:"valid"` // Valid is true if DeploymentStatuses is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullDeploymentStatuses) Scan(value interface{}) error {
+	if value == nil {
+		ns.DeploymentStatuses, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.DeploymentStatuses.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullDeploymentStatuses) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.DeploymentStatuses), nil
+}
+
 type ImageBuildStatus string
 
 const (
@@ -56,10 +102,57 @@ func (ns NullImageBuildStatus) Value() (driver.Value, error) {
 	return string(ns.ImageBuildStatus), nil
 }
 
+type InstanceStatuses string
+
+const (
+	InstanceStatusesPending    InstanceStatuses = "pending"
+	InstanceStatusesStarting   InstanceStatuses = "starting"
+	InstanceStatusesRunning    InstanceStatuses = "running"
+	InstanceStatusesStopping   InstanceStatuses = "stopping"
+	InstanceStatusesStopped    InstanceStatuses = "stopped"
+	InstanceStatusesFailed     InstanceStatuses = "failed"
+	InstanceStatusesTerminated InstanceStatuses = "terminated"
+)
+
+func (e *InstanceStatuses) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = InstanceStatuses(s)
+	case string:
+		*e = InstanceStatuses(s)
+	default:
+		return fmt.Errorf("unsupported scan type for InstanceStatuses: %T", src)
+	}
+	return nil
+}
+
+type NullInstanceStatuses struct {
+	InstanceStatuses InstanceStatuses `json:"instance_statuses"`
+	Valid            bool             `json:"valid"` // Valid is true if InstanceStatuses is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullInstanceStatuses) Scan(value interface{}) error {
+	if value == nil {
+		ns.InstanceStatuses, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.InstanceStatuses.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullInstanceStatuses) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.InstanceStatuses), nil
+}
+
 type Deployment struct {
 	ID             pgtype.UUID        `json:"id"`
 	DeploymentID   string             `json:"deployment_id"`
-	Status         string             `json:"status"`
+	Status         DeploymentStatuses `json:"status"`
 	GithubCommit   string             `json:"github_commit"`
 	ProjectID      pgtype.UUID        `json:"project_id"`
 	EnvironmentID  pgtype.UUID        `json:"environment_id"`
@@ -142,7 +235,6 @@ type ImageBuild struct {
 	ID               pgtype.UUID        `json:"id"`
 	Status           ImageBuildStatus   `json:"status"`
 	GithubRepository string             `json:"github_repository"`
-	GithubBranch     string             `json:"github_branch"`
 	GithubCommit     string             `json:"github_commit"`
 	ImageID          pgtype.UUID        `json:"image_id"`
 	StartedAt        pgtype.Timestamptz `json:"started_at"`
@@ -158,7 +250,7 @@ type Instance struct {
 	RegionID             pgtype.UUID        `json:"region_id"`
 	NodeID               pgtype.UUID        `json:"node_id"`
 	ImageID              pgtype.UUID        `json:"image_id"`
-	State                string             `json:"state"`
+	State                InstanceStatuses   `json:"state"`
 	Vcpus                int32              `json:"vcpus"`
 	Memory               int32              `json:"memory"`
 	DefaultPort          int32              `json:"default_port"`

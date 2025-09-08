@@ -31,6 +31,16 @@ export const nodes = pgTable("nodes", {
   ...timestamps,
 });
 
+export const instanceStatuses = pgEnum("instance_statuses", [
+  "pending",
+  "starting",
+  "running",
+  "stopping",
+  "stopped",
+  "failed",
+  "terminated",
+]);
+
 export const instances = pgTable("instances", {
   id: uuid().primaryKey().$defaultFn(uuidv7),
   regionId: uuid()
@@ -42,7 +52,7 @@ export const instances = pgTable("instances", {
   imageId: uuid()
     .notNull()
     .references(() => images.id),
-  state: text().notNull(), // pending, starting, running, stopping, stopped, failed, terminated
+  state: instanceStatuses().notNull().default("pending"),
   vcpus: integer().notNull(),
   memory: integer().notNull(),
   defaultPort: integer().notNull(),

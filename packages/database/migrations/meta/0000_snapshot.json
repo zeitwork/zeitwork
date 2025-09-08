@@ -1,5 +1,5 @@
 {
-  "id": "6a0ac8cd-6c62-470d-9922-13a5b030be43",
+  "id": "71834b33-b8aa-419a-b1ca-2e2b159396ad",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -24,12 +24,6 @@
         },
         "github_repository": {
           "name": "github_repository",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "github_branch": {
-          "name": "github_branch",
           "type": "text",
           "primaryKey": false,
           "notNull": true
@@ -194,9 +188,11 @@
         },
         "state": {
           "name": "state",
-          "type": "text",
+          "type": "instance_statuses",
+          "typeSchema": "public",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "default": "'pending'"
         },
         "vcpus": {
           "name": "vcpus",
@@ -692,9 +688,11 @@
         },
         "status": {
           "name": "status",
-          "type": "text",
+          "type": "deployment_statuses",
+          "typeSchema": "public",
           "primaryKey": false,
-          "notNull": true
+          "notNull": true,
+          "default": "'pending'"
         },
         "github_commit": {
           "name": "github_commit",
@@ -1826,6 +1824,31 @@
         "pending",
         "building",
         "completed",
+        "failed"
+      ]
+    },
+    "public.instance_statuses": {
+      "name": "instance_statuses",
+      "schema": "public",
+      "values": [
+        "pending",
+        "starting",
+        "running",
+        "stopping",
+        "stopped",
+        "failed",
+        "terminated"
+      ]
+    },
+    "public.deployment_statuses": {
+      "name": "deployment_statuses",
+      "schema": "public",
+      "values": [
+        "pending",
+        "building",
+        "deploying",
+        "active",
+        "inactive",
         "failed"
       ]
     }

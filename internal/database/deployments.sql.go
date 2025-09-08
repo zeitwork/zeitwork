@@ -48,21 +48,21 @@ RETURNING
 `
 
 type DeploymentsCreateParams struct {
-	ID             pgtype.UUID `json:"id"`
-	DeploymentID   string      `json:"deployment_id"`
-	Status         string      `json:"status"`
-	GithubCommit   string      `json:"github_commit"`
-	ProjectID      pgtype.UUID `json:"project_id"`
-	EnvironmentID  pgtype.UUID `json:"environment_id"`
-	ImageID        pgtype.UUID `json:"image_id"`
-	ImageBuildID   pgtype.UUID `json:"image_build_id"`
-	OrganisationID pgtype.UUID `json:"organisation_id"`
+	ID             pgtype.UUID        `json:"id"`
+	DeploymentID   string             `json:"deployment_id"`
+	Status         DeploymentStatuses `json:"status"`
+	GithubCommit   string             `json:"github_commit"`
+	ProjectID      pgtype.UUID        `json:"project_id"`
+	EnvironmentID  pgtype.UUID        `json:"environment_id"`
+	ImageID        pgtype.UUID        `json:"image_id"`
+	ImageBuildID   pgtype.UUID        `json:"image_build_id"`
+	OrganisationID pgtype.UUID        `json:"organisation_id"`
 }
 
 type DeploymentsCreateRow struct {
 	ID             pgtype.UUID        `json:"id"`
 	DeploymentID   string             `json:"deployment_id"`
-	Status         string             `json:"status"`
+	Status         DeploymentStatuses `json:"status"`
 	GithubCommit   string             `json:"github_commit"`
 	ProjectID      pgtype.UUID        `json:"project_id"`
 	EnvironmentID  pgtype.UUID        `json:"environment_id"`
@@ -128,13 +128,13 @@ WHERE d.status = 'active'
 `
 
 type DeploymentsGetActiveRoutesRow struct {
-	DeploymentID   pgtype.UUID `json:"deployment_id"`
-	DeploymentName string      `json:"deployment_name"`
-	Status         string      `json:"status"`
-	Domain         string      `json:"domain"`
-	IpAddress      string      `json:"ip_address"`
-	DefaultPort    int32       `json:"default_port"`
-	Healthy        bool        `json:"healthy"`
+	DeploymentID   pgtype.UUID        `json:"deployment_id"`
+	DeploymentName string             `json:"deployment_name"`
+	Status         DeploymentStatuses `json:"status"`
+	Domain         string             `json:"domain"`
+	IpAddress      string             `json:"ip_address"`
+	DefaultPort    int32              `json:"default_port"`
+	Healthy        bool               `json:"healthy"`
 }
 
 // Get active deployment routes for edge proxy
@@ -187,7 +187,7 @@ WHERE id = $1
 type DeploymentsGetByIdRow struct {
 	ID             pgtype.UUID        `json:"id"`
 	DeploymentID   string             `json:"deployment_id"`
-	Status         string             `json:"status"`
+	Status         DeploymentStatuses `json:"status"`
 	GithubCommit   string             `json:"github_commit"`
 	ProjectID      pgtype.UUID        `json:"project_id"`
 	EnvironmentID  pgtype.UUID        `json:"environment_id"`
@@ -239,7 +239,7 @@ WHERE image_build_id = $1
 type DeploymentsGetByImageBuildIdRow struct {
 	ID             pgtype.UUID        `json:"id"`
 	DeploymentID   string             `json:"deployment_id"`
-	Status         string             `json:"status"`
+	Status         DeploymentStatuses `json:"status"`
 	GithubCommit   string             `json:"github_commit"`
 	ProjectID      pgtype.UUID        `json:"project_id"`
 	EnvironmentID  pgtype.UUID        `json:"environment_id"`
@@ -292,7 +292,7 @@ ORDER BY created_at DESC
 type DeploymentsGetByProjectRow struct {
 	ID             pgtype.UUID        `json:"id"`
 	DeploymentID   string             `json:"deployment_id"`
-	Status         string             `json:"status"`
+	Status         DeploymentStatuses `json:"status"`
 	GithubCommit   string             `json:"github_commit"`
 	ProjectID      pgtype.UUID        `json:"project_id"`
 	EnvironmentID  pgtype.UUID        `json:"environment_id"`
@@ -362,7 +362,7 @@ ORDER BY d.created_at ASC
 type DeploymentsGetPendingWithoutBuildsRow struct {
 	ID               pgtype.UUID        `json:"id"`
 	DeploymentID     string             `json:"deployment_id"`
-	Status           string             `json:"status"`
+	Status           DeploymentStatuses `json:"status"`
 	GithubCommit     string             `json:"github_commit"`
 	ProjectID        pgtype.UUID        `json:"project_id"`
 	EnvironmentID    pgtype.UUID        `json:"environment_id"`
@@ -435,7 +435,7 @@ ORDER BY d.created_at ASC
 type DeploymentsGetReadyForDeploymentRow struct {
 	ID             pgtype.UUID        `json:"id"`
 	DeploymentID   string             `json:"deployment_id"`
-	Status         string             `json:"status"`
+	Status         DeploymentStatuses `json:"status"`
 	GithubCommit   string             `json:"github_commit"`
 	ProjectID      pgtype.UUID        `json:"project_id"`
 	EnvironmentID  pgtype.UUID        `json:"environment_id"`
@@ -508,7 +508,7 @@ type DeploymentsUpdateImageBuildIdParams struct {
 type DeploymentsUpdateImageBuildIdRow struct {
 	ID             pgtype.UUID        `json:"id"`
 	DeploymentID   string             `json:"deployment_id"`
-	Status         string             `json:"status"`
+	Status         DeploymentStatuses `json:"status"`
 	GithubCommit   string             `json:"github_commit"`
 	ProjectID      pgtype.UUID        `json:"project_id"`
 	EnvironmentID  pgtype.UUID        `json:"environment_id"`
@@ -566,7 +566,7 @@ type DeploymentsUpdateImageIdParams struct {
 type DeploymentsUpdateImageIdRow struct {
 	ID             pgtype.UUID        `json:"id"`
 	DeploymentID   string             `json:"deployment_id"`
-	Status         string             `json:"status"`
+	Status         DeploymentStatuses `json:"status"`
 	GithubCommit   string             `json:"github_commit"`
 	ProjectID      pgtype.UUID        `json:"project_id"`
 	EnvironmentID  pgtype.UUID        `json:"environment_id"`
@@ -617,14 +617,14 @@ RETURNING
 `
 
 type DeploymentsUpdateStatusParams struct {
-	ID     pgtype.UUID `json:"id"`
-	Status string      `json:"status"`
+	ID     pgtype.UUID        `json:"id"`
+	Status DeploymentStatuses `json:"status"`
 }
 
 type DeploymentsUpdateStatusRow struct {
 	ID             pgtype.UUID        `json:"id"`
 	DeploymentID   string             `json:"deployment_id"`
-	Status         string             `json:"status"`
+	Status         DeploymentStatuses `json:"status"`
 	GithubCommit   string             `json:"github_commit"`
 	ProjectID      pgtype.UUID        `json:"project_id"`
 	EnvironmentID  pgtype.UUID        `json:"environment_id"`

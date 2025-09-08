@@ -353,6 +353,34 @@ func (q *Queries) DomainsListVerified(ctx context.Context) ([]*DomainsListVerifi
 	return items, nil
 }
 
+const domainsRepointToDeploymentForProjectEnv = `-- name: DomainsRepointToDeploymentForProjectEnv :execrows
+UPDATE domains AS d
+SET deployment_id = $3,
+    updated_at = now()
+FROM deployments AS dep
+WHERE d.deployment_id = dep.id
+  AND dep.project_id = $1
+  AND dep.environment_id = $2
+  AND d.internal = false
+  AND d.verified_at IS NOT NULL
+  AND d.deleted_at IS NULL
+`
+
+type DomainsRepointToDeploymentForProjectEnvParams struct {
+	ProjectID     pgtype.UUID `json:"project_id"`
+	EnvironmentID pgtype.UUID `json:"environment_id"`
+	DeploymentID  pgtype.UUID `json:"deployment_id"`
+}
+
+// Repoint all verified, non-internal domains for a project+env to a deployment
+func (q *Queries) DomainsRepointToDeploymentForProjectEnv(ctx context.Context, arg *DomainsRepointToDeploymentForProjectEnvParams) (int64, error) {
+	result, err := q.db.Exec(ctx, domainsRepointToDeploymentForProjectEnv, arg.ProjectID, arg.EnvironmentID, arg.DeploymentID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const domainsVerify = `-- name: DomainsVerify :one
 UPDATE domains 
 SET verified_at = now(), 

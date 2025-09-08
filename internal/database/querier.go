@@ -51,6 +51,8 @@ type Querier interface {
 	DomainsListAll(ctx context.Context) ([]*DomainsListAllRow, error)
 	// List all verified domains
 	DomainsListVerified(ctx context.Context) ([]*DomainsListVerifiedRow, error)
+	// Repoint all verified, non-internal domains for a project+env to a deployment
+	DomainsRepointToDeploymentForProjectEnv(ctx context.Context, arg *DomainsRepointToDeploymentForProjectEnvParams) (int64, error)
 	// Mark domain as verified
 	DomainsVerify(ctx context.Context, id pgtype.UUID) (*DomainsVerifyRow, error)
 	// Mark an image build as completed

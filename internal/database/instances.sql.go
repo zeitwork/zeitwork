@@ -51,16 +51,16 @@ RETURNING
 `
 
 type InstancesCreateParams struct {
-	ID                   pgtype.UUID `json:"id"`
-	RegionID             pgtype.UUID `json:"region_id"`
-	NodeID               pgtype.UUID `json:"node_id"`
-	ImageID              pgtype.UUID `json:"image_id"`
-	State                string      `json:"state"`
-	Vcpus                int32       `json:"vcpus"`
-	Memory               int32       `json:"memory"`
-	DefaultPort          int32       `json:"default_port"`
-	IpAddress            string      `json:"ip_address"`
-	EnvironmentVariables string      `json:"environment_variables"`
+	ID                   pgtype.UUID      `json:"id"`
+	RegionID             pgtype.UUID      `json:"region_id"`
+	NodeID               pgtype.UUID      `json:"node_id"`
+	ImageID              pgtype.UUID      `json:"image_id"`
+	State                InstanceStatuses `json:"state"`
+	Vcpus                int32            `json:"vcpus"`
+	Memory               int32            `json:"memory"`
+	DefaultPort          int32            `json:"default_port"`
+	IpAddress            string           `json:"ip_address"`
+	EnvironmentVariables string           `json:"environment_variables"`
 }
 
 type InstancesCreateRow struct {
@@ -68,7 +68,7 @@ type InstancesCreateRow struct {
 	RegionID             pgtype.UUID        `json:"region_id"`
 	NodeID               pgtype.UUID        `json:"node_id"`
 	ImageID              pgtype.UUID        `json:"image_id"`
-	State                string             `json:"state"`
+	State                InstanceStatuses   `json:"state"`
 	Vcpus                int32              `json:"vcpus"`
 	Memory               int32              `json:"memory"`
 	DefaultPort          int32              `json:"default_port"`
@@ -147,7 +147,7 @@ type InstancesFindByNodeRow struct {
 	RegionID             pgtype.UUID        `json:"region_id"`
 	NodeID               pgtype.UUID        `json:"node_id"`
 	ImageID              pgtype.UUID        `json:"image_id"`
-	State                string             `json:"state"`
+	State                InstanceStatuses   `json:"state"`
 	Vcpus                int32              `json:"vcpus"`
 	Memory               int32              `json:"memory"`
 	DefaultPort          int32              `json:"default_port"`
@@ -216,7 +216,7 @@ type InstancesGetByDeploymentRow struct {
 	RegionID             pgtype.UUID        `json:"region_id"`
 	NodeID               pgtype.UUID        `json:"node_id"`
 	ImageID              pgtype.UUID        `json:"image_id"`
-	State                string             `json:"state"`
+	State                InstanceStatuses   `json:"state"`
 	Vcpus                int32              `json:"vcpus"`
 	Memory               int32              `json:"memory"`
 	DefaultPort          int32              `json:"default_port"`
@@ -284,7 +284,7 @@ type InstancesGetByIdRow struct {
 	RegionID             pgtype.UUID        `json:"region_id"`
 	NodeID               pgtype.UUID        `json:"node_id"`
 	ImageID              pgtype.UUID        `json:"image_id"`
-	State                string             `json:"state"`
+	State                InstanceStatuses   `json:"state"`
 	Vcpus                int32              `json:"vcpus"`
 	Memory               int32              `json:"memory"`
 	DefaultPort          int32              `json:"default_port"`
@@ -345,7 +345,7 @@ type InstancesUpdateIpAddressRow struct {
 	RegionID             pgtype.UUID        `json:"region_id"`
 	NodeID               pgtype.UUID        `json:"node_id"`
 	ImageID              pgtype.UUID        `json:"image_id"`
-	State                string             `json:"state"`
+	State                InstanceStatuses   `json:"state"`
 	Vcpus                int32              `json:"vcpus"`
 	Memory               int32              `json:"memory"`
 	DefaultPort          int32              `json:"default_port"`
@@ -397,8 +397,8 @@ RETURNING
 `
 
 type InstancesUpdateStateParams struct {
-	ID    pgtype.UUID `json:"id"`
-	State string      `json:"state"`
+	ID    pgtype.UUID      `json:"id"`
+	State InstanceStatuses `json:"state"`
 }
 
 type InstancesUpdateStateRow struct {
@@ -406,7 +406,7 @@ type InstancesUpdateStateRow struct {
 	RegionID             pgtype.UUID        `json:"region_id"`
 	NodeID               pgtype.UUID        `json:"node_id"`
 	ImageID              pgtype.UUID        `json:"image_id"`
-	State                string             `json:"state"`
+	State                InstanceStatuses   `json:"state"`
 	Vcpus                int32              `json:"vcpus"`
 	Memory               int32              `json:"memory"`
 	DefaultPort          int32              `json:"default_port"`

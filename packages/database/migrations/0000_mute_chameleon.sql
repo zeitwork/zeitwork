@@ -1,9 +1,10 @@
 CREATE TYPE "public"."image_build_status" AS ENUM('pending', 'building', 'completed', 'failed');--> statement-breakpoint
+CREATE TYPE "public"."instance_statuses" AS ENUM('pending', 'starting', 'running', 'stopping', 'stopped', 'failed', 'terminated');--> statement-breakpoint
+CREATE TYPE "public"."deployment_statuses" AS ENUM('pending', 'building', 'deploying', 'active', 'inactive', 'failed');--> statement-breakpoint
 CREATE TABLE "image_builds" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"status" "image_build_status" DEFAULT 'pending' NOT NULL,
 	"github_repository" text NOT NULL,
-	"github_branch" text NOT NULL,
 	"github_commit" text NOT NULL,
 	"image_id" uuid,
 	"started_at" timestamp with time zone,
@@ -29,7 +30,7 @@ CREATE TABLE "instances" (
 	"region_id" uuid NOT NULL,
 	"node_id" uuid NOT NULL,
 	"image_id" uuid NOT NULL,
-	"state" text NOT NULL,
+	"state" "instance_statuses" DEFAULT 'pending' NOT NULL,
 	"vcpus" integer NOT NULL,
 	"memory" integer NOT NULL,
 	"default_port" integer NOT NULL,
@@ -98,7 +99,7 @@ CREATE TABLE "deployment_instances" (
 CREATE TABLE "deployments" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"deployment_id" text NOT NULL,
-	"status" text NOT NULL,
+	"status" "deployment_statuses" DEFAULT 'pending' NOT NULL,
 	"github_commit" text NOT NULL,
 	"project_id" uuid NOT NULL,
 	"environment_id" uuid NOT NULL,
