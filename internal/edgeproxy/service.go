@@ -29,23 +29,18 @@ import (
 	pb "github.com/zeitwork/zeitwork/proto"
 )
 
-// VMEndpoint represents a VM endpoint with its IP address (IPv4 or IPv6)
-// IPv6 format: fd00:00:<region_id>:<node_id>:<vm_id>/64
-// IPv4 format: 172.20.x.x (Docker internal network)
-type VMEndpoint struct {
+// Endpoint represents a backend endpoint with its IP address
+type Endpoint struct {
 	URL       *url.URL
 	IPAddress string // Full IP address (IPv4 or IPv6)
-	RegionID  string // Extracted from address (IPv6 only)
-	NodeID    string // Extracted from address (IPv6 only)
-	VMID      string // Extracted from address (IPv6 only)
 	Port      int    // Service port
 }
 
 // Route represents a routing configuration for a domain
 // Maps domain names to VM endpoints
 type Route struct {
-	Domain    string       // e.g., app.example.com
-	Endpoints []VMEndpoint // Available VM endpoints
+	Domain    string     // e.g., app.example.com
+	Endpoints []Endpoint // Available endpoints
 }
 
 // Service represents the native Go edge proxy service
@@ -288,16 +283,16 @@ func (s *Service) handleProxy(w http.ResponseWriter, r *http.Request) {
 	if len(route.Endpoints) == 0 {
 		s.setStandardHeaders(w)
 		s.logger.Warn("No endpoints available for domain", "domain", domain)
-		s.templateManager.ServeErrorPage(w, r, http.StatusBadGateway, domain, "No healthy VMs available")
+		s.templateManager.ServeErrorPage(w, r, http.StatusBadGateway, domain, "No healthy endpoints available")
 		return
 	}
 
-	// Select a VM endpoint using random load balancing
-	endpoint := s.selectVMEndpoint(route.Endpoints)
+	// Select an endpoint using random load balancing
+	endpoint := s.selectEndpoint(route.Endpoints)
 	if endpoint == nil {
 		s.setStandardHeaders(w)
-		s.logger.Error("Failed to select VM endpoint", "domain", domain)
-		s.templateManager.ServeErrorPage(w, r, http.StatusBadGateway, domain, "No healthy VM available")
+		s.logger.Error("Failed to select endpoint", "domain", domain)
+		s.templateManager.ServeErrorPage(w, r, http.StatusBadGateway, domain, "No healthy endpoint available")
 		return
 	}
 
@@ -305,9 +300,6 @@ func (s *Service) handleProxy(w http.ResponseWriter, r *http.Request) {
 	s.logger.Debug("Routing request",
 		"domain", domain,
 		"ip_address", endpoint.IPAddress,
-		"region", endpoint.RegionID,
-		"node", endpoint.NodeID,
-		"vm", endpoint.VMID,
 		"port", endpoint.Port)
 
 	// Proxy the request to the selected VM with error handling
@@ -316,6 +308,7 @@ func (s *Service) handleProxy(w http.ResponseWriter, r *http.Request) {
 	// Ensure Server header on successful proxy responses
 	proxy.ModifyResponse = func(resp *http.Response) error {
 		resp.Header.Set("Server", "Zeitwork")
+		resp.Header.Set("X-Zeitwork-Endpoint", fmt.Sprintf("%s:%d", endpoint.IPAddress, endpoint.Port))
 		return nil
 	}
 
@@ -346,8 +339,8 @@ func (s *Service) handleProxy(w http.ResponseWriter, r *http.Request) {
 	proxy.ServeHTTP(w, r)
 }
 
-// selectVMEndpoint randomly selects a VM endpoint from the available endpoints
-func (s *Service) selectVMEndpoint(endpoints []VMEndpoint) *VMEndpoint {
+// selectEndpoint randomly selects an endpoint from the available endpoints
+func (s *Service) selectEndpoint(endpoints []Endpoint) *Endpoint {
 	if len(endpoints) == 0 {
 		return nil
 	}
@@ -366,7 +359,7 @@ func (s *Service) loadAndApplyConfig() error {
 		return fmt.Errorf("failed to load routes from database: %w", err)
 	}
 
-	// Build domain -> VM endpoints mapping
+	// Build domain -> endpoints mapping
 	routeMap := make(map[string]*Route)
 
 	for _, row := range rows {
@@ -376,7 +369,7 @@ func (s *Service) loadAndApplyConfig() error {
 			continue
 		}
 
-		// Skip unhealthy VMs
+		// Skip unhealthy endpoints
 		if !row.Healthy {
 			s.logger.Debug("Skipping unhealthy VM",
 				"domain", domain,
@@ -384,7 +377,7 @@ func (s *Service) loadAndApplyConfig() error {
 			continue
 		}
 
-		// Create VM endpoint URL (use IP and instance default_port)
+		// Create endpoint URL (use IP and instance default_port)
 		var endpointURL *url.URL
 		var err error
 		endpointURL, err = url.Parse(fmt.Sprintf("http://%s:%d", row.IpAddress, row.DefaultPort))
@@ -397,16 +390,10 @@ func (s *Service) loadAndApplyConfig() error {
 			continue
 		}
 
-		// Region, node, and VM IDs no longer extracted
-		var regionID, nodeID, vmID string
-
-		// Create VM endpoint
-		vmEndpoint := VMEndpoint{
+		// Create endpoint
+		endpoint := Endpoint{
 			URL:       endpointURL,
 			IPAddress: row.IpAddress,
-			RegionID:  regionID,
-			NodeID:    nodeID,
-			VMID:      vmID,
 			Port:      int(row.DefaultPort),
 		}
 
@@ -421,19 +408,19 @@ func (s *Service) loadAndApplyConfig() error {
 		for _, key := range keys {
 			route, exists := routeMap[key]
 			if !exists {
-				route = &Route{Domain: key, Endpoints: make([]VMEndpoint, 0)}
+				route = &Route{Domain: key, Endpoints: make([]Endpoint, 0)}
 				routeMap[key] = route
 			}
-			// Add VM endpoint to route (avoid duplicates)
+			// Add endpoint to route (avoid duplicates)
 			endpointExists := false
 			for _, ep := range route.Endpoints {
-				if ep.IPAddress == vmEndpoint.IPAddress && ep.Port == vmEndpoint.Port {
+				if ep.IPAddress == endpoint.IPAddress && ep.Port == endpoint.Port {
 					endpointExists = true
 					break
 				}
 			}
 			if !endpointExists {
-				route.Endpoints = append(route.Endpoints, vmEndpoint)
+				route.Endpoints = append(route.Endpoints, endpoint)
 			}
 		}
 	}
@@ -448,7 +435,7 @@ func (s *Service) loadAndApplyConfig() error {
 		totalEndpoints += len(route.Endpoints)
 		s.logger.Debug("Domain route configured",
 			"domain", domain,
-			"vm_count", len(route.Endpoints))
+			"endpoint_count", len(route.Endpoints))
 	}
 
 	s.logger.Info("Routing table updated",
