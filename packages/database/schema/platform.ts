@@ -2,6 +2,7 @@ import {
   boolean,
   integer,
   jsonb,
+  pgEnum,
   pgTable,
   text,
   timestamp,
@@ -20,30 +21,27 @@ export const regions = pgTable("regions", {
 
 export const nodes = pgTable("nodes", {
   id: uuid().primaryKey().$defaultFn(uuidv7),
-  regionId: uuid().references(() => regions.id),
-  hostname: text().notNull().unique(),
-  ipAddress: text().notNull(),
+  regionId: uuid()
+    .notNull()
+    .references(() => regions.id),
+  hostname: text().notNull(),
+  ipAddress: text().notNull().unique(),
   state: text().notNull(), // booting, ready, draining, down, terminated, error, unknown
   resources: jsonb().notNull(), // { vcpu: 1, memory: 1024 }
   ...timestamps,
 });
 
-// export const ipv6Allocations = pgTable("ipv6_allocations", {
-//   id: uuid().primaryKey().$defaultFn(uuidv7),
-//   regionId: uuid().references(() => regions.id),
-//   nodeId: uuid().references(() => nodes.id),
-//   instanceId: uuid().references(() => instances.id),
-//   ipv6Address: text().notNull().unique(), // Full IPv6 address
-//   prefix: text().notNull(), // IPv6 prefix for this allocation
-//   state: text().notNull(), // allocated, released, reserved
-//   ...timestamps,
-// });
-
 export const instances = pgTable("instances", {
   id: uuid().primaryKey().$defaultFn(uuidv7),
-  regionId: uuid().references(() => regions.id),
-  nodeId: uuid().references(() => nodes.id),
-  imageId: uuid().references(() => images.id),
+  regionId: uuid()
+    .notNull()
+    .references(() => regions.id),
+  nodeId: uuid()
+    .notNull()
+    .references(() => nodes.id),
+  imageId: uuid()
+    .notNull()
+    .references(() => images.id),
   state: text().notNull(), // pending, starting, running, stopping, stopped, failed, terminated
   vcpus: integer().notNull(),
   memory: integer().notNull(),
@@ -58,6 +56,31 @@ export const images = pgTable("images", {
   name: text().notNull(),
   size: integer(), // in bytes
   hash: text().notNull(), // sha256 hash of the image
+  ...timestamps,
+});
+
+export const imageBuildStatus = pgEnum("image_build_status", [
+  "pending",
+  "building",
+  "completed",
+  "failed",
+]);
+
+// status is computed based on other fields
+export const imageBuilds = pgTable("image_builds", {
+  id: uuid().primaryKey().$defaultFn(uuidv7),
+  status: imageBuildStatus().notNull().default("pending"),
+  //
+  githubRepository: text().notNull(),
+  githubBranch: text().notNull(),
+  githubCommit: text().notNull(),
+  //
+  imageId: uuid().references(() => images.id),
+  //
+  startedAt: timestamp({ withTimezone: true }),
+  completedAt: timestamp({ withTimezone: true }),
+  failedAt: timestamp({ withTimezone: true }),
+  //
   ...timestamps,
 });
 

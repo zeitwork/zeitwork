@@ -1,3 +1,19 @@
+CREATE TYPE "public"."image_build_status" AS ENUM('pending', 'building', 'completed', 'failed');--> statement-breakpoint
+CREATE TABLE "image_builds" (
+	"id" uuid PRIMARY KEY NOT NULL,
+	"status" "image_build_status" DEFAULT 'pending' NOT NULL,
+	"github_repository" text NOT NULL,
+	"github_branch" text NOT NULL,
+	"github_commit" text NOT NULL,
+	"image_id" uuid,
+	"started_at" timestamp with time zone,
+	"completed_at" timestamp with time zone,
+	"failed_at" timestamp with time zone,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"deleted_at" timestamp with time zone
+);
+--> statement-breakpoint
 CREATE TABLE "images" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"name" text NOT NULL,
@@ -10,9 +26,9 @@ CREATE TABLE "images" (
 --> statement-breakpoint
 CREATE TABLE "instances" (
 	"id" uuid PRIMARY KEY NOT NULL,
-	"region_id" uuid,
-	"node_id" uuid,
-	"image_id" uuid,
+	"region_id" uuid NOT NULL,
+	"node_id" uuid NOT NULL,
+	"image_id" uuid NOT NULL,
 	"state" text NOT NULL,
 	"vcpus" integer NOT NULL,
 	"memory" integer NOT NULL,
@@ -26,7 +42,7 @@ CREATE TABLE "instances" (
 --> statement-breakpoint
 CREATE TABLE "nodes" (
 	"id" uuid PRIMARY KEY NOT NULL,
-	"region_id" uuid,
+	"region_id" uuid NOT NULL,
 	"hostname" text NOT NULL,
 	"ip_address" text NOT NULL,
 	"state" text NOT NULL,
@@ -34,7 +50,7 @@ CREATE TABLE "nodes" (
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"deleted_at" timestamp with time zone,
-	CONSTRAINT "nodes_hostname_unique" UNIQUE("hostname")
+	CONSTRAINT "nodes_ipAddress_unique" UNIQUE("ip_address")
 );
 --> statement-breakpoint
 CREATE TABLE "regions" (
@@ -69,20 +85,10 @@ CREATE TABLE "ssl_locks" (
 	CONSTRAINT "ssl_locks_key_unique" UNIQUE("key")
 );
 --> statement-breakpoint
-CREATE TABLE "deployment_domains" (
-	"id" uuid PRIMARY KEY NOT NULL,
-	"deployment_id" uuid,
-	"domain_id" uuid,
-	"organisation_id" uuid NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"deleted_at" timestamp with time zone
-);
---> statement-breakpoint
 CREATE TABLE "deployment_instances" (
 	"id" uuid PRIMARY KEY NOT NULL,
-	"deployment_id" uuid,
-	"instance_id" uuid,
+	"deployment_id" uuid NOT NULL,
+	"instance_id" uuid NOT NULL,
 	"organisation_id" uuid NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -93,10 +99,11 @@ CREATE TABLE "deployments" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"deployment_id" text NOT NULL,
 	"status" text NOT NULL,
-	"commit_hash" text NOT NULL,
-	"project_id" uuid,
-	"environment_id" uuid,
+	"github_commit" text NOT NULL,
+	"project_id" uuid NOT NULL,
+	"environment_id" uuid NOT NULL,
 	"image_id" uuid,
+	"image_build_id" uuid,
 	"organisation_id" uuid NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -109,11 +116,36 @@ CREATE TABLE "domains" (
 	"name" text NOT NULL,
 	"verification_token" text,
 	"verified_at" timestamp with time zone,
+	"deployment_id" uuid,
 	"internal" boolean DEFAULT false NOT NULL,
 	"organisation_id" uuid NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"deleted_at" timestamp with time zone
+);
+--> statement-breakpoint
+CREATE TABLE "environment_domains" (
+	"id" uuid PRIMARY KEY NOT NULL,
+	"domain_id" uuid NOT NULL,
+	"project_id" uuid NOT NULL,
+	"environment_id" uuid NOT NULL,
+	"organisation_id" uuid NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"deleted_at" timestamp with time zone
+);
+--> statement-breakpoint
+CREATE TABLE "environment_variables" (
+	"id" uuid PRIMARY KEY NOT NULL,
+	"name" text NOT NULL,
+	"value" text NOT NULL,
+	"project_id" uuid NOT NULL,
+	"environment_id" uuid NOT NULL,
+	"organisation_id" uuid NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"deleted_at" timestamp with time zone,
+	CONSTRAINT "environment_variables_name_unique" UNIQUE("name","project_id","environment_id","organisation_id")
 );
 --> statement-breakpoint
 CREATE TABLE "github_installations" (
@@ -128,22 +160,9 @@ CREATE TABLE "github_installations" (
 	CONSTRAINT "github_installations_githubInstallationId_unique" UNIQUE("github_installation_id")
 );
 --> statement-breakpoint
-CREATE TABLE "image_builds" (
-	"id" uuid PRIMARY KEY NOT NULL,
-	"status" text NOT NULL,
-	"deployment_id" uuid,
-	"started_at" timestamp with time zone,
-	"completed_at" timestamp with time zone,
-	"failed_at" timestamp with time zone,
-	"organisation_id" uuid NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"deleted_at" timestamp with time zone
-);
---> statement-breakpoint
 CREATE TABLE "organisation_members" (
 	"id" uuid PRIMARY KEY NOT NULL,
-	"user_id" uuid,
+	"user_id" uuid NOT NULL,
 	"organisation_id" uuid NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -160,20 +179,11 @@ CREATE TABLE "organisations" (
 	CONSTRAINT "organisations_slug_unique" UNIQUE("slug")
 );
 --> statement-breakpoint
-CREATE TABLE "project_domains" (
-	"id" uuid PRIMARY KEY NOT NULL,
-	"project_id" uuid,
-	"domain_id" uuid,
-	"organisation_id" uuid NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"deleted_at" timestamp with time zone
-);
---> statement-breakpoint
 CREATE TABLE "project_environments" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"name" text NOT NULL,
-	"project_id" uuid,
+	"branch" text NOT NULL,
+	"project_id" uuid NOT NULL,
 	"organisation_id" uuid NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -181,27 +191,12 @@ CREATE TABLE "project_environments" (
 	CONSTRAINT "project_environments_name_projectId_organisationId_unique" UNIQUE("name","project_id","organisation_id")
 );
 --> statement-breakpoint
-CREATE TABLE "project_secrets" (
-	"id" uuid PRIMARY KEY NOT NULL,
-	"name" text NOT NULL,
-	"value" text NOT NULL,
-	"project_id" uuid,
-	"environment_id" uuid,
-	"organisation_id" uuid NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"deleted_at" timestamp with time zone,
-	CONSTRAINT "project_secrets_name_projectId_organisationId_unique" UNIQUE("name","project_id","organisation_id")
-);
---> statement-breakpoint
 CREATE TABLE "projects" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"name" text NOT NULL,
 	"slug" text NOT NULL,
 	"github_repository" text NOT NULL,
-	"default_branch" text NOT NULL,
-	"github_installation_id" integer NOT NULL,
-	"latest_deployment_id" uuid,
+	"github_installation_id" uuid NOT NULL,
 	"organisation_id" uuid NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -241,35 +236,34 @@ CREATE TABLE "waitlist" (
 	CONSTRAINT "waitlist_email_unique" UNIQUE("email")
 );
 --> statement-breakpoint
+ALTER TABLE "image_builds" ADD CONSTRAINT "image_builds_image_id_images_id_fk" FOREIGN KEY ("image_id") REFERENCES "public"."images"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "instances" ADD CONSTRAINT "instances_region_id_regions_id_fk" FOREIGN KEY ("region_id") REFERENCES "public"."regions"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "instances" ADD CONSTRAINT "instances_node_id_nodes_id_fk" FOREIGN KEY ("node_id") REFERENCES "public"."nodes"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "instances" ADD CONSTRAINT "instances_image_id_images_id_fk" FOREIGN KEY ("image_id") REFERENCES "public"."images"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "nodes" ADD CONSTRAINT "nodes_region_id_regions_id_fk" FOREIGN KEY ("region_id") REFERENCES "public"."regions"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "deployment_domains" ADD CONSTRAINT "deployment_domains_deployment_id_deployments_id_fk" FOREIGN KEY ("deployment_id") REFERENCES "public"."deployments"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "deployment_domains" ADD CONSTRAINT "deployment_domains_domain_id_domains_id_fk" FOREIGN KEY ("domain_id") REFERENCES "public"."domains"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "deployment_domains" ADD CONSTRAINT "deployment_domains_organisation_id_organisations_id_fk" FOREIGN KEY ("organisation_id") REFERENCES "public"."organisations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "deployment_instances" ADD CONSTRAINT "deployment_instances_deployment_id_deployments_id_fk" FOREIGN KEY ("deployment_id") REFERENCES "public"."deployments"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "deployment_instances" ADD CONSTRAINT "deployment_instances_instance_id_instances_id_fk" FOREIGN KEY ("instance_id") REFERENCES "public"."instances"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "deployment_instances" ADD CONSTRAINT "deployment_instances_organisation_id_organisations_id_fk" FOREIGN KEY ("organisation_id") REFERENCES "public"."organisations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "deployments" ADD CONSTRAINT "deployments_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "deployments" ADD CONSTRAINT "deployments_environment_id_project_environments_id_fk" FOREIGN KEY ("environment_id") REFERENCES "public"."project_environments"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "deployments" ADD CONSTRAINT "deployments_image_id_images_id_fk" FOREIGN KEY ("image_id") REFERENCES "public"."images"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "deployments" ADD CONSTRAINT "deployments_image_build_id_image_builds_id_fk" FOREIGN KEY ("image_build_id") REFERENCES "public"."image_builds"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "deployments" ADD CONSTRAINT "deployments_organisation_id_organisations_id_fk" FOREIGN KEY ("organisation_id") REFERENCES "public"."organisations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "domains" ADD CONSTRAINT "domains_deployment_id_deployments_id_fk" FOREIGN KEY ("deployment_id") REFERENCES "public"."deployments"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "domains" ADD CONSTRAINT "domains_organisation_id_organisations_id_fk" FOREIGN KEY ("organisation_id") REFERENCES "public"."organisations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "environment_domains" ADD CONSTRAINT "environment_domains_domain_id_domains_id_fk" FOREIGN KEY ("domain_id") REFERENCES "public"."domains"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "environment_domains" ADD CONSTRAINT "environment_domains_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "environment_domains" ADD CONSTRAINT "environment_domains_environment_id_project_environments_id_fk" FOREIGN KEY ("environment_id") REFERENCES "public"."project_environments"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "environment_domains" ADD CONSTRAINT "environment_domains_organisation_id_organisations_id_fk" FOREIGN KEY ("organisation_id") REFERENCES "public"."organisations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "environment_variables" ADD CONSTRAINT "environment_variables_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "environment_variables" ADD CONSTRAINT "environment_variables_environment_id_project_environments_id_fk" FOREIGN KEY ("environment_id") REFERENCES "public"."project_environments"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "environment_variables" ADD CONSTRAINT "environment_variables_organisation_id_organisations_id_fk" FOREIGN KEY ("organisation_id") REFERENCES "public"."organisations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "github_installations" ADD CONSTRAINT "github_installations_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "github_installations" ADD CONSTRAINT "github_installations_organisation_id_organisations_id_fk" FOREIGN KEY ("organisation_id") REFERENCES "public"."organisations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "image_builds" ADD CONSTRAINT "image_builds_deployment_id_deployments_id_fk" FOREIGN KEY ("deployment_id") REFERENCES "public"."deployments"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "image_builds" ADD CONSTRAINT "image_builds_organisation_id_organisations_id_fk" FOREIGN KEY ("organisation_id") REFERENCES "public"."organisations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "organisation_members" ADD CONSTRAINT "organisation_members_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "organisation_members" ADD CONSTRAINT "organisation_members_organisation_id_organisations_id_fk" FOREIGN KEY ("organisation_id") REFERENCES "public"."organisations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "project_domains" ADD CONSTRAINT "project_domains_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "project_domains" ADD CONSTRAINT "project_domains_domain_id_domains_id_fk" FOREIGN KEY ("domain_id") REFERENCES "public"."domains"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "project_domains" ADD CONSTRAINT "project_domains_organisation_id_organisations_id_fk" FOREIGN KEY ("organisation_id") REFERENCES "public"."organisations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "project_environments" ADD CONSTRAINT "project_environments_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "project_environments" ADD CONSTRAINT "project_environments_organisation_id_organisations_id_fk" FOREIGN KEY ("organisation_id") REFERENCES "public"."organisations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "project_secrets" ADD CONSTRAINT "project_secrets_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "project_secrets" ADD CONSTRAINT "project_secrets_environment_id_project_environments_id_fk" FOREIGN KEY ("environment_id") REFERENCES "public"."project_environments"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "project_secrets" ADD CONSTRAINT "project_secrets_organisation_id_organisations_id_fk" FOREIGN KEY ("organisation_id") REFERENCES "public"."organisations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "projects" ADD CONSTRAINT "projects_latest_deployment_id_deployments_id_fk" FOREIGN KEY ("latest_deployment_id") REFERENCES "public"."deployments"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "projects" ADD CONSTRAINT "projects_github_installation_id_github_installations_id_fk" FOREIGN KEY ("github_installation_id") REFERENCES "public"."github_installations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "projects" ADD CONSTRAINT "projects_organisation_id_organisations_id_fk" FOREIGN KEY ("organisation_id") REFERENCES "public"."organisations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "sessions" ADD CONSTRAINT "sessions_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE no action ON UPDATE no action;

@@ -1,4 +1,4 @@
-import { deployments, domains, projectDomains, projects } from "@zeitwork/database/schema"
+import { deployments, domains, projects, environmentDomains } from "@zeitwork/database/schema"
 import { eq, and, inArray } from "drizzle-orm"
 import { z } from "zod"
 
@@ -16,7 +16,7 @@ export default defineEventHandler(async (event) => {
     domains?: (typeof domains.$inferSelect)[]
   }
 
-  type ProjectDomain = typeof projectDomains.$inferSelect & {
+  type ProjectDomain = typeof environmentDomains.$inferSelect & {
     domain?: typeof domains.$inferSelect | null
   }
 
@@ -48,32 +48,11 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, message: "Project not found" })
   }
 
-  // Has deployment, then get the latest deployment
-  if (project.latestDeploymentId) {
-    let [latestDeployment] = await useDrizzle()
-      .select()
-      .from(deployments)
-      .where(eq(deployments.projectId, project.id))
-      .limit(1)
-    project.latestDeployment = latestDeployment
-  } else {
-    project.latestDeployment = null
-  }
-
-  // Fetch the domains for each deployment
-  if (project.latestDeployment) {
-    const results = await useDrizzle()
-      .select()
-      .from(domains)
-      .where(eq(domains.deploymentId, project.latestDeployment.id))
-    project.latestDeployment.domains = results
-  }
-
   // project domains
   const projectDomainList = await useDrizzle()
     .select()
-    .from(projectDomains)
-    .where(eq(projectDomains.projectId, project.id))
+    .from(environmentDomains)
+    .where(eq(environmentDomains.projectId, project.id))
   project.domains = projectDomainList
 
   return project

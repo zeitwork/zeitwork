@@ -52,10 +52,3 @@ services:
       - REGISTRY_STORAGE_DELETE_ENABLED=true
     volumes:
       - registry_data:/var/lib/registry
-
-  # Dummy service to ensure zeitwork network is created and maintained
-  network-keeper:
-    image: busybox:latest
-    command: sleep infinity
-    networks:
-      - zeitwork

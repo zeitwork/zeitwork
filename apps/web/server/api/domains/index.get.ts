@@ -1,4 +1,4 @@
-import { deployments, domains, projectDomains, projects } from "@zeitwork/database/schema"
+import { deployments, domains, projects, environmentDomains } from "@zeitwork/database/schema"
 import { eq, inArray, SQL } from "drizzle-orm"
 import { z } from "zod"
 
@@ -25,8 +25,10 @@ export default defineEventHandler(async (event) => {
 
     const projectDomainList = await useDrizzle()
       .select()
-      .from(projectDomains)
-      .where(and(eq(projectDomains.projectId, project.id), eq(projectDomains.organisationId, secure.organisationId)))
+      .from(environmentDomains)
+      .where(
+        and(eq(environmentDomains.projectId, project.id), eq(environmentDomains.organisationId, secure.organisationId)),
+      )
 
     if (!projectDomainList) return []
 

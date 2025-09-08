@@ -118,10 +118,10 @@ function deploymentStatusBgColor(status: string) {
             {{ deployment.status }}
           </div>
         </div>
-        <div class="font-mono">{{ deployment.commitHash.slice(0, 7) }}</div>
+        <div class="font-mono">{{ deployment.githubCommit.slice(0, 7) }}</div>
         <div>
           <nuxt-link :to="formatDeploymentUrl(deployment)" external target="_blank">
-            {{ deployment.domains?.[0].name }}
+            {{ deployment.domains?.[0]?.name }}
           </nuxt-link>
         </div>
         <div class="text-right">{{ renderDate(deployment.createdAt) }}</div>

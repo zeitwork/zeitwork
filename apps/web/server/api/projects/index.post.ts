@@ -1,4 +1,4 @@
-import { projects, githubInstallations, projectSecrets, projectEnvironments } from "@zeitwork/database/schema"
+import { projects, githubInstallations, projectEnvironments } from "@zeitwork/database/schema"
 import { useDeploymentModel } from "~~/server/models/deployment"
 import z from "zod"
 
@@ -39,7 +39,7 @@ export default defineEventHandler(async (event) => {
       body.repository.repo,
     )
     if (repository) {
-      githubInstallationId = iteration.githubInstallationId
+      githubInstallationId = iteration.id
       githubRepositoryId = repository.id
       break
     }
@@ -69,8 +69,7 @@ export default defineEventHandler(async (event) => {
         name: body.name,
         slug: generateSlug(body.name),
         githubRepository: githubRepository,
-        githubInstallationId: githubInstallationId!,
-        defaultBranch: "main",
+        githubInstallationId: githubInstallationId,
         organisationId: secure.organisationId,
       })
       .returning()
@@ -78,39 +77,32 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 500, message: "Failed to create project" })
     }
 
-    // Create project environments
-    const defaults = ["production", "staging"]
-    const envs = await tx
+    // Create default production environment
+    const [productionEnv] = await tx
       .insert(projectEnvironments)
-      .values(
-        defaults.map((env) => ({
-          name: env,
-          projectId: project.id,
-          organisationId: secure.organisationId,
-        })),
-      )
+      .values({
+        name: "production",
+        branch: "main",
+        projectId: project.id,
+        organisationId: secure.organisationId,
+      })
       .returning()
-    if (!envs || envs.length !== defaults.length) {
-      throw createError({ statusCode: 500, message: "Failed to create project environments" })
-    }
-
-    const productionEnv = envs.find((env) => env.name === "production")
     if (!productionEnv) {
       throw createError({ statusCode: 500, message: "Failed to create production environment" })
     }
 
-    if (body.secrets.length > 0) {
-      // Create environment variables
-      await tx.insert(projectSecrets).values(
-        body.secrets.map((secret) => ({
-          name: secret.name,
-          value: encryptSecret(secret.value),
-          projectId: project.id,
-          environmentId: productionEnv.id,
-          organisationId: secure.organisationId,
-        })),
-      )
-    }
+    // if (body.secrets.length > 0) {
+    //   // Create environment variables
+    //   await tx.insert(projectEnvironmentVariables).values(
+    //     body.secrets.map((secret) => ({
+    //       name: secret.name,
+    //       value: encryptSecret(secret.value),
+    //       projectId: project.id,
+    //       environmentId: productionEnv.id,
+    //       organisationId: secure.organisationId,
+    //     })),
+    //   )
+    // }
 
     return { project, productionEnv }
   })

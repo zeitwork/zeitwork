@@ -1,4 +1,11 @@
-import { deployments, organisations, projects, domains } from "@zeitwork/database/schema"
+import {
+  deployments,
+  organisations,
+  projects,
+  domains,
+  githubInstallations,
+  projectEnvironments,
+} from "@zeitwork/database/schema"
 import { customAlphabet } from "nanoid"
 import { eq } from "../utils/drizzle"
 
@@ -44,11 +51,31 @@ export function useDeploymentModel() {
 
       const deploymentId = generateDeploymentId()
 
+      const [githubInstallation] = await useDrizzle()
+        .select()
+        .from(githubInstallations)
+        .where(eq(githubInstallations.id, project.githubInstallationId))
+        .limit(1)
+
+      if (!githubInstallation) {
+        return { data: null, error: new Error("GitHub installation not found") }
+      }
+
+      // environment
+      const [environment] = await useDrizzle()
+        .select()
+        .from(projectEnvironments)
+        .where(eq(projectEnvironments.id, params.environmentId))
+        .limit(1)
+      if (!environment) {
+        return { data: null, error: new Error("Environment not found") }
+      }
+
       const { data: latestCommitHash, error: latestCommitHashError } = await github.branch.getLatestCommitSHA(
-        project.githubInstallationId,
+        githubInstallation.githubInstallationId,
         project.githubRepository.split("/")[0],
         project.githubRepository.split("/")[1],
-        project.defaultBranch,
+        environment.branch,
       )
       if (latestCommitHashError) {
         return { data: null, error: new Error("Failed to get latest commit hash") }
@@ -59,8 +86,8 @@ export function useDeploymentModel() {
         .values({
           deploymentId: deploymentId,
           status: "pending",
-          commitHash: latestCommitHash,
           projectId: project.id,
+          githubCommit: latestCommitHash,
           environmentId: params.environmentId,
           organisationId: params.organisationId,
         })

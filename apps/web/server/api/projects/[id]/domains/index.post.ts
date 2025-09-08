@@ -1,4 +1,4 @@
-import { domains, projectDomains, projects } from "@zeitwork/database/schema"
+import { domains, projects, environmentDomains } from "@zeitwork/database/schema"
 import { and, eq } from "drizzle-orm"
 import { z } from "zod"
 
@@ -56,20 +56,21 @@ export default defineEventHandler(async (event) => {
     // Ensure project-domain link exists
     const [existingLink] = await tx
       .select()
-      .from(projectDomains)
+      .from(environmentDomains)
       .where(
         and(
-          eq(projectDomains.projectId, project.id),
-          eq(projectDomains.domainId, existingDomain.id),
-          eq(projectDomains.organisationId, secure.organisationId),
+          eq(environmentDomains.projectId, project.id),
+          eq(environmentDomains.domainId, existingDomain.id),
+          eq(environmentDomains.organisationId, secure.organisationId),
         ),
       )
       .limit(1)
 
     if (!existingLink) {
-      await tx.insert(projectDomains).values({
+      await tx.insert(environmentDomains).values({
         projectId: project.id,
         domainId: existingDomain.id,
+        environmentId: project.productionEnv.id, // TODO: Get the production environment
         organisationId: secure.organisationId,
       })
     }
