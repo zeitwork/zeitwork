@@ -58,7 +58,6 @@ export const images = pgTable("images", {
   name: text().notNull(),
   size: integer(), // in bytes
   hash: text().notNull(), // sha256 hash of the image
-  objectKey: text(), // S3 object key
   ...timestamps,
 });
 

@@ -3,7 +3,6 @@ CREATE TABLE "images" (
 	"name" text NOT NULL,
 	"size" integer,
 	"hash" text NOT NULL,
-	"object_key" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"deleted_at" timestamp with time zone

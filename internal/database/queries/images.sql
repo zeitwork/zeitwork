@@ -5,7 +5,6 @@ SELECT
     name,
     size,
     hash,
-    object_key,
     created_at,
     updated_at
 FROM images 
@@ -19,7 +18,6 @@ SELECT
     name,
     size,
     hash,
-    object_key,
     created_at,
     updated_at
 FROM images 
@@ -32,21 +30,18 @@ INSERT INTO images (
     id,
     name,
     size,
-    hash,
-    object_key
+    hash
 ) VALUES (
     $1,
     $2,
     $3,
-    $4,
-    $5
+    $4
 )
 RETURNING 
     id,
     name,
     size,
     hash,
-    object_key,
     created_at,
     updated_at;
 
@@ -56,7 +51,6 @@ UPDATE images
 SET name = $2, 
     size = $3,
     hash = $4,
-    object_key = $5,
     updated_at = now()
 WHERE id = $1
 RETURNING 
@@ -64,7 +58,6 @@ RETURNING
     name,
     size,
     hash,
-    object_key,
     created_at,
     updated_at;
 
@@ -75,7 +68,6 @@ SELECT
     name,
     size,
     hash,
-    object_key,
     created_at,
     updated_at
 FROM images 

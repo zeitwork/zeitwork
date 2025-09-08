@@ -63,7 +63,6 @@ type Image struct {
 	Name      string             `json:"name"`
 	Size      pgtype.Int4        `json:"size"`
 	Hash      string             `json:"hash"`
-	ObjectKey pgtype.Text        `json:"object_key"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt pgtype.Timestamptz `json:"deleted_at"`

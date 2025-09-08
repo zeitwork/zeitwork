@@ -32,6 +32,7 @@ export default defineEventHandler(async (event) => {
     .from(deployments)
     .leftJoin(domains, eq(deployments.id, domains.deploymentId))
     .where(and(...wheres))
+    .orderBy(desc(deployments.id))
 
   const result = query.map((row) => ({
     ...row.deployments,

@@ -125,6 +125,39 @@ func (o *DeploymentOrchestrator) HandleDeploymentCreatedByID(ctx context.Context
 	return o.CreateImageBuildForDeployment(ctx, deployment)
 }
 
+// ReconcilePendingDeploymentsWithoutBuilds ensures pending deployments have an image build
+func (o *DeploymentOrchestrator) ReconcilePendingDeploymentsWithoutBuilds(ctx context.Context) error {
+	o.logger.Info("Reconciling pending deployments without builds")
+
+	pending, err := o.db.DeploymentsGetPendingWithoutBuilds(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get pending deployments without builds: %w", err)
+	}
+
+	if len(pending) == 0 {
+		o.logger.Debug("No pending deployments require build creation")
+		return nil
+	}
+
+	o.logger.Info("Found pending deployments without builds", "count", len(pending))
+
+	// Create builds for each pending deployment (idempotent via HandleDeploymentCreatedByID checks)
+	errors := lo.FilterMap(pending, func(d *database.DeploymentsGetPendingWithoutBuildsRow, _ int) (error, bool) {
+		if err := o.HandleDeploymentCreatedByID(ctx, d.ID); err != nil {
+			o.logger.Error("Failed to ensure image build for deployment", "deployment_id", d.ID, "error", err)
+			return err, true
+		}
+		o.logger.Info("Ensured image build exists for deployment", "deployment_id", d.ID)
+		return nil, false
+	})
+
+	if len(errors) > 0 {
+		return fmt.Errorf("failed to reconcile %d pending deployments without builds: %v", len(errors), errors)
+	}
+
+	return nil
+}
+
 // HandleInstanceUpdatedByID processes instance update events and updates project's latest deployment if eligible
 func (o *DeploymentOrchestrator) HandleInstanceUpdatedByID(ctx context.Context, instanceID pgtype.UUID) error {
 	// Map instance -> deployment via deployment_instances

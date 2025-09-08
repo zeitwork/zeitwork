@@ -97,7 +97,7 @@ export function useDeploymentModel() {
   }
 }
 
-const deploymentIdAlphabet = "0123456789abcdefghijklmnopqrstuvwxyz"
+const deploymentIdAlphabet = "123456789abcdefghijkmnopqrstuvwxyz"
 const deploymentIdGenerator = customAlphabet(deploymentIdAlphabet, 10)
 
 function generateDeploymentId(): string {
@@ -107,10 +107,10 @@ function generateDeploymentId(): string {
 /**
  * Generates an internal domain name for a deployment
  * Pattern: <project-slug>-<deployment-id>-<org-slug>.zeitwork.app (production)
- * Pattern: <project-slug>-<deployment-id>-<org-slug>.zeitwork.localhost:7777 (development)
+ * Pattern: <project-slug>-<deployment-id>-<org-slug>.zeitwork.localhost (development)
  */
 function generateInternalDomain(projectSlug: string, deploymentId: string, orgSlug: string): string {
   const isDevelopment = process.env.NODE_ENV === "development" || process.env.ENVIRONMENT === "development"
-  const baseDomain = isDevelopment ? "zeitwork.localhost:8080" : "zeitwork.app"
+  const baseDomain = isDevelopment ? "zeitwork.localhost" : "zeitwork.app"
   return `${projectSlug}-${deploymentId}-${orgSlug}.${baseDomain}`
 }

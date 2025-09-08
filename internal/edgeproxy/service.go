@@ -12,11 +12,12 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	natsgo "github.com/nats-io/nats.go"
 	"google.golang.org/protobuf/proto"
@@ -24,6 +25,7 @@ import (
 	"github.com/zeitwork/zeitwork/internal/database"
 	"github.com/zeitwork/zeitwork/internal/shared/config"
 	"github.com/zeitwork/zeitwork/internal/shared/nats"
+	pguuid "github.com/zeitwork/zeitwork/internal/shared/uuid"
 	pb "github.com/zeitwork/zeitwork/proto"
 )
 
@@ -53,8 +55,7 @@ type Service struct {
 	db              *pgxpool.Pool
 	queries         *database.Queries
 	natsClient      *nats.Client
-	routesMu        sync.RWMutex
-	routes          map[string]*Route // Key: domain name
+	routes          atomic.Value // stores map[string]*Route
 	portHttp        int
 	portHttps       int
 	templateManager *TemplateManager
@@ -130,12 +131,14 @@ func NewService(config *Config, logger *slog.Logger) (*Service, error) {
 		db:              db,
 		queries:         queries,
 		natsClient:      natsClient,
-		routes:          make(map[string]*Route),
 		portHttp:        config.PortHttp,
 		portHttps:       config.PortHttps,
 		templateManager: templateManager,
 		certs:           make(map[string]*tls.Certificate),
 	}
+
+	// Initialize routes map for atomic access
+	s.routes.Store(make(map[string]*Route))
 
 	return s, nil
 }
@@ -186,19 +189,29 @@ func (s *Service) configPoller(ctx context.Context) {
 
 // startHTTPServer starts the main HTTP proxy server
 func (s *Service) startHTTPServer(ctx context.Context) {
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", s.handleProxy)
+	// Separate muxes for HTTP (redirect) and HTTPS (proxy)
+	httpMux := http.NewServeMux()
+	httpsMux := http.NewServeMux()
 
-	// Health check endpoint
-	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+	// Shared health handler (available over both HTTP and HTTPS)
+	healthHandler := func(w http.ResponseWriter, r *http.Request) {
+		s.setStandardHeaders(w)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(map[string]string{"status": "healthy"})
-	})
+	}
+
+	// HTTPS handlers: full proxy + health
+	httpsMux.HandleFunc("/", s.handleProxy)
+	httpsMux.HandleFunc("/health", healthHandler)
+
+	// HTTP handlers: health + redirect all other paths to HTTPS
+	httpMux.HandleFunc("/health", healthHandler)
+	httpMux.HandleFunc("/", s.redirectToHTTPS)
 
 	httpServer := &http.Server{
 		Addr:    fmt.Sprintf(":%d", s.portHttp),
-		Handler: mux,
+		Handler: httpMux,
 	}
 
 	// HTTPS server with dynamic certificate selection
@@ -209,7 +222,7 @@ func (s *Service) startHTTPServer(ctx context.Context) {
 	}
 	httpsServer := &http.Server{
 		Addr:      fmt.Sprintf(":%d", s.portHttps),
-		Handler:   mux,
+		Handler:   httpsMux,
 		TLSConfig: tlsConfig,
 	}
 
@@ -261,18 +274,19 @@ func (s *Service) handleProxy(w http.ResponseWriter, r *http.Request) {
 	// Extract domain from request
 	domain := strings.ToLower(r.Host)
 
-	// Look up route for this domain
-	s.routesMu.RLock()
-	route, exists := s.routes[domain]
-	s.routesMu.RUnlock()
+	// Look up route for this domain (lock-free read)
+	current := s.routes.Load().(map[string]*Route)
+	route, exists := current[domain]
 
 	if !exists {
+		s.setStandardHeaders(w)
 		s.logger.Debug("Domain not found in routing table", "domain", domain)
 		s.templateManager.ServeErrorPage(w, r, http.StatusNotFound, domain, "Domain not found in routing table")
 		return
 	}
 
 	if len(route.Endpoints) == 0 {
+		s.setStandardHeaders(w)
 		s.logger.Warn("No endpoints available for domain", "domain", domain)
 		s.templateManager.ServeErrorPage(w, r, http.StatusBadGateway, domain, "No healthy VMs available")
 		return
@@ -281,6 +295,7 @@ func (s *Service) handleProxy(w http.ResponseWriter, r *http.Request) {
 	// Select a VM endpoint using random load balancing
 	endpoint := s.selectVMEndpoint(route.Endpoints)
 	if endpoint == nil {
+		s.setStandardHeaders(w)
 		s.logger.Error("Failed to select VM endpoint", "domain", domain)
 		s.templateManager.ServeErrorPage(w, r, http.StatusBadGateway, domain, "No healthy VM available")
 		return
@@ -298,8 +313,15 @@ func (s *Service) handleProxy(w http.ResponseWriter, r *http.Request) {
 	// Proxy the request to the selected VM with error handling
 	proxy := httputil.NewSingleHostReverseProxy(endpoint.URL)
 
+	// Ensure Server header on successful proxy responses
+	proxy.ModifyResponse = func(resp *http.Response) error {
+		resp.Header.Set("Server", "Zeitwork")
+		return nil
+	}
+
 	// Custom error handler for proxy failures
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+		s.setStandardHeaders(w)
 		s.logger.Error("Proxy request failed",
 			"domain", domain,
 			"ip_address", endpoint.IPAddress,
@@ -336,71 +358,7 @@ func (s *Service) selectVMEndpoint(endpoints []VMEndpoint) *VMEndpoint {
 	return &selected
 }
 
-// detectIPVersion determines if an address is IPv4 or IPv6
-func detectIPVersion(address string) int {
-	// Remove any CIDR suffix
-	address = strings.Split(address, "/")[0]
-
-	if strings.Contains(address, ":") {
-		return 6 // IPv6
-	}
-	return 4 // IPv4
-}
-
-// parseIPv6VM extracts region, node, and VM IDs from an IPv6 address
-// Expected format: fd00:00:<region_id>:<node_id>:<vm_id>/64
-func parseIPv6VM(ipv6 string) (regionID, nodeID, vmID string) {
-	// Remove the /64 suffix if present
-	ipv6 = strings.TrimSuffix(ipv6, "/64")
-
-	// Split the IPv6 address into segments
-	segments := strings.Split(ipv6, ":")
-	if len(segments) >= 5 {
-		regionID = segments[2]
-		nodeID = segments[3]
-		vmID = segments[4]
-	}
-	return
-}
-
-// normalizeIPAddress converts IP address to the format expected by the runtime
-func normalizeIPAddress(address string, ipVersion int) string {
-	// Remove CIDR suffix
-	address = strings.Split(address, "/")[0]
-
-	if ipVersion == 6 {
-		// Convert IPv6 address format to match what Docker actually assigns
-		// Convert fd00:00:199:199:199 -> fd00::199:199:199
-		if strings.HasPrefix(address, "fd00:00:") {
-			parts := strings.Split(address, ":")
-			if len(parts) >= 5 {
-				return fmt.Sprintf("fd00::%s:%s:%s",
-					strings.TrimLeft(parts[2], "0"),
-					strings.TrimLeft(parts[3], "0"),
-					strings.TrimLeft(parts[4], "0"))
-			}
-		}
-		// TODO: Production IPv6 Implementation
-		// - Add fd12:: support for production IPv6 (avoids conflicts with existing fd62:: on host)
-		// - Implement proper IPv6 routing for production environments
-		// - Consider using ULA ranges that don't conflict with existing network infrastructure
-		// - Add IPv6 firewall rules and security considerations
-		if strings.HasPrefix(address, "fd12:00:") {
-			// TODO: Implement fd12:: address normalization for production
-			// Similar to fd00:: but with different prefix
-		}
-	}
-
-	// IPv4 addresses are used as-is
-	return address
-}
-
 // loadAndApplyConfig loads configuration from database and applies it to the proxy
-//
-// Development vs Production IP Handling:
-// - Development: Uses Docker IPv4 addresses (172.20.x.x) which are accessible from macOS host
-// - Production: Uses IPv6 addresses (fd00:: or fd12::) with proper routing infrastructure
-// - The edge proxy automatically detects IP version and handles both transparently
 func (s *Service) loadAndApplyConfig() error {
 	// Get all active deployments with their routes
 	rows, err := s.queries.DeploymentsGetActiveRoutes(context.Background())
@@ -426,36 +384,21 @@ func (s *Service) loadAndApplyConfig() error {
 			continue
 		}
 
-		// Detect IP version and normalize address
-		ipVersion := detectIPVersion(row.IpAddress)
-		normalizedAddress := normalizeIPAddress(row.IpAddress, ipVersion)
-
-		// Create VM endpoint URL based on IP version
+		// Create VM endpoint URL (use IP and instance default_port)
 		var endpointURL *url.URL
 		var err error
-
-		if ipVersion == 6 {
-			// IPv6 addresses need brackets in URLs
-			endpointURL, err = url.Parse(fmt.Sprintf("http://[%s]:%d", normalizedAddress, row.DefaultPort))
-		} else {
-			// IPv4 addresses don't need brackets
-			endpointURL, err = url.Parse(fmt.Sprintf("http://%s:%d", normalizedAddress, row.DefaultPort))
-		}
+		endpointURL, err = url.Parse(fmt.Sprintf("http://%s:%d", row.IpAddress, row.DefaultPort))
 
 		if err != nil {
 			s.logger.Error("Failed to parse VM endpoint URL",
 				"ip_address", row.IpAddress,
-				"normalized", normalizedAddress,
 				"port", row.DefaultPort,
 				"error", err)
 			continue
 		}
 
-		// Extract region, node, and VM IDs (only for IPv6)
+		// Region, node, and VM IDs no longer extracted
 		var regionID, nodeID, vmID string
-		if ipVersion == 6 {
-			regionID, nodeID, vmID = parseIPv6VM(row.IpAddress)
-		}
 
 		// Create VM endpoint
 		vmEndpoint := VMEndpoint{
@@ -467,33 +410,36 @@ func (s *Service) loadAndApplyConfig() error {
 			Port:      int(row.DefaultPort),
 		}
 
-		// Get or create route for this domain
-		route, exists := routeMap[domain]
-		if !exists {
-			route = &Route{
-				Domain:    domain,
-				Endpoints: make([]VMEndpoint, 0),
-			}
-			routeMap[domain] = route
+		// Register route under bare domain and common port-suffixed variants
+		keys := []string{domain}
+		if s.portHttp != 80 {
+			keys = append(keys, fmt.Sprintf("%s:%d", domain, s.portHttp))
 		}
-
-		// Add VM endpoint to route (avoid duplicates)
-		endpointExists := false
-		for _, ep := range route.Endpoints {
-			if ep.IPAddress == vmEndpoint.IPAddress && ep.Port == vmEndpoint.Port {
-				endpointExists = true
-				break
-			}
+		if s.portHttps != 443 {
+			keys = append(keys, fmt.Sprintf("%s:%d", domain, s.portHttps))
 		}
-		if !endpointExists {
-			route.Endpoints = append(route.Endpoints, vmEndpoint)
+		for _, key := range keys {
+			route, exists := routeMap[key]
+			if !exists {
+				route = &Route{Domain: key, Endpoints: make([]VMEndpoint, 0)}
+				routeMap[key] = route
+			}
+			// Add VM endpoint to route (avoid duplicates)
+			endpointExists := false
+			for _, ep := range route.Endpoints {
+				if ep.IPAddress == vmEndpoint.IPAddress && ep.Port == vmEndpoint.Port {
+					endpointExists = true
+					break
+				}
+			}
+			if !endpointExists {
+				route.Endpoints = append(route.Endpoints, vmEndpoint)
+			}
 		}
 	}
 
-	// Update routes atomically
-	s.routesMu.Lock()
-	s.routes = routeMap
-	s.routesMu.Unlock()
+	// Atomically swap the routes map
+	s.routes.Store(routeMap)
 
 	// Log routing table summary
 	totalDomains := len(routeMap)
@@ -732,6 +678,14 @@ func (s *Service) getCertificateForClientHello(hello *tls.ClientHelloInfo) (*tls
 		}
 	}
 
+	// 5) Derive wildcard from requested domain and attempt load (e.g., app.example.com -> *.example.com)
+	if wildcard := deriveBaseWildcard(domain); wildcard != "" {
+		loaded, err = s.loadCertificateFromDB(wildcard)
+		if err == nil && loaded != nil {
+			return loaded, nil
+		}
+	}
+
 	return nil, fmt.Errorf("no certificate for domain %s", domain)
 }
 
@@ -745,6 +699,56 @@ func (s *Service) getBaseWildcard() string {
 		}
 	}
 	return ""
+}
+
+// setStandardHeaders sets common response headers for all edgeproxy responses.
+func (s *Service) setStandardHeaders(w http.ResponseWriter) {
+	w.Header().Set("Server", "Zeitwork")
+}
+
+// deriveBaseWildcard builds a wildcard candidate from the requested domain, e.g.
+// "app.example.com" -> "*.example.com". Returns empty string if not derivable.
+func deriveBaseWildcard(domain string) string {
+	parts := strings.Split(domain, ".")
+	if len(parts) >= 2 {
+		base := strings.Join(parts[len(parts)-2:], ".")
+		return "*." + base
+	}
+	return ""
+}
+
+// redirectToHTTPS redirects all HTTP requests to HTTPS preserving host and path.
+func (s *Service) redirectToHTTPS(w http.ResponseWriter, r *http.Request) {
+	// Allow local HTTP health checks without redirect
+	if r.URL.Path == "/health" {
+		s.setStandardHeaders(w)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(map[string]string{"status": "healthy"})
+		return
+	}
+
+	// Strip incoming port and rebuild with configured HTTPS port
+	hostOnly := r.Host
+	if h, _, err := net.SplitHostPort(r.Host); err == nil {
+		hostOnly = h
+	}
+
+	httpsHost := hostOnly
+	if s.portHttps != 443 {
+		httpsHost = net.JoinHostPort(hostOnly, strconv.Itoa(s.portHttps))
+	}
+
+	target := &url.URL{
+		Scheme: "https",
+		Host:   httpsHost,
+		Path:   r.URL.Path,
+	}
+	// Preserve query string if present
+	target.RawQuery = r.URL.RawQuery
+
+	s.setStandardHeaders(w)
+	http.Redirect(w, r, target.String(), http.StatusPermanentRedirect)
 }
 
 func (s *Service) loadCertificateFromDB(name string) (*tls.Certificate, error) {
@@ -770,7 +774,7 @@ func (s *Service) loadCertificateFromDB(name string) (*tls.Certificate, error) {
 
 func (s *Service) prefetchCertByID(id string) {
 	// Load cert by id (reads key and value), then cache by domain name extracted from key
-	row, err := s.queries.SslCertsGetById(context.Background(), uuid.MustParse(id))
+	row, err := s.queries.SslCertsGetById(context.Background(), pguuid.MustParseUUID(id))
 	if err != nil || row == nil {
 		s.logger.Error("Failed to prefetch cert by id", "id", id, "error", err)
 		return

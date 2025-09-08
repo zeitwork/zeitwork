@@ -548,11 +548,10 @@ func (s *Service) createImageRecord(ctx context.Context, result *types.BuildResu
 
 	// Create the image record
 	_, err := s.queries.ImagesCreate(ctx, &database.ImagesCreateParams{
-		ID:        imageUUID,
-		Name:      result.ImageTag,
-		Size:      imageSize,
-		Hash:      result.ImageHash,
-		ObjectKey: pgtype.Text{}, // We're not using S3 object key for registry images
+		ID:   imageUUID,
+		Name: result.ImageTag,
+		Size: imageSize,
+		Hash: result.ImageHash,
 	})
 
 	if err != nil {

@@ -115,6 +115,11 @@ func (s *Service) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to subscribe to events: %w", err)
 	}
 
+	// Reconcile pending deployments without builds on startup
+	if err := s.orchestrator.ReconcilePendingDeploymentsWithoutBuilds(ctx); err != nil {
+		return fmt.Errorf("failed to reconcile pending deployments without builds: %w", err)
+	}
+
 	// Start the deployment reconciler
 	if err := s.reconciler.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start reconciler: %w", err)

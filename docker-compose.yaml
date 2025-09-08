@@ -59,4 +59,3 @@ services:
     command: sleep infinity
     networks:
       - zeitwork
-    restart: unless-stopped

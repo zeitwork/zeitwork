@@ -16,31 +16,27 @@ INSERT INTO images (
     id,
     name,
     size,
-    hash,
-    object_key
+    hash
 ) VALUES (
     $1,
     $2,
     $3,
-    $4,
-    $5
+    $4
 )
 RETURNING 
     id,
     name,
     size,
     hash,
-    object_key,
     created_at,
     updated_at
 `
 
 type ImagesCreateParams struct {
-	ID        pgtype.UUID `json:"id"`
-	Name      string      `json:"name"`
-	Size      pgtype.Int4 `json:"size"`
-	Hash      string      `json:"hash"`
-	ObjectKey pgtype.Text `json:"object_key"`
+	ID   pgtype.UUID `json:"id"`
+	Name string      `json:"name"`
+	Size pgtype.Int4 `json:"size"`
+	Hash string      `json:"hash"`
 }
 
 type ImagesCreateRow struct {
@@ -48,7 +44,6 @@ type ImagesCreateRow struct {
 	Name      string             `json:"name"`
 	Size      pgtype.Int4        `json:"size"`
 	Hash      string             `json:"hash"`
-	ObjectKey pgtype.Text        `json:"object_key"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
@@ -60,7 +55,6 @@ func (q *Queries) ImagesCreate(ctx context.Context, arg *ImagesCreateParams) (*I
 		arg.Name,
 		arg.Size,
 		arg.Hash,
-		arg.ObjectKey,
 	)
 	var i ImagesCreateRow
 	err := row.Scan(
@@ -68,7 +62,6 @@ func (q *Queries) ImagesCreate(ctx context.Context, arg *ImagesCreateParams) (*I
 		&i.Name,
 		&i.Size,
 		&i.Hash,
-		&i.ObjectKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -81,7 +74,6 @@ SELECT
     name,
     size,
     hash,
-    object_key,
     created_at,
     updated_at
 FROM images 
@@ -94,7 +86,6 @@ type ImagesGetAllRow struct {
 	Name      string             `json:"name"`
 	Size      pgtype.Int4        `json:"size"`
 	Hash      string             `json:"hash"`
-	ObjectKey pgtype.Text        `json:"object_key"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
@@ -114,7 +105,6 @@ func (q *Queries) ImagesGetAll(ctx context.Context) ([]*ImagesGetAllRow, error) 
 			&i.Name,
 			&i.Size,
 			&i.Hash,
-			&i.ObjectKey,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -134,7 +124,6 @@ SELECT
     name,
     size,
     hash,
-    object_key,
     created_at,
     updated_at
 FROM images 
@@ -147,7 +136,6 @@ type ImagesGetByHashRow struct {
 	Name      string             `json:"name"`
 	Size      pgtype.Int4        `json:"size"`
 	Hash      string             `json:"hash"`
-	ObjectKey pgtype.Text        `json:"object_key"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
@@ -161,7 +149,6 @@ func (q *Queries) ImagesGetByHash(ctx context.Context, hash string) (*ImagesGetB
 		&i.Name,
 		&i.Size,
 		&i.Hash,
-		&i.ObjectKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -174,7 +161,6 @@ SELECT
     name,
     size,
     hash,
-    object_key,
     created_at,
     updated_at
 FROM images 
@@ -187,7 +173,6 @@ type ImagesGetByIdRow struct {
 	Name      string             `json:"name"`
 	Size      pgtype.Int4        `json:"size"`
 	Hash      string             `json:"hash"`
-	ObjectKey pgtype.Text        `json:"object_key"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
@@ -201,7 +186,6 @@ func (q *Queries) ImagesGetById(ctx context.Context, id pgtype.UUID) (*ImagesGet
 		&i.Name,
 		&i.Size,
 		&i.Hash,
-		&i.ObjectKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -213,7 +197,6 @@ UPDATE images
 SET name = $2, 
     size = $3,
     hash = $4,
-    object_key = $5,
     updated_at = now()
 WHERE id = $1
 RETURNING 
@@ -221,17 +204,15 @@ RETURNING
     name,
     size,
     hash,
-    object_key,
     created_at,
     updated_at
 `
 
 type ImagesUpdateParams struct {
-	ID        pgtype.UUID `json:"id"`
-	Name      string      `json:"name"`
-	Size      pgtype.Int4 `json:"size"`
-	Hash      string      `json:"hash"`
-	ObjectKey pgtype.Text `json:"object_key"`
+	ID   pgtype.UUID `json:"id"`
+	Name string      `json:"name"`
+	Size pgtype.Int4 `json:"size"`
+	Hash string      `json:"hash"`
 }
 
 type ImagesUpdateRow struct {
@@ -239,7 +220,6 @@ type ImagesUpdateRow struct {
 	Name      string             `json:"name"`
 	Size      pgtype.Int4        `json:"size"`
 	Hash      string             `json:"hash"`
-	ObjectKey pgtype.Text        `json:"object_key"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
 }
@@ -251,7 +231,6 @@ func (q *Queries) ImagesUpdate(ctx context.Context, arg *ImagesUpdateParams) (*I
 		arg.Name,
 		arg.Size,
 		arg.Hash,
-		arg.ObjectKey,
 	)
 	var i ImagesUpdateRow
 	err := row.Scan(
@@ -259,7 +238,6 @@ func (q *Queries) ImagesUpdate(ctx context.Context, arg *ImagesUpdateParams) (*I
 		&i.Name,
 		&i.Size,
 		&i.Hash,
-		&i.ObjectKey,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
