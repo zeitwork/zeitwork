@@ -1,7 +1,9 @@
 package docker
 
 import (
+	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -180,12 +182,48 @@ func (d *DockerBuildRuntime) pushDockerImage(ctx context.Context, imageTag strin
 	}
 	defer pushResponse.Close()
 
-	// Read the push output
-	pushLog, err := io.ReadAll(pushResponse)
-	if err != nil {
-		return "", fmt.Errorf("failed to read push output: %w", err)
+	// Read the push output line by line to handle streaming response properly
+	var pushLog strings.Builder
+	scanner := bufio.NewScanner(pushResponse)
+	
+	// Track if we encountered any errors in the push stream
+	var lastError string
+	
+	for scanner.Scan() {
+		line := scanner.Text()
+		pushLog.WriteString(line)
+		pushLog.WriteString("\n")
+		
+		// Parse JSON to check for errors in the push stream
+		var pushStatus struct {
+			Error       string `json:"error,omitempty"`
+			ErrorDetail struct {
+				Message string `json:"message,omitempty"`
+			} `json:"errorDetail,omitempty"`
+		}
+		
+		if err := json.Unmarshal([]byte(line), &pushStatus); err == nil {
+			if pushStatus.Error != "" {
+				lastError = pushStatus.Error
+			} else if pushStatus.ErrorDetail.Message != "" {
+				lastError = pushStatus.ErrorDetail.Message
+			}
+		}
+	}
+	
+	// Check for scanner errors (this will catch EOF and other read errors)
+	if err := scanner.Err(); err != nil {
+		// Don't treat EOF as an error if we got some output
+		if err != io.EOF || pushLog.Len() == 0 {
+			d.logger.Warn("Error reading push output stream", "error", err, "tag", imageTag, "output_length", pushLog.Len())
+		}
+	}
+	
+	// Check if there was an error reported in the push stream
+	if lastError != "" {
+		return pushLog.String(), fmt.Errorf("docker push failed: %s", lastError)
 	}
 
 	d.logger.Debug("Docker image pushed successfully", "tag", imageTag)
-	return string(pushLog), nil
+	return pushLog.String(), nil
 }

@@ -1,0 +1,18 @@
+[Unit]
+Description=firecracker-containerd daemon
+After=network.target
+
+[Service]
+Type=notify
+ExecStart={{.FirecrackerContainerdBinary}} --config {{.ConfigPath}}
+Restart=always
+RestartSec=5
+Delegate=yes
+KillMode=process
+OOMScoreAdjust=-999
+LimitNOFILE=1048576
+LimitNPROC=1048576
+LimitCORE=infinity
+
+[Install]
+WantedBy=multi-user.target

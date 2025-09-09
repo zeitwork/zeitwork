@@ -1,0 +1,99 @@
+#!/bin/bash
+set -euo pipefail
+
+# Create a basic rootfs image for firecracker VMs
+ROOTFS_PATH="{{.RootfsPath}}"
+ROOTFS_SIZE="{{.RootfsSize}}"
+TEMP_MOUNT="{{.TempMount}}"
+
+echo "Creating rootfs image: $ROOTFS_PATH"
+
+# Check if rootfs already exists
+if [[ -f "$ROOTFS_PATH" ]]; then
+    echo "Rootfs image already exists: $ROOTFS_PATH"
+    exit 0
+fi
+
+echo "Creating sparse file ($ROOTFS_SIZE)..."
+truncate -s "$ROOTFS_SIZE" "$ROOTFS_PATH"
+
+echo "Formatting as ext4..."
+mkfs.ext4 -F "$ROOTFS_PATH"
+
+echo "Mounting rootfs for setup..."
+mkdir -p "$TEMP_MOUNT"
+mount -o loop "$ROOTFS_PATH" "$TEMP_MOUNT"
+
+# Cleanup function
+cleanup() {
+    echo "Unmounting rootfs..."
+    umount "$TEMP_MOUNT" 2>/dev/null || true
+    rmdir "$TEMP_MOUNT" 2>/dev/null || true
+}
+trap cleanup EXIT
+
+echo "Creating basic directory structure..."
+# Create essential directories
+mkdir -p "$TEMP_MOUNT"/{bin,sbin,usr/{bin,sbin},lib,lib64,etc,proc,sys,dev,tmp,var,run,root,home}
+
+echo "Copying essential binaries..."
+# Copy basic utilities if available
+BINARIES=("/bin/sh" "/bin/bash" "/bin/ls" "/bin/cat" "/bin/echo" "/bin/cp" "/bin/mv" "/bin/rm")
+
+for binary in "${BINARIES[@]}"; do
+    if [[ -f "$binary" ]]; then
+        cp "$binary" "$TEMP_MOUNT/bin/" 2>/dev/null || true
+        echo "Copied: $binary"
+    fi
+done
+
+# Copy shared libraries for basic binaries
+echo "Copying essential libraries..."
+if [[ -f "/lib64/ld-linux-x86-64.so.2" ]]; then
+    cp "/lib64/ld-linux-x86-64.so.2" "$TEMP_MOUNT/lib64/"
+fi
+
+# Copy some basic shared libraries
+LIB_DIRS=("/lib/x86_64-linux-gnu" "/usr/lib/x86_64-linux-gnu" "/lib64")
+for lib_dir in "${LIB_DIRS[@]}"; do
+    if [[ -d "$lib_dir" ]]; then
+        # Copy essential libraries
+        for lib in libc.so.6 libdl.so.2 libpthread.so.0 librt.so.1; do
+            if [[ -f "$lib_dir/$lib" ]]; then
+                mkdir -p "$TEMP_MOUNT$(dirname "$lib_dir")"
+                cp "$lib_dir/$lib" "$TEMP_MOUNT$lib_dir/" 2>/dev/null || true
+            fi
+        done
+    fi
+done
+
+echo "Creating basic configuration files..."
+# Create basic /etc/passwd
+cat > "$TEMP_MOUNT/etc/passwd" << 'EOF'
+root:x:0:0:root:/root:/bin/sh
+nobody:x:65534:65534:nobody:/nonexistent:/usr/sbin/nologin
+EOF
+
+# Create basic /etc/group
+cat > "$TEMP_MOUNT/etc/group" << 'EOF'
+root:x:0:
+nogroup:x:65534:
+EOF
+
+# Create basic /etc/fstab
+cat > "$TEMP_MOUNT/etc/fstab" << 'EOF'
+/dev/vda1 / ext4 rw 0 1
+proc /proc proc defaults 0 0
+sysfs /sys sysfs defaults 0 0
+devtmpfs /dev devtmpfs defaults 0 0
+tmpfs /tmp tmpfs defaults 0 0
+EOF
+
+echo "Setting permissions..."
+chmod 755 "$TEMP_MOUNT/bin"/* 2>/dev/null || true
+chmod 755 "$TEMP_MOUNT/sbin"/* 2>/dev/null || true
+chmod 644 "$TEMP_MOUNT/etc/passwd" "$TEMP_MOUNT/etc/group"
+chmod 600 "$TEMP_MOUNT/etc/fstab"
+
+echo "Rootfs image created successfully: $ROOTFS_PATH"
+echo "Image size: $(du -h "$ROOTFS_PATH" | cut -f1)"

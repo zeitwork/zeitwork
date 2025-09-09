@@ -35,14 +35,35 @@ type DockerRuntimeConfig struct {
 	EnableAutoCleanup bool          // Auto-cleanup stopped containers
 }
 
-// FirecrackerRuntimeConfig contains Firecracker-specific configuration
+// FirecrackerRuntimeConfig contains configuration for firecracker-containerd
 type FirecrackerRuntimeConfig struct {
-	// TODO: Implement Firecracker configuration
-	// ContainerdEndpoint string
-	// SnapshotterName    string
-	// NetworkNamespace   string
-	// KernelImagePath    string
-	// RootfsImagePath    string
+	// firecracker-containerd daemon configuration
+	ContainerdSocket    string // Path to firecracker-containerd socket
+	ContainerdNamespace string // Containerd namespace to use
+	RuntimeConfigPath   string // Path to firecracker runtime config JSON
+
+	// Container resource defaults
+	DefaultVCpus    int32 // Default vCPUs per container
+	DefaultMemoryMB int32 // Default memory per container in MB
+
+	// Networking (CNI-based)
+	CNIConfDir       string // CNI configuration directory
+	CNIBinDir        string // CNI plugin binaries directory
+	NetworkNamespace string // Network namespace for containers
+
+	// Timeouts
+	StartTimeout time.Duration // Timeout for container startup
+	StopTimeout  time.Duration // Timeout for container shutdown
+
+	// Image configuration
+	DefaultKernelPath string // Default kernel image path
+	DefaultRootfsPath string // Default VM base rootfs image path (with agent)
+	ImageRegistry     string // Container image registry
+
+	// Auto-setup configuration
+	EnableAutoSetup bool   // Enable automatic setup and validation on startup
+	EnableJailer    bool   // Enable jailer (recommended: true)
+	BuildMethod     string // Kernel/rootfs build method: "firecracker-devtool", "manual", "skip"
 }
 
 // LoadConfig loads configuration from environment variables
@@ -100,7 +121,33 @@ func loadRuntimeConfig() (*RuntimeConfig, error) {
 		}
 	case "production":
 		config.FirecrackerConfig = &FirecrackerRuntimeConfig{
-			// TODO: Implement Firecracker configuration loading
+			// firecracker-containerd configuration
+			ContainerdSocket:    getEnvOrDefault("FIRECRACKER_CONTAINERD_SOCKET", "/run/firecracker-containerd/containerd.sock"),
+			ContainerdNamespace: getEnvOrDefault("FIRECRACKER_CONTAINERD_NAMESPACE", "zeitwork"),
+			RuntimeConfigPath:   getEnvOrDefault("FIRECRACKER_RUNTIME_CONFIG", "/etc/containerd/firecracker-runtime.json"),
+
+			// Resource defaults
+			DefaultVCpus:    int32(getEnvInt("DEFAULT_VCPUS", 1)),
+			DefaultMemoryMB: int32(getEnvInt("DEFAULT_MEMORY_MB", 128)),
+
+			// CNI networking
+			CNIConfDir:       getEnvOrDefault("CNI_CONF_DIR", "/etc/cni/net.d"),
+			CNIBinDir:        getEnvOrDefault("CNI_BIN_DIR", "/opt/cni/bin"),
+			NetworkNamespace: getEnvOrDefault("NETWORK_NAMESPACE", "zeitwork"),
+
+			// Timeouts
+			StartTimeout: getEnvDuration("FC_START_TIMEOUT", 60*time.Second),
+			StopTimeout:  getEnvDuration("FC_STOP_TIMEOUT", 30*time.Second),
+
+			// Image configuration
+			DefaultKernelPath: getEnvOrDefault("DEFAULT_KERNEL_PATH", "/var/lib/firecracker-containerd/runtime/default-vmlinux.bin"),
+			DefaultRootfsPath: getEnvOrDefault("DEFAULT_ROOTFS_PATH", "/var/lib/firecracker-containerd/runtime/default-rootfs.ext4"),
+			ImageRegistry:     getEnvOrDefault("IMAGE_REGISTRY", "localhost:5001"),
+
+			// Auto-setup and Security
+			EnableAutoSetup: getEnvBool("ENABLE_AUTO_SETUP", true),
+			EnableJailer:    getEnvBool("ENABLE_JAILER", true),
+			BuildMethod:     getEnvOrDefault("BUILD_METHOD", "firecracker-devtool"),
 		}
 	default:
 		return nil, fmt.Errorf("unsupported runtime mode: %s", mode)
@@ -130,6 +177,15 @@ func getEnvBool(key string, defaultValue bool) bool {
 	if value := os.Getenv(key); value != "" {
 		if b, err := strconv.ParseBool(value); err == nil {
 			return b
+		}
+	}
+	return defaultValue
+}
+
+func getEnvInt(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		if i, err := strconv.Atoi(value); err == nil {
+			return i
 		}
 	}
 	return defaultValue

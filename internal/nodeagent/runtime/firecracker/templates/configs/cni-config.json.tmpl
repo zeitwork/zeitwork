@@ -1,0 +1,16 @@
+{
+  "cniVersion": "0.4.0",
+  "name": "{{.NetworkName}}",
+  "type": "bridge",
+  "bridge": "{{.BridgeName}}",
+  "isDefaultGateway": true,
+  "ipMasq": true,
+  "hairpinMode": true,
+  "ipam": {
+    "type": "host-local",
+    "subnet": "{{.Subnet}}",
+    "rangeStart": "{{.RangeStart}}",
+    "rangeEnd": "{{.RangeEnd}}",
+    "gateway": "{{.Gateway}}"
+  }
+}

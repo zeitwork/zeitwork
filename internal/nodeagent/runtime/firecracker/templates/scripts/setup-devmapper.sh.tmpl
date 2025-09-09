@@ -1,0 +1,46 @@
+#!/bin/bash
+set -euo pipefail
+
+# Setup device mapper thin pool for firecracker-containerd snapshotter
+POOL_NAME="{{.PoolName}}"
+DATA_PATH="{{.DataPath}}"
+METADATA_PATH="{{.MetadataPath}}"
+DATA_SIZE="{{.DataSize}}"
+METADATA_SIZE="{{.MetadataSize}}"
+
+echo "Setting up device mapper thin pool: $POOL_NAME"
+
+# Check if pool already exists
+if dmsetup info "$POOL_NAME" >/dev/null 2>&1; then
+    echo "Device mapper pool already exists: $POOL_NAME"
+    exit 0
+fi
+
+echo "Creating sparse files..."
+# Create data file
+truncate -s "$DATA_SIZE" "$DATA_PATH"
+echo "Created data file: $DATA_PATH ($DATA_SIZE)"
+
+# Create metadata file
+truncate -s "$METADATA_SIZE" "$METADATA_PATH"
+echo "Created metadata file: $METADATA_PATH ($METADATA_SIZE)"
+
+echo "Setting up loop devices..."
+# Create loop devices
+DATA_LOOP=$(losetup -f --show "$DATA_PATH")
+METADATA_LOOP=$(losetup -f --show "$METADATA_PATH")
+
+echo "Data loop device: $DATA_LOOP"
+echo "Metadata loop device: $METADATA_LOOP"
+
+# Get device size in sectors
+DATA_SECTORS=$(blockdev --getsz "$DATA_LOOP")
+
+echo "Creating thin pool..."
+# Create thin pool
+dmsetup create "$POOL_NAME" --table "0 $DATA_SECTORS thin-pool $METADATA_LOOP $DATA_LOOP 128 65536 1 skip_block_zeroing"
+
+echo "Device mapper thin pool created successfully: $POOL_NAME"
+
+# Verify pool
+dmsetup status "$POOL_NAME"

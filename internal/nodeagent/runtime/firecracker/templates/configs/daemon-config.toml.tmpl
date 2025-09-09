@@ -1,0 +1,16 @@
+version = 2
+disabled_plugins = ["io.containerd.grpc.v1.cri"]
+root = "{{.ContainerdRoot}}"
+state = "{{.ContainerdState}}"
+
+[grpc]
+address = "{{.ContainerdSocket}}"
+
+[plugins]
+  [plugins."io.containerd.snapshotter.v1.devmapper"]
+    pool_name = "{{.DeviceMapperPool}}"
+    base_image_size = "{{.BaseImageSize}}"
+    root_path = "{{.SnapshotterRoot}}"
+
+[debug]
+level = "{{.LogLevel}}"

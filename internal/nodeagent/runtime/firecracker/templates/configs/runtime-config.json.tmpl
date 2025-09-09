@@ -1,0 +1,16 @@
+{
+  "firecracker_binary_path": "{{.FirecrackerBinary}}",
+  "kernel_image_path": "{{.KernelImagePath}}",
+  "kernel_args": "{{.KernelArgs}}",
+  "root_drive": "{{.RootDrive}}",
+  "cpu_template": "{{.CPUTemplate}}",
+  "machine_config": {
+    "vcpu_count": {{.VCPUs}},
+    "mem_size_mib": {{.MemoryMB}},
+    "ht_enabled": {{.HTEnabled}}
+  },
+  "jailer": {
+    "runc_binary_path": "{{.RuncBinary}}"
+  },
+  "log_level": "{{.LogLevel}}"
+}

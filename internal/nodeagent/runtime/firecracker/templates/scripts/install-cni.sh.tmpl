@@ -1,0 +1,33 @@
+#!/bin/bash
+set -euo pipefail
+
+# Install CNI plugins
+CNI_VERSION="{{.CNIVersion}}"
+CNI_DIR="{{.CNIDir}}"
+TEMP_DIR="{{.TempDir}}"
+CNI_URL="https://github.com/containernetworking/plugins/releases/download/${CNI_VERSION}/cni-plugins-linux-amd64-${CNI_VERSION}.tgz"
+
+echo "Installing CNI plugins ${CNI_VERSION} to ${CNI_DIR}..."
+
+# Create CNI directory
+mkdir -p "$CNI_DIR"
+
+# Check if plugins already exist
+if [[ -f "$CNI_DIR/bridge" ]]; then
+    echo "CNI plugins already installed"
+    exit 0
+fi
+
+cd "$TEMP_DIR"
+
+echo "Downloading CNI plugins..."
+wget -O "cni-plugins-${CNI_VERSION}.tgz" "$CNI_URL"
+
+echo "Installing CNI plugins..."
+tar -C "$CNI_DIR" -xzf "cni-plugins-${CNI_VERSION}.tgz"
+
+# Verify installation
+echo "CNI plugins installed:"
+ls -la "$CNI_DIR"
+
+echo "CNI plugins installation completed successfully"

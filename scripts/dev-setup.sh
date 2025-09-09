@@ -51,7 +51,7 @@ check_prerequisites() {
     local missing_prereqs=0
     
     # Check for required commands
-    local commands=("docker" "docker-compose" "go" "bun" "make")
+    local commands=("docker" "go" "bun" "make")
     for cmd in "${commands[@]}"; do
         if ! check_command "$cmd"; then
             missing_prereqs=1
@@ -91,17 +91,17 @@ start_docker_services() {
     print_status "Starting Docker services (PostgreSQL and NATS)..."
     
     # Check if services are already running
-    if docker-compose ps | grep -q "Up"; then
+    if docker compose ps | grep -q "Up"; then
         print_warning "Some Docker services are already running"
-        docker-compose ps
+        docker compose ps
     else
-        docker-compose up -d
+        docker compose up -d
         
         # Wait for PostgreSQL to be ready
         print_status "Waiting for PostgreSQL to be ready..."
         local retries=30
         while [ $retries -gt 0 ]; do
-            if docker-compose exec -T postgres pg_isready -U postgres &> /dev/null; then
+            if docker compose exec -T postgres pg_isready -U postgres &> /dev/null; then
                 print_success "PostgreSQL is ready"
                 break
             fi
@@ -204,7 +204,12 @@ start_service() {
     export_service_env "$service_name"
     
     # Start the service
-    nohup bash -c "$service_cmd" > "$log_file" 2>&1 &
+    if [ "$service_name" = "nodeagent" ]; then
+        # Nodeagent requires root privileges for firecracker-containerd
+        nohup sudo -E bash -c "$service_cmd" > "$log_file" 2>&1 &
+    else
+        nohup bash -c "$service_cmd" > "$log_file" 2>&1 &
+    fi
     local pid=$!
     
     # Save PID for later cleanup
@@ -310,7 +315,7 @@ main() {
 case "${1:-}" in
     "stop")
         stop_services
-        docker-compose down
+        docker compose down
         print_success "Development environment stopped"
         ;;
     *)
