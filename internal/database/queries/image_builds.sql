@@ -24,6 +24,16 @@ RETURNING
     created_at,
     updated_at;
 
+-- name: ImageBuildsUpdateImageId :one
+-- Set image_id for an image build
+UPDATE image_builds
+SET image_id = $2,
+    updated_at = now()
+WHERE id = $1
+RETURNING 
+    id,
+    image_id;
+
 -- name: ImageBuildsComplete :one
 -- Mark an image build as completed
 UPDATE image_builds 

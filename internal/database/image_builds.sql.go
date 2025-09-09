@@ -346,3 +346,31 @@ func (q *Queries) ImageBuildsResetStale(ctx context.Context, dollar_1 pgtype.Tex
 	}
 	return items, nil
 }
+
+const imageBuildsUpdateImageId = `-- name: ImageBuildsUpdateImageId :one
+UPDATE image_builds
+SET image_id = $2,
+    updated_at = now()
+WHERE id = $1
+RETURNING 
+    id,
+    image_id
+`
+
+type ImageBuildsUpdateImageIdParams struct {
+	ID      pgtype.UUID `json:"id"`
+	ImageID pgtype.UUID `json:"image_id"`
+}
+
+type ImageBuildsUpdateImageIdRow struct {
+	ID      pgtype.UUID `json:"id"`
+	ImageID pgtype.UUID `json:"image_id"`
+}
+
+// Set image_id for an image build
+func (q *Queries) ImageBuildsUpdateImageId(ctx context.Context, arg *ImageBuildsUpdateImageIdParams) (*ImageBuildsUpdateImageIdRow, error) {
+	row := q.db.QueryRow(ctx, imageBuildsUpdateImageId, arg.ID, arg.ImageID)
+	var i ImageBuildsUpdateImageIdRow
+	err := row.Scan(&i.ID, &i.ImageID)
+	return &i, err
+}

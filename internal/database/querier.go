@@ -67,6 +67,8 @@ type Querier interface {
 	ImageBuildsGetById(ctx context.Context, id pgtype.UUID) (*ImageBuildsGetByIdRow, error)
 	// Reset builds that have been "building" for too long (using minutes parameter)
 	ImageBuildsResetStale(ctx context.Context, dollar_1 pgtype.Text) ([]*ImageBuildsResetStaleRow, error)
+	// Set image_id for an image build
+	ImageBuildsUpdateImageId(ctx context.Context, arg *ImageBuildsUpdateImageIdParams) (*ImageBuildsUpdateImageIdRow, error)
 	// Create a new image
 	ImagesCreate(ctx context.Context, arg *ImagesCreateParams) (*ImagesCreateRow, error)
 	// Get all images

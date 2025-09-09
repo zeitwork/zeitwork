@@ -406,6 +406,15 @@ func (s *Service) processBuild(ctx context.Context, build *database.ImageBuild) 
 			return
 		}
 
+		// Link image_build to created image
+		if _, err := s.queries.ImageBuildsUpdateImageId(buildCtx, &database.ImageBuildsUpdateImageIdParams{
+			ID:      build.ID,
+			ImageID: pgtype.UUID{Valid: true, Bytes: imageID.Bytes},
+		}); err != nil {
+			s.logger.Error("Failed to update image_build image_id", "build_id", build.ID, "image_id", imageID, "error", err)
+			// Do not fail the build solely due to linkage; manager can retry on next event
+		}
+
 		// Mark build as completed
 		_, err = s.queries.ImageBuildsComplete(buildCtx, build.ID)
 		if err != nil {

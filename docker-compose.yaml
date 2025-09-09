@@ -52,3 +52,7 @@ services:
       - REGISTRY_STORAGE_DELETE_ENABLED=true
     volumes:
       - registry_data:/var/lib/registry
+  helloworld:
+    image: hello-world:latest
+    networks:
+      - zeitwork

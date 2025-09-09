@@ -18,14 +18,17 @@ const { data: deployments, refresh: refreshDeployments } = await useFetch(`/api/
 
 const { isPending, start, stop } = useTimeoutFn(() => {
   refreshDeployments()
-}, 10000)
+}, 1000)
 
 start()
 
 watch(
   deployments,
   (value) => {
-    const anyPending = value?.some((deployment) => deployment.status === "pending" || deployment.status === "building")
+    const anyPending = value?.some(
+      (deployment) =>
+        deployment.status === "pending" || deployment.status === "building" || deployment.status === "deploying",
+    )
     if (anyPending) {
       start()
     } else {
@@ -66,7 +69,7 @@ function deploymentStatusColor(status: string) {
     case "building":
       return "text-blue-500"
     case "deploying":
-      return "text-green-500"
+      return "text-orange-500"
     case "failed":
       return "text-red-500"
     case "active":
@@ -83,7 +86,7 @@ function deploymentStatusBgColor(status: string) {
     case "building":
       return "bg-blue-100"
     case "deploying":
-      return "bg-green-100"
+      return "bg-orange-100"
     case "failed":
       return "bg-red-100"
     case "active":
