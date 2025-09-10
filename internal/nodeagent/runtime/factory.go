@@ -12,6 +12,7 @@ import (
 
 // NewRuntime creates a new runtime based on configuration
 func NewRuntime(cfg *config.RuntimeConfig, logger *slog.Logger) (types.Runtime, error) {
+	logger.Info("Creating new runtime", "mode", cfg.Mode)
 	switch cfg.Mode {
 	case "development":
 		if cfg.DockerConfig == nil {

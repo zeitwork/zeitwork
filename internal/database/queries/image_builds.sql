@@ -132,3 +132,23 @@ RETURNING
     failed_at,
     created_at,
     updated_at;
+
+-- name: ImageBuildsDequeueByID :one
+-- Atomically move a pending build with the given ID to building status
+UPDATE image_builds
+SET status = 'building',
+    started_at = now(),
+    updated_at = now()
+WHERE id = $1
+  AND status = 'pending'
+RETURNING 
+    id,
+    status,
+    github_repository,
+    github_commit,
+    image_id,
+    started_at,
+    completed_at,
+    failed_at,
+    created_at,
+    updated_at;

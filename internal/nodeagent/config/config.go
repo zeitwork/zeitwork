@@ -140,8 +140,8 @@ func loadRuntimeConfig() (*RuntimeConfig, error) {
 			StopTimeout:  getEnvDuration("FC_STOP_TIMEOUT", 30*time.Second),
 
 			// Image configuration
-			DefaultKernelPath: getEnvOrDefault("DEFAULT_KERNEL_PATH", "/var/lib/firecracker-containerd/runtime/default-vmlinux.bin"),
-			DefaultRootfsPath: getEnvOrDefault("DEFAULT_ROOTFS_PATH", "/var/lib/firecracker-containerd/runtime/default-rootfs.ext4"),
+			DefaultKernelPath: getEnvOrDefault("DEFAULT_KERNEL_PATH", "/var/lib/firecracker-containerd/runtime/hello-vmlinux.bin"),
+			DefaultRootfsPath: getEnvOrDefault("DEFAULT_ROOTFS_PATH", "/var/lib/firecracker-containerd/runtime/default-rootfs.img"),
 			ImageRegistry:     getEnvOrDefault("IMAGE_REGISTRY", "localhost:5001"),
 
 			// Auto-setup and Security

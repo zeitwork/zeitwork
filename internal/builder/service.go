@@ -13,6 +13,7 @@ import (
 	"github.com/nats-io/nats.go"
 	"google.golang.org/protobuf/proto"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/zeitwork/zeitwork/internal/builder/runtime"
 	"github.com/zeitwork/zeitwork/internal/builder/types"
 	"github.com/zeitwork/zeitwork/internal/database"
@@ -142,8 +143,22 @@ func (s *Service) initialImageBuildCheck(ctx context.Context) {
 			break
 		}
 
+		// Convert to ImageBuild and process
+		build := &database.ImageBuild{
+			ID:               imageBuild.ID,
+			Status:           imageBuild.Status,
+			GithubRepository: imageBuild.GithubRepository,
+			GithubCommit:     imageBuild.GithubCommit,
+			ImageID:          imageBuild.ImageID,
+			StartedAt:        imageBuild.StartedAt,
+			CompletedAt:      imageBuild.CompletedAt,
+			FailedAt:         imageBuild.FailedAt,
+			CreatedAt:        imageBuild.CreatedAt,
+			UpdatedAt:        imageBuild.UpdatedAt,
+		}
+
 		// Process the build
-		if err := s.processImageBuildFromRow(ctx, imageBuild); err != nil {
+		if err := s.processImageBuildFromRow(ctx, build); err != nil {
 			s.logger.Error("Failed to process pending image build on startup",
 				"build_id", imageBuild.ID,
 				"error", err)
@@ -280,7 +295,12 @@ func (s *Service) handleImageBuildCreated(ctx context.Context, data []byte) erro
 	s.logger.Info("Processing image build created event",
 		"image_build_id", imageBuildCreated.Id)
 
-	// Try to process any pending build (the specific build might already be taken by another builder)
+	// First try to dequeue that specific build to avoid race with SKIP LOCKED
+	if err := s.processSpecificBuild(ctx, imageBuildCreated.Id); err != nil {
+		s.logger.Error("Failed to dequeue specific build", "build_id", imageBuildCreated.Id, "error", err)
+	}
+
+	// Fallback: try to process any pending build (legacy behaviour)
 	return s.processAnyPendingBuild(ctx)
 }
 
@@ -294,6 +314,11 @@ func (s *Service) handleImageBuildUpdated(ctx context.Context, data []byte) erro
 
 	s.logger.Debug("Processing image build updated event",
 		"image_build_id", imageBuildUpdated.Id)
+
+	// Try to dequeue that specific build first (in case it was reset to pending)
+	if err := s.processSpecificBuild(ctx, imageBuildUpdated.Id); err != nil {
+		s.logger.Error("Failed to dequeue specific build", "build_id", imageBuildUpdated.Id, "error", err)
+	}
 
 	// When a build is updated, it might have been reset to pending status
 	// Try to process any pending build
@@ -314,12 +339,24 @@ func (s *Service) processAnyPendingBuild(ctx context.Context) error {
 		return nil
 	}
 
-	// Process the build we got
-	return s.processImageBuildFromRow(ctx, imageBuild)
+	// Convert to ImageBuild and process
+	build := &database.ImageBuild{
+		ID:               imageBuild.ID,
+		Status:           imageBuild.Status,
+		GithubRepository: imageBuild.GithubRepository,
+		GithubCommit:     imageBuild.GithubCommit,
+		ImageID:          imageBuild.ImageID,
+		StartedAt:        imageBuild.StartedAt,
+		CompletedAt:      imageBuild.CompletedAt,
+		FailedAt:         imageBuild.FailedAt,
+		CreatedAt:        imageBuild.CreatedAt,
+		UpdatedAt:        imageBuild.UpdatedAt,
+	}
+	return s.processImageBuildFromRow(ctx, build)
 }
 
 // processImageBuildFromRow processes an image build from a database row
-func (s *Service) processImageBuildFromRow(ctx context.Context, imageBuild *database.ImageBuildsDequeuePendingRow) error {
+func (s *Service) processImageBuildFromRow(ctx context.Context, imageBuild *database.ImageBuild) error {
 	// If shutting down, do not start new work
 	select {
 	case <-s.stopChan:
@@ -353,18 +390,7 @@ func (s *Service) processImageBuildFromRow(ctx context.Context, imageBuild *data
 	s.buildsWG.Add(1)
 
 	// Process the build in a separate goroutine
-	go s.processBuild(ctx, &database.ImageBuild{
-		ID:               imageBuild.ID,
-		Status:           imageBuild.Status,
-		GithubRepository: imageBuild.GithubRepository,
-		GithubCommit:     imageBuild.GithubCommit,
-		ImageID:          imageBuild.ImageID,
-		StartedAt:        imageBuild.StartedAt,
-		CompletedAt:      imageBuild.CompletedAt,
-		FailedAt:         imageBuild.FailedAt,
-		CreatedAt:        imageBuild.CreatedAt,
-		UpdatedAt:        imageBuild.UpdatedAt,
-	})
+	go s.processBuild(ctx, imageBuild)
 
 	return nil
 }
@@ -490,4 +516,40 @@ func (s *Service) getActiveBuilds() int {
 	s.buildsMu.RLock()
 	defer s.buildsMu.RUnlock()
 	return s.activeBuildCount
+}
+
+// processSpecificBuild tries to dequeue and process a specific build id if it is still pending.
+func (s *Service) processSpecificBuild(ctx context.Context, id string) error {
+	buildUUID := uuid.MustParseUUID(id)
+
+	row, err := s.dequeueBuildByID(ctx, buildUUID)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			// Someone else picked it up or it is no longer pending
+			return nil
+		}
+		return err
+	}
+
+	// Convert to ImageBuild and process
+	build := &database.ImageBuild{
+		ID:               row.ID,
+		Status:           row.Status,
+		GithubRepository: row.GithubRepository,
+		GithubCommit:     row.GithubCommit,
+		ImageID:          row.ImageID,
+		StartedAt:        row.StartedAt,
+		CompletedAt:      row.CompletedAt,
+		FailedAt:         row.FailedAt,
+		CreatedAt:        row.CreatedAt,
+		UpdatedAt:        row.UpdatedAt,
+	}
+
+	// Successfully dequeued the specific build – process it
+	return s.processImageBuildFromRow(ctx, build)
+}
+
+// dequeueBuildByID atomically moves a pending build to building for a given id.
+func (s *Service) dequeueBuildByID(ctx context.Context, id pgtype.UUID) (*database.ImageBuildsDequeueByIDRow, error) {
+	return s.queries.ImageBuildsDequeueByID(ctx, id)
 }
