@@ -4,6 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -64,19 +67,25 @@ func (f *FirecrackerRuntime) CreateInstance(ctx context.Context, spec *types.Ins
 		return nil, fmt.Errorf("failed to ensure image: %w", err)
 	}
 
+	// For now, default to port 3000
+	defaultPort := int32(3000)
+
 	// Build container spec
+	labels := map[string]string{
+		"zeitwork.instance.id":  spec.ID,
+		"zeitwork.image.id":     spec.ImageID,
+		"zeitwork.managed":      "true",
+		"zeitwork.runtime":      "firecracker",
+		"zeitwork.default_port": fmt.Sprintf("%d", defaultPort),
+	}
+
 	opts := []containerd.NewContainerOpts{
 		containerd.WithImage(image),
 		containerd.WithRuntime("aws.firecracker", nil),
 		containerd.WithSnapshotter("devmapper"),
 		containerd.WithNewSnapshot(spec.ID, image),
 		containerd.WithNewSpec(f.buildOCISpecFromImage(spec, image)...),
-		containerd.WithContainerLabels(map[string]string{
-			"zeitwork.instance.id": spec.ID,
-			"zeitwork.image.id":    spec.ImageID,
-			"zeitwork.managed":     "true",
-			"zeitwork.runtime":     "firecracker",
-		}),
+		containerd.WithContainerLabels(labels),
 	}
 
 	container, err := f.client.NewContainer(ctx, spec.ID, opts...)
@@ -98,12 +107,15 @@ func (f *FirecrackerRuntime) CreateInstance(ctx context.Context, spec *types.Ins
 		Resources: spec.Resources,
 		EnvVars:   spec.EnvironmentVariables,
 		NetworkInfo: &types.NetworkInfo{
-			DefaultPort:  0,
+			DefaultPort:  defaultPort,
 			PortMappings: map[int32]int32{},
-			NetworkID:    f.config.NetworkNamespace,
+			NetworkID:    "",
 		},
 		CreatedAt: info.CreatedAt,
 		RuntimeID: spec.ID,
+	}
+	if spec.NetworkConfig != nil {
+		instance.NetworkInfo.NetworkID = spec.NetworkConfig.NetworkName
 	}
 
 	f.logger.Info("Firecracker instance container created", "instance_id", spec.ID)
@@ -129,6 +141,9 @@ func (f *FirecrackerRuntime) StartInstance(ctx context.Context, instance *types.
 	} else if !errdefs.IsNotFound(tErr) && !strings.Contains(strings.ToLower(tErr.Error()), "not found") {
 		return fmt.Errorf("failed to check existing task: %w", tErr)
 	}
+
+	// Snapshot current CNI leases to detect the new IP after start
+	preLeases := f.listCNIHostLocalIPs()
 
 	// Create a fresh task
 	task, err := container.NewTask(ctx, cio.NullIO)
@@ -180,10 +195,50 @@ func (f *FirecrackerRuntime) StartInstance(ctx context.Context, instance *types.
 				instance.State = types.InstanceStateRunning
 				now := time.Now()
 				instance.StartedAt = &now
+
+				// Resolve IP by diffing host-local leases
+				postLeases := f.listCNIHostLocalIPs()
+				if ip := pickNewIP(preLeases, postLeases); ip != "" {
+					if instance.NetworkInfo == nil {
+						instance.NetworkInfo = &types.NetworkInfo{PortMappings: map[int32]int32{}}
+					}
+					instance.NetworkInfo.IPAddress = ip
+					f.logger.Info("Resolved instance IP from CNI host-local", "instance_id", instance.ID, "ip", ip)
+				} else if ip, ierr := f.getIPFromCNIHostLocal(instance.ID); ierr == nil {
+					if instance.NetworkInfo == nil {
+						instance.NetworkInfo = &types.NetworkInfo{PortMappings: map[int32]int32{}}
+					}
+					instance.NetworkInfo.IPAddress = ip
+					f.logger.Info("Resolved instance IP via fallback lookup", "instance_id", instance.ID, "ip", ip)
+				} else {
+					f.logger.Warn("Could not resolve instance IP from CNI leases", "instance_id", instance.ID)
+				}
+
+				// Best-effort TCP probe to ip:default_port
+				if instance.NetworkInfo != nil && instance.NetworkInfo.IPAddress != "" {
+					addr := fmt.Sprintf("%s:%d", instance.NetworkInfo.IPAddress, instance.NetworkInfo.DefaultPort)
+					if f.probeTCP(addr, 2*time.Second) {
+						f.logger.Info("TCP probe succeeded", "instance_id", instance.ID, "addr", addr)
+					} else {
+						f.logger.Warn("TCP probe failed", "instance_id", instance.ID, "addr", addr)
+					}
+				}
+
 				f.logger.Info("Firecracker instance started", "instance_id", instance.ID)
 				return nil
 			}
 			if st.Status == containerd.Stopped {
+				// Try to fetch exit status for diagnostics
+				statusC, wErr := task.Wait(ctx)
+				if wErr == nil {
+					select {
+					case es := <-statusC:
+						if es.ExitCode() != 0 {
+							return fmt.Errorf("task stopped unexpectedly during start (exit=%d)", es.ExitCode())
+						}
+					default:
+					}
+				}
 				return fmt.Errorf("task stopped unexpectedly during start")
 			}
 		}
@@ -239,10 +294,6 @@ func (f *FirecrackerRuntime) StopInstance(ctx context.Context, instance *types.I
 func (f *FirecrackerRuntime) DeleteInstance(ctx context.Context, instance *types.Instance) error {
 	f.logger.Info("Deleting Firecracker instance", "instance_id", instance.ID)
 
-	if instance.State == types.InstanceStateRunning {
-		_ = f.StopInstance(ctx, instance)
-	}
-
 	ctx = namespaces.WithNamespace(ctx, f.config.ContainerdNamespace)
 	container, err := f.client.LoadContainer(ctx, instance.ID)
 	if err != nil {
@@ -250,8 +301,22 @@ func (f *FirecrackerRuntime) DeleteInstance(ctx context.Context, instance *types
 		return nil
 	}
 
+	// Ensure any existing task is cleaned up before deletion
+	if err := f.cleanupExistingTask(ctx, container); err != nil {
+		f.logger.Warn("Failed to cleanup task before delete", "instance_id", instance.ID, "error", err)
+	}
+
 	if err := container.Delete(ctx, containerd.WithSnapshotCleanup); err != nil {
-		return fmt.Errorf("failed to delete container: %w", err)
+		lower := strings.ToLower(err.Error())
+		if errdefs.IsFailedPrecondition(err) || strings.Contains(lower, "failed precondition") || strings.Contains(lower, "running task") {
+			f.logger.Warn("Delete precondition failed; cleaning up task and retrying", "instance_id", instance.ID)
+			_ = f.cleanupExistingTask(ctx, container)
+			if derr := container.Delete(ctx, containerd.WithSnapshotCleanup); derr != nil {
+				return fmt.Errorf("failed to delete container after cleanup: %w", derr)
+			}
+		} else {
+			return fmt.Errorf("failed to delete container: %w", err)
+		}
 	}
 
 	instance.State = types.InstanceStateTerminated
@@ -326,10 +391,40 @@ func (f *FirecrackerRuntime) ListInstances(ctx context.Context) ([]*types.Instan
 	return instances, nil
 }
 
-// GetStats not implemented yet for Firecracker
+// GetStats retrieves basic placeholder stats for Firecracker VMs
 func (f *FirecrackerRuntime) GetStats(ctx context.Context, instance *types.Instance) (*types.InstanceStats, error) {
-	f.logger.Debug("GetStats not implemented for firecracker runtime", "instance_id", instance.ID)
-	return nil, fmt.Errorf("GetStats not implemented yet for firecracker runtime")
+	instanceID := ""
+	if instance != nil {
+		instanceID = instance.ID
+	}
+
+	stats := &types.InstanceStats{
+		InstanceID: instanceID,
+		Timestamp:  time.Now(),
+		CPUPercent: 0.0,
+		CPUUsage:   0,
+		// Memory fields filled below if limits known
+		MemoryUsed:     0,
+		MemoryLimit:    0,
+		MemoryPercent:  0.0,
+		NetworkRxBytes: 0,
+		NetworkTxBytes: 0,
+		DiskReadBytes:  0,
+		DiskWriteBytes: 0,
+	}
+
+	// Best-effort: derive memory limit from instance resources
+	if instance != nil && instance.Resources != nil {
+		if instance.Resources.MemoryLimit > 0 {
+			stats.MemoryLimit = uint64(instance.Resources.MemoryLimit)
+		} else if instance.Resources.Memory > 0 {
+			stats.MemoryLimit = uint64(instance.Resources.Memory) * 1024 * 1024
+		}
+	}
+
+	// Without cgroup/metrics integration, we cannot know MemoryUsed/CPUUsage yet
+	// Keep zeros to indicate unknown usage rather than erroring.
+	return stats, nil
 }
 
 // ExecuteCommand not implemented yet for Firecracker
@@ -385,6 +480,100 @@ func (f *FirecrackerRuntime) GetRuntimeInfo() *types.RuntimeInfo {
 
 // ----------------- helpers -----------------
 
+// getIPFromCNIHostLocal attempts to discover the VM's IPv4 address by reading
+// host-local IPAM lease files under the configured CNI state directory.
+// It looks for a file named after the network with the content lines of IPs.
+// firecracker-containerd typically uses a fixed MAC -> IP mapping; since we
+// don't have the MAC here, we fallback to the single-IP heuristic.
+func (f *FirecrackerRuntime) getIPFromCNIHostLocal(instanceID string) (string, error) {
+	// Expected layout for host-local IPAM: /var/lib/cni/networks/<network>/<ip>
+	// Files are named by IP address and contain the container ID. We'll scan the
+	// directory and find the file whose content matches our instanceID.
+	stateDir := f.config.CNIStateDir
+	if stateDir == "" {
+		stateDir = "/var/lib/cni/networks"
+	}
+	netDir := fmt.Sprintf("%s/%s", stateDir, f.config.NetworkName)
+	entries, err := os.ReadDir(netDir)
+	if err != nil {
+		return "", fmt.Errorf("read cni state dir: %w", err)
+	}
+	for _, ent := range entries {
+		if ent.IsDir() {
+			continue
+		}
+		name := ent.Name()
+		// skip meta files
+		if strings.HasPrefix(name, ".") || strings.HasSuffix(name, ".lock") {
+			continue
+		}
+		path := fmt.Sprintf("%s/%s", netDir, name)
+		data, rerr := os.ReadFile(path)
+		if rerr != nil {
+			continue
+		}
+		content := strings.TrimSpace(string(data))
+		if content == instanceID {
+			// filename is the IP address
+			return name, nil
+		}
+	}
+	return "", fmt.Errorf("ip not found in cni host-local leases for %s", instanceID)
+}
+
+// listCNIHostLocalIPs lists IPv4 lease filenames (IPs) under the host-local dir for the configured network
+func (f *FirecrackerRuntime) listCNIHostLocalIPs() []string {
+	stateDir := f.config.CNIStateDir
+	if stateDir == "" {
+		stateDir = "/var/lib/cni/networks"
+	}
+	netDir := fmt.Sprintf("%s/%s", stateDir, f.config.NetworkName)
+	entries, err := os.ReadDir(netDir)
+	if err != nil {
+		return nil
+	}
+	var ips []string
+	for _, ent := range entries {
+		if ent.IsDir() {
+			continue
+		}
+		name := ent.Name()
+		if strings.Count(name, ".") == 3 { // naive IPv4 filename check
+			ips = append(ips, name)
+		}
+	}
+	return ips
+}
+
+// pickNewIP returns IPs present in after but not in before; if exactly one, return it
+func pickNewIP(before, after []string) string {
+	set := make(map[string]struct{}, len(before))
+	for _, ip := range before {
+		set[ip] = struct{}{}
+	}
+	var news []string
+	for _, ip := range after {
+		if _, ok := set[ip]; !ok {
+			news = append(news, ip)
+		}
+	}
+	if len(news) == 1 {
+		return news[0]
+	}
+	return ""
+}
+
+// probeTCP tries to connect to addr within timeout
+func (f *FirecrackerRuntime) probeTCP(addr string, timeout time.Duration) bool {
+	d := net.Dialer{Timeout: timeout}
+	c, err := d.Dial("tcp", addr)
+	if err != nil {
+		return false
+	}
+	_ = c.Close()
+	return true
+}
+
 // cleanupExistingTask attempts to stop and delete any existing task for the container.
 // It is safe to call if no task exists.
 func (f *FirecrackerRuntime) cleanupExistingTask(ctx context.Context, container containerd.Container) error {
@@ -433,8 +622,15 @@ func (f *FirecrackerRuntime) ensureImage(ctx context.Context, imageTag string) (
 
 	// Ensure registry prefix
 	ref := f.ensureRegistryPrefix(imageTag)
-	f.logger.Info("Pulling image for firecracker", "image", ref, "snapshotter", "devmapper")
-	img, err = f.client.Pull(ctx, ref, containerd.WithPullUnpack, containerd.WithPullSnapshotter("devmapper"))
+	// Use a dedicated pull timeout
+	pullTimeout := f.config.StartTimeout
+	if f.config.PullTimeout > 0 {
+		pullTimeout = f.config.PullTimeout
+	}
+	pctx, cancel := context.WithTimeout(ctx, pullTimeout)
+	defer cancel()
+	f.logger.Info("Pulling image for firecracker", "image", ref, "snapshotter", "devmapper", "timeout", pullTimeout.String())
+	img, err = f.client.Pull(pctx, ref, containerd.WithPullUnpack, containerd.WithPullSnapshotter("devmapper"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to pull image %s: %w", ref, err)
 	}
@@ -447,7 +643,7 @@ func (f *FirecrackerRuntime) buildOCISpecFromImage(spec *types.InstanceSpec, ima
 		oci.WithImageConfig(image),
 		oci.WithHostname(fmt.Sprintf("zeitwork-%s", trimID(spec.ID, 8))),
 		oci.WithRootFSPath("rootfs"),
-		oci.WithProcessCwd("/"),
+		// Respect the image's configured working directory; do not override CWD
 	}
 
 	// Env vars
@@ -490,10 +686,23 @@ func (f *FirecrackerRuntime) containerToInstance(ctx context.Context, c containe
 		CreatedAt: info.CreatedAt,
 		RuntimeID: c.ID(),
 		NetworkInfo: &types.NetworkInfo{
-			NetworkID:    f.config.NetworkNamespace,
+			NetworkID:    f.config.NetworkName,
 			DefaultPort:  0,
 			PortMappings: map[int32]int32{},
 		},
+	}
+	if dpStr, ok := info.Labels["zeitwork.default_port"]; ok {
+		if v, err := strconv.Atoi(dpStr); err == nil {
+			inst.NetworkInfo.DefaultPort = int32(v)
+		}
+	}
+	if inst.NetworkInfo.DefaultPort == 0 {
+		inst.NetworkInfo.DefaultPort = 3000
+	}
+
+	// Best-effort IP discovery from CNI cache (no guarantee if created long ago)
+	if ip, err := f.getIPFromCNIHostLocal(instanceID); err == nil {
+		inst.NetworkInfo.IPAddress = ip
 	}
 	return inst, nil
 }

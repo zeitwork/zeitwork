@@ -49,11 +49,14 @@ type FirecrackerRuntimeConfig struct {
 	// Networking (CNI-based)
 	CNIConfDir       string // CNI configuration directory
 	CNIBinDir        string // CNI plugin binaries directory
+	CNIStateDir      string // CNI state/cache directory (for host-local IPAM leases)
 	NetworkNamespace string // Network namespace for containers
+	NetworkName      string // CNI network name used by firecracker-containerd (matches runtime JSON)
 
 	// Timeouts
 	StartTimeout time.Duration // Timeout for container startup
 	StopTimeout  time.Duration // Timeout for container shutdown
+	PullTimeout  time.Duration // Timeout for image pulls
 
 	// Image configuration
 	DefaultKernelPath string // Default kernel image path
@@ -133,11 +136,14 @@ func loadRuntimeConfig() (*RuntimeConfig, error) {
 			// CNI networking
 			CNIConfDir:       getEnvOrDefault("CNI_CONF_DIR", "/etc/cni/net.d"),
 			CNIBinDir:        getEnvOrDefault("CNI_BIN_DIR", "/opt/cni/bin"),
+			CNIStateDir:      getEnvOrDefault("CNI_STATE_DIR", "/var/lib/cni/networks"),
 			NetworkNamespace: getEnvOrDefault("NETWORK_NAMESPACE", "zeitwork"),
+			NetworkName:      getEnvOrDefault("FIRECRACKER_NETWORK_NAME", "fcnet"),
 
 			// Timeouts
 			StartTimeout: getEnvDuration("FC_START_TIMEOUT", 60*time.Second),
 			StopTimeout:  getEnvDuration("FC_STOP_TIMEOUT", 30*time.Second),
+			PullTimeout:  getEnvDuration("FC_PULL_TIMEOUT", 5*time.Minute),
 
 			// Image configuration
 			DefaultKernelPath: getEnvOrDefault("DEFAULT_KERNEL_PATH", "/var/lib/firecracker-containerd/runtime/hello-vmlinux.bin"),

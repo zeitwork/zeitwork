@@ -347,7 +347,7 @@ func (s *Service) createInstancesForDeployment(ctx context.Context, d *database.
 		State:                "pending",
 		Vcpus:                2,
 		Memory:               2048,
-		DefaultPort:          8080,
+		DefaultPort:          3000,
 		IpAddress:            "",
 		EnvironmentVariables: "{}",
 	}); err != nil {
