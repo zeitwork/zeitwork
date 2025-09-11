@@ -16,6 +16,7 @@ run "${SCRIPT_DIR}/scripts/45_cni_ipv6.sh"
 run "${SCRIPT_DIR}/scripts/50_start_daemon.sh"
 run "${SCRIPT_DIR}/scripts/60_build_image_import.sh"
 run "${SCRIPT_DIR}/scripts/70_run_container_ipv6.sh"
+run "${SCRIPT_DIR}/scripts/75_set_ipv6_inside.sh"
 run "${SCRIPT_DIR}/scripts/80_verify_ipv6.sh"
 
 echo "All steps completed."

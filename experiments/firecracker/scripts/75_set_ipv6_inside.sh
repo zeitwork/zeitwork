@@ -29,6 +29,14 @@ if [[ -z "$IP6" ]]; then
 fi
 log "Assigning IPv6 ${IP6} inside VM"
 
+# Wait for eth0 to exist in guest
+for i in {1..30}; do
+  if sudo /usr/local/bin/firecracker-ctr --address /run/firecracker-containerd/containerd.sock -n ${NS} tasks exec --exec-id chk-$RANDOM ${NAME} sh -lc "ip link show eth0 >/dev/null 2>&1"; then
+    break
+  fi
+  sleep 1
+done
+
 run "sudo /usr/local/bin/firecracker-ctr --address /run/firecracker-containerd/containerd.sock -n ${NS} tasks exec --exec-id ifup-$RANDOM ${NAME} sh -lc 'ip link set eth0 up'"
 run "sudo /usr/local/bin/firecracker-ctr --address /run/firecracker-containerd/containerd.sock -n ${NS} tasks exec --exec-id ip-$RANDOM ${NAME} sh -lc 'ip -6 addr add ${IP6}/64 dev eth0 || true'"
 run "sudo /usr/local/bin/firecracker-ctr --address /run/firecracker-containerd/containerd.sock -n ${NS} tasks exec --exec-id rt-$RANDOM ${NAME} sh -lc 'ip -6 route add default via fd00:fc::1 dev eth0 || true'"
