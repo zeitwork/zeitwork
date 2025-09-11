@@ -1,214 +1,301 @@
 package firecracker
 
 import (
-	"bufio"
 	"context"
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/binary"
-	"encoding/hex"
 	"fmt"
-	"log/slog"
+	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"regexp"
-	"strings"
 	"time"
 
-	"github.com/zeitwork/zeitwork/internal/database"
-	"github.com/zeitwork/zeitwork/internal/nodeagent/config"
-	"github.com/zeitwork/zeitwork/internal/nodeagent/types"
+	"github.com/firecracker-microvm/firecracker-go-sdk"
+	"github.com/firecracker-microvm/firecracker-go-sdk/client/models"
 )
 
-// Runtime implements the Zeitwork Runtime interface using firecracker-containerd.
-// It shells out to firecracker-ctr to avoid direct gRPC dependencies and mirrors
-// the working flow validated in experiments/firecracker/scripts.
-type Runtime struct {
-	cfg     *config.FirecrackerRuntimeConfig
-	logger  *slog.Logger
-	queries *database.Queries
+// Client wraps the firecracker-go-sdk for our use case
+type Client struct {
+	machine   *firecracker.Machine
+	config    firecracker.Config
+	machineID string
 }
 
-// NewFirecrackerRuntime creates a new Firecracker runtime backed by firecracker-containerd.
-func NewFirecrackerRuntime(cfg *config.FirecrackerRuntimeConfig, logger *slog.Logger, queries *database.Queries) (*Runtime, error) {
-	if cfg == nil {
-		return nil, fmt.Errorf("nil firecracker runtime config")
+// VMInstance represents a VM instance configuration
+type VMInstance struct {
+	ID         string
+	IPAddress  *net.IP
+	ImagePath  string
+	KernelPath string
+	InitrdPath string
+	SocketPath string
+	WorkDir    string
+	VCPUs      int
+	MemoryMB   int
+	NetworkTAP string
+}
+
+// NewClient creates a new Firecracker client using the firecracker-go-sdk
+func NewClient(instance *VMInstance) (*Client, error) {
+	// Validate the configuration
+	if err := ValidateConfig(instance); err != nil {
+		return nil, fmt.Errorf("invalid configuration: %w", err)
 	}
-	// Basic socket check
-	if _, err := os.Stat(cfg.ContainerdSocket); err != nil {
-		return nil, fmt.Errorf("containerd socket not found at %s: %w", cfg.ContainerdSocket, err)
+
+	// Ensure work directory exists
+	if err := os.MkdirAll(instance.WorkDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create work directory %s: %w", instance.WorkDir, err)
 	}
-	// Try a cheap call to verify connectivity
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if _, err := runFC(ctx, cfg, []string{"version"}); err != nil {
-		logger.Warn("firecracker-ctr version probe failed", "error", err)
+
+	// Ensure socket directory exists
+	socketDir := filepath.Dir(instance.SocketPath)
+	if err := os.MkdirAll(socketDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create socket directory %s: %w", socketDir, err)
 	}
-	return &Runtime{cfg: cfg, logger: logger, queries: queries}, nil
-}
 
-func (r *Runtime) addressArgs() []string {
-	return []string{"--address", r.cfg.ContainerdSocket}
-}
-
-func (r *Runtime) nsArgs() []string {
-	if r.cfg.ContainerdNamespace == "" {
-		return nil
+	// Build the Firecracker configuration
+	config := firecracker.Config{
+		SocketPath:        instance.SocketPath,
+		KernelImagePath:   instance.KernelPath,
+		KernelArgs:        buildKernelArgs(),
+		LogLevel:          "Info",
+		DisableValidation: false,
+		// Note: LogPath omitted - when using jailer, log path handling is complex
+		// The jailer environment may not have the same directory structure
+		MachineCfg: models.MachineConfiguration{
+			VcpuCount:  firecracker.Int64(int64(instance.VCPUs)),
+			MemSizeMib: firecracker.Int64(int64(instance.MemoryMB)),
+			Smt:        firecracker.Bool(false),
+		},
+		Drives: []models.Drive{
+			{
+				DriveID:      firecracker.String("rootfs"),
+				PathOnHost:   firecracker.String(instance.ImagePath),
+				IsRootDevice: firecracker.Bool(true),
+				IsReadOnly:   firecracker.Bool(false),
+			},
+		},
 	}
-	return []string{"-n", r.cfg.ContainerdNamespace}
-}
 
-// runFC executes firecracker-ctr with context, returning combined output.
-func runFC(ctx context.Context, cfg *config.FirecrackerRuntimeConfig, args []string) (string, error) {
-	base := []string{"/usr/local/bin/firecracker-ctr", "--address", cfg.ContainerdSocket}
-	cmd := exec.CommandContext(ctx, base[0], append(base[1:], args...)...)
-	cmd.Env = append(os.Environ(), "LC_ALL=C", "LANG=C")
-	out, err := cmd.CombinedOutput()
-	return string(out), err
-}
-
-// runFCNS runs firecracker-ctr with namespace flags.
-func runFCNS(ctx context.Context, cfg *config.FirecrackerRuntimeConfig, ns string, args []string) (string, error) {
-	full := []string{"--address", cfg.ContainerdSocket}
-	if ns != "" {
-		full = append(full, "-n", ns)
+	// Add initrd if provided
+	if instance.InitrdPath != "" {
+		config.InitrdPath = instance.InitrdPath
 	}
-	full = append(full, args...)
-	cmd := exec.CommandContext(ctx, "/usr/local/bin/firecracker-ctr", full...)
-	cmd.Env = append(os.Environ(), "LC_ALL=C", "LANG=C")
-	out, err := cmd.CombinedOutput()
-	return string(out), err
-}
 
-// generateName returns a stable task/container name for an instance.
-func generateName(instanceID string) string {
-	// Keep short, DNS-safe
-	return fmt.Sprintf("fc-%s", sanitizeName(instanceID))
-}
+	// Configure networking if TAP device is specified
+	if instance.NetworkTAP != "" {
+		config.NetworkInterfaces = firecracker.NetworkInterfaces{
+			{
+				StaticConfiguration: &firecracker.StaticNetworkConfiguration{
+					MacAddress:  generateMACAddress(instance.ID),
+					HostDevName: instance.NetworkTAP,
+				},
+				AllowMMDS: true, // Allow VM to access metadata for automatic IP configuration
+			},
+		}
+	}
 
-func sanitizeName(s string) string {
-	// replace any non-alnum with hyphen
-	re := regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
-	return strings.Trim(re.ReplaceAllString(s, "-"), "-")
-}
+	// Configure jailer for security isolation (nodeagent always runs as root)
+	// ✅ JAILER NOW WORKING! Fixed missing NumaNode and ChrootStrategy fields
+	// Using latest SDK development version (v1.0.1-0.20250818195323) + Firecracker v1.13.1
+	jailerBaseDir := "/srv/jailer" // Use default jailer location
+	if err := os.MkdirAll(jailerBaseDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create jailer base directory: %w", err)
+	}
 
-func randomHex(n int) string {
-	b := make([]byte, n)
-	_, _ = rand.Read(b)
-	return hex.EncodeToString(b)
-}
+	config.JailerCfg = &firecracker.JailerConfig{
+		GID:            firecracker.Int(1000),
+		UID:            firecracker.Int(1000),
+		ID:             instance.ID,
+		NumaNode:       firecracker.Int(0), // CRITICAL: This was missing and causing nil pointer panic!
+		ExecFile:       "/usr/local/bin/firecracker",
+		JailerBinary:   "/usr/local/bin/jailer",
+		ChrootBaseDir:  jailerBaseDir,
+		CgroupVersion:  "2", // Use cgroup v2 since that's what's mounted
+		Daemonize:      false,
+		ChrootStrategy: firecracker.NewNaiveChrootStrategy(instance.KernelPath), // CRITICAL: Another missing field!
+	}
 
-// findVMIDForTaskExec tries to map an ExecID (or TaskID) to a VM ID using the daemon log.
-// This relies on debug logging enabled and is a pragmatic approach validated in experiments.
-func findVMIDForTaskExec(logPath, execID, taskID string) (string, error) {
-	f, err := os.Open(logPath)
+	// Create the Firecracker machine
+	machine, err := firecracker.NewMachine(context.Background(), config)
 	if err != nil {
-		return "", err
+		return nil, fmt.Errorf("failed to create firecracker machine for VM %s: %w", instance.ID, err)
 	}
-	defer f.Close()
 
-	scanner := bufio.NewScanner(f)
-	var vmID string
-	needleExec := fmt.Sprintf("ExecID=%s", execID)
-	needleTask := fmt.Sprintf("TaskID=%s", taskID)
-	needleVM := "vmID="
-	for scanner.Scan() {
-		line := scanner.Text()
-		if (execID != "" && strings.Contains(line, needleExec)) || (taskID != "" && strings.Contains(line, needleTask)) {
-			if idx := strings.Index(line, needleVM); idx >= 0 {
-				vmID = strings.TrimSpace(line[idx+len(needleVM):])
-				// vmID may include trailing fields; split on space if so
-				if sp := strings.IndexAny(vmID, " \t"); sp >= 0 {
-					vmID = vmID[:sp]
-				}
-			}
-		}
-	}
-	if vmID == "" {
-		return "", fmt.Errorf("vmID not found in log for execID=%s taskID=%s", execID, taskID)
-	}
-	return vmID, nil
+	return &Client{
+		machine:   machine,
+		config:    config,
+		machineID: instance.ID,
+	}, nil
 }
 
-// discoverIPv6Lease finds the IPv6 allocated by host-local IPAM for a given VM ID.
-func discoverIPv6Lease(cniStateDir, networkName, vmID string) (string, error) {
-	leaseDir := filepath.Join(cniStateDir, networkName)
-	d, err := os.ReadDir(leaseDir)
+// Start starts the VM
+func (c *Client) Start(ctx context.Context) error {
+	if err := c.machine.Start(ctx); err != nil {
+		return fmt.Errorf("failed to start VM %s: %w", c.machineID, err)
+	}
+	return nil
+}
+
+// ConfigureNetworkMetadata sets up MMDS metadata for automatic IP configuration
+func (c *Client) ConfigureNetworkMetadata(ctx context.Context, instance *VMInstance) error {
+	if instance.IPAddress == nil {
+		return nil // No IP to configure
+	}
+
+	metadata := map[string]interface{}{
+		"network": map[string]interface{}{
+			"ipv6_address": instance.IPAddress.String(),
+			"interface":    "eth0",
+			"prefix_len":   64,
+			"gateway":      "fd00:fc::1", // Default gateway for zeitwork platform
+		},
+		"instance": map[string]interface{}{
+			"id":   instance.ID,
+			"type": "zeitwork-vm",
+		},
+	}
+
+	if err := c.SetMetadata(ctx, metadata); err != nil {
+		return fmt.Errorf("failed to set network metadata for VM %s: %w", c.machineID, err)
+	}
+
+	return nil
+}
+
+// Stop stops the VM gracefully
+func (c *Client) Stop(ctx context.Context) error {
+	if err := c.machine.Shutdown(ctx); err != nil {
+		return fmt.Errorf("failed to stop VM %s: %w", c.machineID, err)
+	}
+	return nil
+}
+
+// Wait waits for the VM to finish
+func (c *Client) Wait(ctx context.Context) error {
+	return c.machine.Wait(ctx)
+}
+
+// IsRunning checks if the VM is currently running
+func (c *Client) IsRunning(ctx context.Context) (bool, error) {
+	// With jailer, trust the SDK to handle socket connections properly
+	// Just check if we can get instance info - this confirms VM is running and API responsive
+	_, err := c.machine.DescribeInstanceInfo(ctx)
 	if err != nil {
-		return "", fmt.Errorf("read lease dir: %w", err)
+		return false, nil // VM not running or not responsive
 	}
-	for _, de := range d {
-		name := de.Name()
-		if !strings.HasPrefix(name, "fd") { // crude filter for IPv6 ULA/fd00
-			continue
-		}
-		content, err := os.ReadFile(filepath.Join(leaseDir, name))
-		if err != nil {
-			continue
-		}
-		if strings.Contains(string(content), vmID) {
-			return name, nil // filename is the IPv6 address
-		}
-	}
-	return "", fmt.Errorf("no IPv6 lease found for vmID %s", vmID)
+
+	return true, nil
 }
 
-// generateFallbackIPv6 deterministically derives a unique IPv6 within fd00:fc::/64 for a VM.
-// It avoids conflicts with existing host-local leases by checking the CNI lease directory.
-func generateFallbackIPv6(cniStateDir, networkName, vmID string) (string, error) {
-	leaseDir := filepath.Join(cniStateDir, networkName)
-	inUse := make(map[string]struct{})
-	if entries, err := os.ReadDir(leaseDir); err == nil {
-		for _, de := range entries {
-			name := de.Name()
-			if strings.HasPrefix(name, "fd") {
-				inUse[name] = struct{}{}
-			}
-		}
+// GetInstanceInfo retrieves VM instance information
+func (c *Client) GetInstanceInfo(ctx context.Context) (*models.InstanceInfo, error) {
+	info, err := c.machine.DescribeInstanceInfo(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get instance info for VM %s: %w", c.machineID, err)
 	}
-	base := "fd00:fc::"
-	sum := sha256.Sum256([]byte(strings.TrimSpace(vmID)))
-	h0 := binary.BigEndian.Uint16(sum[0:2])
-	h1 := binary.BigEndian.Uint16(sum[2:4])
-	h2 := binary.BigEndian.Uint16(sum[4:6])
-	h3 := binary.BigEndian.Uint16(sum[6:8])
-	for i := 0; i < 64; i++ {
-		ip := fmt.Sprintf("%s%x:%x:%x:%x", base, h0, h1, h2, h3+uint16(i))
-		if ip == "fd00:fc::1" {
-			continue
-		}
-		if _, exists := inUse[ip]; exists {
-			continue
-		}
-		return ip, nil
-	}
-	for i := 0; i < 128; i++ {
-		b := make([]byte, 8)
-		_, _ = rand.Read(b)
-		ip := fmt.Sprintf("%s%x:%x:%x:%x", base, binary.BigEndian.Uint16(b[0:2]), binary.BigEndian.Uint16(b[2:4]), binary.BigEndian.Uint16(b[4:6]), binary.BigEndian.Uint16(b[6:8]))
-		if ip == "fd00:fc::1" {
-			continue
-		}
-		if _, exists := inUse[ip]; exists {
-			continue
-		}
-		return ip, nil
-	}
-	return "", fmt.Errorf("unable to generate unique IPv6 for vmID %s", vmID)
+	return &info, nil
 }
 
-// mapStatus maps textual ctr task STATUS to InstanceState.
-func mapStatus(s string) types.InstanceState {
-	s = strings.ToUpper(strings.TrimSpace(s))
-	switch {
-	case strings.Contains(s, "RUNNING"):
-		return types.InstanceStateRunning
-	case strings.Contains(s, "STOPPED") || strings.Contains(s, "EXITED"):
-		return types.InstanceStateStopped
-	case strings.Contains(s, "CREATED"):
-		return types.InstanceStateCreating
-	default:
-		return types.InstanceStatePending
+// SetMetadata sets metadata for the VM (MMDS)
+func (c *Client) SetMetadata(ctx context.Context, metadata interface{}) error {
+	if err := c.machine.SetMetadata(ctx, metadata); err != nil {
+		return fmt.Errorf("failed to set metadata for VM %s: %w", c.machineID, err)
 	}
+	return nil
+}
+
+// GetMetadata retrieves metadata from the VM (MMDS)
+func (c *Client) GetMetadata(ctx context.Context, metadata interface{}) error {
+	if err := c.machine.GetMetadata(ctx, metadata); err != nil {
+		return fmt.Errorf("failed to get metadata for VM %s: %w", c.machineID, err)
+	}
+	return nil
+}
+
+// Cleanup cleans up resources (socket, temporary files)
+func (c *Client) Cleanup() error {
+	// Remove socket if it exists
+	if _, err := os.Stat(c.config.SocketPath); err == nil {
+		if err := os.Remove(c.config.SocketPath); err != nil {
+			return fmt.Errorf("failed to remove socket %s: %w", c.config.SocketPath, err)
+		}
+	}
+
+	// Additional cleanup can be added here (log files, temporary directories, etc.)
+	return nil
+}
+
+// WaitForSocket waits for the Firecracker socket to be available
+func (c *Client) WaitForSocket(ctx context.Context, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+
+	for time.Now().Before(deadline) {
+		// When using jailer, need to check if the API is actually responding
+		// The socket path gets modified by jailer, so we rely on API responsiveness
+		if running, _ := c.IsRunning(ctx); running {
+			return nil
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+			// Continue polling
+		}
+	}
+
+	return fmt.Errorf("timeout waiting for Firecracker API to respond (socket: %s)", c.config.SocketPath)
+}
+
+// buildKernelArgs constructs the kernel boot arguments
+func buildKernelArgs() string {
+	return "console=ttyS0 reboot=k panic=1 pci=off"
+}
+
+// generateMACAddress generates a deterministic MAC address for the VM
+func generateMACAddress(vmID string) string {
+	// Generate a deterministic MAC address based on VM ID
+	// This ensures the same VM always gets the same MAC address
+	hash := 0
+	for _, c := range vmID {
+		hash = hash*31 + int(c)
+	}
+
+	// Ensure it's a locally administered MAC address (second bit of first byte set)
+	return fmt.Sprintf("02:00:00:%02x:%02x:%02x",
+		(hash>>16)&0xff,
+		(hash>>8)&0xff,
+		hash&0xff)
+}
+
+// ValidateConfig validates the VM configuration
+func ValidateConfig(instance *VMInstance) error {
+	if instance.ID == "" {
+		return fmt.Errorf("VM ID cannot be empty")
+	}
+
+	if instance.KernelPath == "" {
+		return fmt.Errorf("kernel path cannot be empty")
+	}
+
+	if _, err := os.Stat(instance.KernelPath); os.IsNotExist(err) {
+		return fmt.Errorf("kernel file does not exist: %s", instance.KernelPath)
+	}
+
+	if instance.ImagePath == "" {
+		return fmt.Errorf("image path cannot be empty")
+	}
+
+	if _, err := os.Stat(instance.ImagePath); os.IsNotExist(err) {
+		return fmt.Errorf("image file does not exist: %s", instance.ImagePath)
+	}
+
+	if instance.VCPUs <= 0 {
+		return fmt.Errorf("vCPU count must be positive, got %d", instance.VCPUs)
+	}
+
+	if instance.MemoryMB <= 0 {
+		return fmt.Errorf("memory size must be positive, got %d MB", instance.MemoryMB)
+	}
+
+	return nil
 }
