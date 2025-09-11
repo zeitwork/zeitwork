@@ -81,6 +81,8 @@ type Querier interface {
 	ImagesGetById(ctx context.Context, id pgtype.UUID) (*ImagesGetByIdRow, error)
 	// Update image
 	ImagesUpdate(ctx context.Context, arg *ImagesUpdateParams) (*ImagesUpdateRow, error)
+	// Check if an IP address is already in use by any non-deleted instance
+	InstancesCheckIpInUse(ctx context.Context, ipAddress string) (bool, error)
 	// Create a new instance
 	InstancesCreate(ctx context.Context, arg *InstancesCreateParams) (*InstancesCreateRow, error)
 	// Soft delete an instance

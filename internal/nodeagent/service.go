@@ -69,7 +69,7 @@ func NewService(cfg *config.Config, logger *slog.Logger) (*Service, error) {
 	}
 
 	// Initialize runtime
-	rt, err := nodeagentRuntime.NewRuntime(cfg.Runtime, logger)
+	rt, err := nodeagentRuntime.NewRuntime(cfg.Runtime, logger, db.Queries())
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize runtime: %w", err)
 	}

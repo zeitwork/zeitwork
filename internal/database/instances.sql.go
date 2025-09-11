@@ -11,6 +11,23 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const instancesCheckIpInUse = `-- name: InstancesCheckIpInUse :one
+SELECT EXISTS(
+    SELECT 1 
+    FROM instances 
+    WHERE ip_address = $1 
+        AND deleted_at IS NULL
+) as in_use
+`
+
+// Check if an IP address is already in use by any non-deleted instance
+func (q *Queries) InstancesCheckIpInUse(ctx context.Context, ipAddress string) (bool, error) {
+	row := q.db.QueryRow(ctx, instancesCheckIpInUse, ipAddress)
+	var in_use bool
+	err := row.Scan(&in_use)
+	return in_use, err
+}
+
 const instancesCreate = `-- name: InstancesCreate :one
 INSERT INTO instances (
     id,

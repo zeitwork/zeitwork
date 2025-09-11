@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 
+	"github.com/zeitwork/zeitwork/internal/database"
 	"github.com/zeitwork/zeitwork/internal/nodeagent/config"
 	"github.com/zeitwork/zeitwork/internal/nodeagent/runtime/docker"
 	"github.com/zeitwork/zeitwork/internal/nodeagent/runtime/firecracker"
@@ -11,7 +12,7 @@ import (
 )
 
 // NewRuntime creates a new runtime based on configuration
-func NewRuntime(cfg *config.RuntimeConfig, logger *slog.Logger) (types.Runtime, error) {
+func NewRuntime(cfg *config.RuntimeConfig, logger *slog.Logger, queries *database.Queries) (types.Runtime, error) {
 	logger.Info("Creating new runtime", "mode", cfg.Mode)
 	switch cfg.Mode {
 	case "development":
@@ -24,7 +25,7 @@ func NewRuntime(cfg *config.RuntimeConfig, logger *slog.Logger) (types.Runtime, 
 		if cfg.FirecrackerConfig == nil {
 			return nil, fmt.Errorf("Firecracker configuration is required for production mode")
 		}
-		return firecracker.NewFirecrackerRuntime(cfg.FirecrackerConfig, logger)
+		return firecracker.NewFirecrackerRuntime(cfg.FirecrackerConfig, logger, queries)
 
 	default:
 		return nil, fmt.Errorf("unsupported runtime mode: %s", cfg.Mode)

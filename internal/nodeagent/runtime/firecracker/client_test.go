@@ -47,7 +47,7 @@ func TestFirecrackerRuntime_CreateConnectCleanup(t *testing.T) {
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 
-	rt, err := NewFirecrackerRuntime(cfg, logger)
+	rt, err := NewFirecrackerRuntime(cfg, logger, nil)
 	if err != nil {
 		t.Skipf("firecracker runtime unavailable: %v", err)
 	}

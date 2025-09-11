@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"log/slog"
@@ -14,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/zeitwork/zeitwork/internal/database"
 	"github.com/zeitwork/zeitwork/internal/nodeagent/config"
 	"github.com/zeitwork/zeitwork/internal/nodeagent/types"
 )
@@ -22,12 +25,13 @@ import (
 // It shells out to firecracker-ctr to avoid direct gRPC dependencies and mirrors
 // the working flow validated in experiments/firecracker/scripts.
 type Runtime struct {
-	cfg    *config.FirecrackerRuntimeConfig
-	logger *slog.Logger
+	cfg     *config.FirecrackerRuntimeConfig
+	logger  *slog.Logger
+	queries *database.Queries
 }
 
 // NewFirecrackerRuntime creates a new Firecracker runtime backed by firecracker-containerd.
-func NewFirecrackerRuntime(cfg *config.FirecrackerRuntimeConfig, logger *slog.Logger) (*Runtime, error) {
+func NewFirecrackerRuntime(cfg *config.FirecrackerRuntimeConfig, logger *slog.Logger, queries *database.Queries) (*Runtime, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("nil firecracker runtime config")
 	}
@@ -41,7 +45,7 @@ func NewFirecrackerRuntime(cfg *config.FirecrackerRuntimeConfig, logger *slog.Lo
 	if _, err := runFC(ctx, cfg, []string{"version"}); err != nil {
 		logger.Warn("firecracker-ctr version probe failed", "error", err)
 	}
-	return &Runtime{cfg: cfg, logger: logger}, nil
+	return &Runtime{cfg: cfg, logger: logger, queries: queries}, nil
 }
 
 func (r *Runtime) addressArgs() []string {
@@ -148,6 +152,50 @@ func discoverIPv6Lease(cniStateDir, networkName, vmID string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("no IPv6 lease found for vmID %s", vmID)
+}
+
+// generateFallbackIPv6 deterministically derives a unique IPv6 within fd00:fc::/64 for a VM.
+// It avoids conflicts with existing host-local leases by checking the CNI lease directory.
+func generateFallbackIPv6(cniStateDir, networkName, vmID string) (string, error) {
+	leaseDir := filepath.Join(cniStateDir, networkName)
+	inUse := make(map[string]struct{})
+	if entries, err := os.ReadDir(leaseDir); err == nil {
+		for _, de := range entries {
+			name := de.Name()
+			if strings.HasPrefix(name, "fd") {
+				inUse[name] = struct{}{}
+			}
+		}
+	}
+	base := "fd00:fc::"
+	sum := sha256.Sum256([]byte(strings.TrimSpace(vmID)))
+	h0 := binary.BigEndian.Uint16(sum[0:2])
+	h1 := binary.BigEndian.Uint16(sum[2:4])
+	h2 := binary.BigEndian.Uint16(sum[4:6])
+	h3 := binary.BigEndian.Uint16(sum[6:8])
+	for i := 0; i < 64; i++ {
+		ip := fmt.Sprintf("%s%x:%x:%x:%x", base, h0, h1, h2, h3+uint16(i))
+		if ip == "fd00:fc::1" {
+			continue
+		}
+		if _, exists := inUse[ip]; exists {
+			continue
+		}
+		return ip, nil
+	}
+	for i := 0; i < 128; i++ {
+		b := make([]byte, 8)
+		_, _ = rand.Read(b)
+		ip := fmt.Sprintf("%s%x:%x:%x:%x", base, binary.BigEndian.Uint16(b[0:2]), binary.BigEndian.Uint16(b[2:4]), binary.BigEndian.Uint16(b[4:6]), binary.BigEndian.Uint16(b[6:8]))
+		if ip == "fd00:fc::1" {
+			continue
+		}
+		if _, exists := inUse[ip]; exists {
+			continue
+		}
+		return ip, nil
+	}
+	return "", fmt.Errorf("unable to generate unique IPv6 for vmID %s", vmID)
 }
 
 // mapStatus maps textual ctr task STATUS to InstanceState.

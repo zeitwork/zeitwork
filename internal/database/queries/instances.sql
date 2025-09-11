@@ -141,3 +141,12 @@ UPDATE instances
 SET deleted_at = now(), 
     updated_at = now()
 WHERE id = $1;
+
+-- name: InstancesCheckIpInUse :one
+-- Check if an IP address is already in use by any non-deleted instance
+SELECT EXISTS(
+    SELECT 1 
+    FROM instances 
+    WHERE ip_address = $1 
+        AND deleted_at IS NULL
+) as in_use;

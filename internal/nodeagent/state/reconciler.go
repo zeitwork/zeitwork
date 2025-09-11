@@ -243,6 +243,8 @@ func (r *Reconciler) executeCreate(ctx context.Context, instance *types.Instance
 			return fmt.Errorf("failed to start instance: %w", err)
 		}
 
+		// The runtime should handle IP uniqueness checking and fallback generation internally
+
 		// Update the database with the actual container IP address
 		if createdInstance.NetworkInfo != nil && createdInstance.NetworkInfo.IPAddress != "" {
 			if err := r.updateInstanceIPAddress(ctx, createdInstance.ID, createdInstance.NetworkInfo.IPAddress); err != nil {
