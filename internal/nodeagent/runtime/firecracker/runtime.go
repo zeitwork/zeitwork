@@ -438,11 +438,12 @@ func shortID(id string) string {
 }
 
 func tapNameFor(id string) string {
-	base := fmt.Sprintf("tap-zeitwork-%s", shortID(id))
-	if len(base) > 15 {
-		return base[:15]
-	}
-	return base
+	// Use a hash to ensure uniqueness within 15 char limit
+	h := fnv.New32a()
+	_, _ = h.Write([]byte(id))
+	hash := h.Sum32()
+	// Create unique name: tap-zw-XXXXXXXX (15 chars max)
+	return fmt.Sprintf("tap-zw-%08x", hash)
 }
 
 func mkfifo(path string, mode uint32) error {
