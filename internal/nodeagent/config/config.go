@@ -60,7 +60,7 @@ type FirecrackerRuntimeConfig struct {
 
 	// Image configuration
 	DefaultKernelPath string // Default kernel image path
-	DefaultRootfsPath string // Default VM base rootfs image path (with agent)
+	DefaultRootfsPath string // Default VM base rootfs image path (standalone Zeitwork VM)
 	ImageRegistry     string // Container image registry
 
 	// Auto-setup configuration
@@ -146,8 +146,8 @@ func loadRuntimeConfig() (*RuntimeConfig, error) {
 			PullTimeout:  getEnvDuration("FC_PULL_TIMEOUT", 5*time.Minute),
 
 			// Image configuration
-			DefaultKernelPath: getEnvOrDefault("DEFAULT_KERNEL_PATH", "/var/lib/firecracker-containerd/runtime/hello-vmlinux.bin"),
-			DefaultRootfsPath: getEnvOrDefault("DEFAULT_ROOTFS_PATH", "/var/lib/firecracker-containerd/runtime/default-rootfs.img"),
+			DefaultKernelPath: getEnvOrDefault("DEFAULT_KERNEL_PATH", "/var/lib/zeitwork/firecracker/zeitwork-vmlinux.bin"),
+			DefaultRootfsPath: getEnvOrDefault("DEFAULT_ROOTFS_PATH", "/var/lib/zeitwork/firecracker/zeitwork-rootfs.img"),
 			ImageRegistry:     getEnvOrDefault("IMAGE_REGISTRY", "localhost:5001"),
 
 			// Auto-setup and Security

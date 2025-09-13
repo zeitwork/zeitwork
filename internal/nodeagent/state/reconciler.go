@@ -231,8 +231,8 @@ func (r *Reconciler) executeCreate(ctx context.Context, instance *types.Instance
 	}
 
 	// Start the instance if it should be running
-	// Instances in "pending" or "running" state should be started
-	if instance.State == types.InstanceStateRunning || instance.State == types.InstanceStatePending {
+	// Start newly created instances for all desired states except explicitly stopped/terminated
+	if instance.State != types.InstanceStateStopped && instance.State != types.InstanceStateTerminated {
 		if err := r.runtime.StartInstance(ctx, createdInstance); err != nil {
 			// Try to clean up the created instance
 			if deleteErr := r.runtime.DeleteInstance(ctx, createdInstance); deleteErr != nil {

@@ -1,0 +1,21 @@
+#!/sbin/openrc-run
+
+name="zeitwork-app"
+description="Zeitwork App Launcher"
+command="/usr/local/bin/zeitwork-run"
+command_background="yes"
+pidfile="/run/zeitwork-app.pid"
+output_log="/var/log/zeitwork-app.log"
+error_log="/var/log/zeitwork-app.log"
+start_stop_daemon_args="--stdout /dev/console --stderr /dev/console"
+
+depend() {
+    need net zeitwork-network
+    after firewall
+}
+
+start_pre() {
+    mkdir -p /var/log
+}
+
+
