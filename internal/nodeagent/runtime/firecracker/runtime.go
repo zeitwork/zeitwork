@@ -556,40 +556,40 @@ func (f *FirecrackerRuntime) prepareRootfsWithImage(rootfsPath string, imageTag 
 		return fmt.Errorf("docker export: %w", err)
 	}
 
-	// Write env as shell-friendly file (host and inside image)
-	if env == nil {
-		env = map[string]string{}
-	}
-	if defaultPort > 0 {
-		if _, ok := env["PORT"]; !ok {
-			env["PORT"] = fmt.Sprintf("%d", defaultPort)
-		}
-	}
-	if _, ok := env["HOST"]; !ok {
-		env["HOST"] = "0.0.0.0"
-	}
-	if _, ok := env["NITRO_HOST"]; !ok {
-		env["NITRO_HOST"] = "0.0.0.0"
-	}
-	if _, ok := env["NUXT_HOST"]; !ok {
-		env["NUXT_HOST"] = "0.0.0.0"
-	}
-	var bldr strings.Builder
-	for k, v := range env {
-		esc := strings.ReplaceAll(v, "'", "'\\''")
-		fmt.Fprintf(&bldr, "export %s='%s'\n", k, esc)
-	}
-	if err := os.WriteFile(filepath.Join(etcZw, "env.sh"), []byte(bldr.String()), 0o644); err != nil {
-		return err
-	}
-	// also write inside image
-	etcZwApp := filepath.Join(appDir, "etc", "zeitwork")
-	if err := os.MkdirAll(etcZwApp, 0o755); err != nil {
-		return err
-	}
-	if err := os.WriteFile(filepath.Join(etcZwApp, "env.sh"), []byte(bldr.String()), 0o644); err != nil {
-		return err
-	}
+	// // Write env as shell-friendly file (host and inside image)
+	// if env == nil {
+	// 	env = map[string]string{}
+	// }
+	// if defaultPort > 0 {
+	// 	if _, ok := env["PORT"]; !ok {
+	// 		env["PORT"] = fmt.Sprintf("%d", defaultPort)
+	// 	}
+	// }
+	// if _, ok := env["HOST"]; !ok {
+	// 	env["HOST"] = "0.0.0.0"
+	// }
+	// if _, ok := env["NITRO_HOST"]; !ok {
+	// 	env["NITRO_HOST"] = "0.0.0.0"
+	// }
+	// if _, ok := env["NUXT_HOST"]; !ok {
+	// 	env["NUXT_HOST"] = "0.0.0.0"
+	// }
+	// var bldr strings.Builder
+	// for k, v := range env {
+	// 	esc := strings.ReplaceAll(v, "'", "'\\''")
+	// 	fmt.Fprintf(&bldr, "export %s='%s'\n", k, esc)
+	// }
+	// if err := os.WriteFile(filepath.Join(etcZw, "env.sh"), []byte(bldr.String()), 0o644); err != nil {
+	// 	return err
+	// }
+	// // also write inside image
+	// etcZwApp := filepath.Join(appDir, "etc", "zeitwork")
+	// if err := os.MkdirAll(etcZwApp, 0o755); err != nil {
+	// 	return err
+	// }
+	// if err := os.WriteFile(filepath.Join(etcZwApp, "env.sh"), []byte(bldr.String()), 0o644); err != nil {
+	// 	return err
+	// }
 
 	// Inspect image for entrypoint/cmd/workingdir
 	entry, cmd, workingDir, err := dockerInspectImageConfig(imageTag)
