@@ -27,7 +27,7 @@ import (
 // Service represents the node agent service
 type Service struct {
 	logger *slog.Logger
-	config *config.Config
+	config *sharedConfig.NodeAgentConfig
 	nodeID uuid.UUID
 
 	// Core components
@@ -44,7 +44,7 @@ type Service struct {
 }
 
 // NewService creates a new node agent service
-func NewService(cfg *config.Config, logger *slog.Logger) (*Service, error) {
+func NewService(cfg *sharedConfig.NodeAgentConfig, logger *slog.Logger) (*Service, error) {
 	// Parse node ID
 	nodeID, err := uuid.Parse(cfg.NodeID)
 	if err != nil {
@@ -58,18 +58,32 @@ func NewService(cfg *config.Config, logger *slog.Logger) (*Service, error) {
 	}
 
 	// Initialize NATS client
-	natsConfig, err := sharedConfig.LoadNATSConfig()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load NATS config: %w", err)
-	}
-
-	natsClient, err := sharedNats.NewClient(natsConfig, "nodeagent")
+	natsClient, err := sharedNats.NewClient(cfg.NATS, "nodeagent")
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to NATS: %w", err)
 	}
 
+	// Convert shared config to internal config format for runtime
+	runtimeConfig := &config.RuntimeConfig{
+		Mode: cfg.Runtime.Mode,
+		DockerConfig: &config.DockerRuntimeConfig{
+			Endpoint:          cfg.Runtime.DockerConfig.Endpoint,
+			NetworkName:       cfg.Runtime.DockerConfig.NetworkName,
+			ImageRegistry:     cfg.Runtime.DockerConfig.ImageRegistry,
+			PullTimeout:       cfg.Runtime.DockerConfig.PullTimeout,
+			StartTimeout:      cfg.Runtime.DockerConfig.StartTimeout,
+			StopTimeout:       cfg.Runtime.DockerConfig.StopTimeout,
+			EnableAutoCleanup: cfg.Runtime.DockerConfig.EnableAutoCleanup,
+		},
+		FirecrackerConfig: &config.FirecrackerRuntimeConfig{
+			ContainerdSocket:    cfg.Runtime.FirecrackerConfig.ContainerdSocket,
+			ContainerdNamespace: cfg.Runtime.FirecrackerConfig.ContainerdNamespace,
+			RuntimeConfigPath:   cfg.Runtime.FirecrackerConfig.RuntimeConfigPath,
+		},
+	}
+
 	// Initialize runtime
-	rt, err := nodeagentRuntime.NewRuntime(cfg.Runtime, logger, db.Queries())
+	rt, err := nodeagentRuntime.NewRuntime(runtimeConfig, logger, db.Queries())
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize runtime: %w", err)
 	}

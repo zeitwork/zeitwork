@@ -12,32 +12,17 @@ import (
 )
 
 func main() {
-	// Load base configuration
-	baseCfg, err := config.LoadListenerConfig()
+	// Load listener configuration
+	cfg, err := config.LoadListenerConfig()
 	if err != nil {
 		panic("Failed to load configuration: " + err.Error())
 	}
 
-	// Load NATS configuration
-	natsCfg, err := config.LoadNATSConfigWithPrefix("LISTENER")
-	if err != nil {
-		panic("Failed to load NATS configuration: " + err.Error())
-	}
-
 	// Create logger
-	logger := logging.NewLogger(baseCfg.ServiceName, baseCfg.LogLevel, baseCfg.Environment)
-
-	// Create listener service configuration
-	listenerCfg := &listener.Config{
-		BaseConfig:          baseCfg,
-		DatabaseURL:         getEnvWithDefault("LISTENER_DATABASE_URL", "postgres://postgres:root@localhost/zeitwork?sslmode=disable"),
-		NATSConfig:          natsCfg,
-		ReplicationSlotName: getEnvWithDefault("LISTENER_REPLICATION_SLOT", "zeitwork_listener"),
-		PublicationName:     getEnvWithDefault("LISTENER_PUBLICATION_NAME", "zeitwork_changes"),
-	}
+	logger := logging.NewLogger(cfg.ServiceName, cfg.LogLevel, cfg.Environment)
 
 	// Create the listener service
-	service, err := listener.NewService(listenerCfg, logger)
+	service, err := listener.NewService(cfg, logger)
 	if err != nil {
 		logger.Error("Failed to create listener service", "error", err)
 		panic("Failed to create listener service: " + err.Error())
@@ -59,12 +44,12 @@ func main() {
 
 	// Start the service
 	logger.Info("Starting listener service",
-		"environment", baseCfg.Environment,
-		"log_level", baseCfg.LogLevel,
-		"database_url", listenerCfg.DatabaseURL,
-		"nats_urls", natsCfg.URLs,
-		"publication", listenerCfg.PublicationName,
-		"slot", listenerCfg.ReplicationSlotName,
+		"environment", cfg.Environment,
+		"log_level", cfg.LogLevel,
+		"database_url", cfg.DatabaseURL,
+		"nats_urls", cfg.NATS.URLs,
+		"publication", cfg.PublicationName,
+		"slot", cfg.ReplicationSlotName,
 	)
 
 	// Run the service
@@ -76,12 +61,4 @@ func main() {
 			os.Exit(1)
 		}
 	}
-}
-
-// getEnvWithDefault gets an environment variable with a default value
-func getEnvWithDefault(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
 }

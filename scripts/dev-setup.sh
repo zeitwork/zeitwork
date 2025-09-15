@@ -70,19 +70,6 @@ check_prerequisites() {
         fi
     fi
     
-    # Check for required environment variables
-    if [ -z "${DATABASE_URL:-}" ]; then
-        print_error "DATABASE_URL environment variable is not set"
-        print_error "Please set DATABASE_URL (e.g., export DATABASE_URL='postgres://postgres:postgres@localhost:5432/postgres')"
-        missing_prereqs=1
-    fi
-    
-    if [ -z "${NATS_URL:-}" ]; then
-        print_error "NATS_URL environment variable is not set"
-        print_error "Please set NATS_URL (e.g., export NATS_URL='nats://localhost:4222')"
-        missing_prereqs=1
-    fi
-    
     return $missing_prereqs
 }
 
@@ -144,44 +131,7 @@ run_migrations() {
     print_success "Database migrations completed"
 }
 
-# Export service-specific environment variables
-export_service_env() {
-    local service_prefix=$(echo "$1" | tr '[:lower:]' '[:upper:]')
-    
-    # Export service-specific variables if they exist
-    for var in LOG_LEVEL ENVIRONMENT DATABASE_URL NATS_URLS NATS_MAX_RECONNECTS NATS_RECONNECT_WAIT_MS NATS_TIMEOUT_MS; do
-        local service_var="${service_prefix}_${var}"
-        if [ -n "${!service_var:-}" ]; then
-            export $var="${!service_var}"
-        fi
-    done
-    
-    # Export service-specific variables that don't have global equivalents
-    case "$service_prefix" in
-        "BUILDER")
-            for var in TYPE WORK_DIR BUILD_POLL_INTERVAL_MS BUILD_TIMEOUT_MS MAX_CONCURRENT_BUILDS CONTAINER_REGISTRY PORT; do
-                local service_var="${service_prefix}_${var}"
-                if [ -n "${!service_var:-}" ]; then
-                    export $var="${!service_var}"
-                fi
-            done
-            ;;
-        "NODEAGENT")
-            for var in NODE_ID PORT; do
-                local service_var="${service_prefix}_${var}"
-                if [ -n "${!service_var:-}" ]; then
-                    export $var="${!service_var}"
-                fi
-            done
-            ;;
-        "EDGEPROXY"|"CERTMANAGER"|"LISTENER"|"MANAGER")
-            local service_var="${service_prefix}_PORT"
-            if [ -n "${!service_var:-}" ]; then
-                export PORT="${!service_var}"
-            fi
-            ;;
-    esac
-}
+# All environment variables are already exported from .env file at script startup
 
 # Start a service in the background
 start_service() {
@@ -200,13 +150,13 @@ start_service() {
         return 0
     fi
     
-    # Export service-specific environment variables
-    export_service_env "$service_name"
+    # Environment variables are already exported from .env file
     
     # Start the service
     if [ "$service_name" = "nodeagent" ]; then
         # Nodeagent requires root privileges for firecracker-containerd
-        nohup sudo -E bash -c "$service_cmd" > "$log_file" 2>&1 &
+        # nohup sudo -E bash -c "$service_cmd" > "$log_file" 2>&1 &
+        nohup bash -c "$service_cmd" > "$log_file" 2>&1 &
     else
         nohup bash -c "$service_cmd" > "$log_file" 2>&1 &
     fi

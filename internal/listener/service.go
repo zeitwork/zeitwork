@@ -20,7 +20,7 @@ import (
 // Service represents the listener service that streams PostgreSQL changes to NATS
 type Service struct {
 	logger                *slog.Logger
-	config                *Config
+	config                *config.ListenerConfig
 	natsClient            *nats.Client
 	pgConn                *pgconn.PgConn
 	relations             map[uint32]*pglogrepl.RelationMessageV2
@@ -30,19 +30,8 @@ type Service struct {
 	standbyMessageTimeout time.Duration
 }
 
-// Config holds the configuration for the listener service
-type Config struct {
-	BaseConfig          *config.BaseConfig
-	DatabaseURL         string
-	NATSConfig          *config.NATSConfig
-	ReplicationSlotName string
-	PublicationName     string
-	StandbyTimeout      time.Duration
-	PluginArgs          []string
-}
-
 // NewService creates a new listener service
-func NewService(cfg *Config, logger *slog.Logger) (*Service, error) {
+func NewService(cfg *config.ListenerConfig, logger *slog.Logger) (*Service, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("config is required")
 	}
@@ -67,7 +56,7 @@ func NewService(cfg *Config, logger *slog.Logger) (*Service, error) {
 	}
 
 	// Create NATS client
-	natsClient, err := nats.NewClient(cfg.NATSConfig, "listener")
+	natsClient, err := nats.NewClient(cfg.NATS, "listener")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create NATS client: %w", err)
 	}

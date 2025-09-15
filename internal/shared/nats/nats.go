@@ -23,6 +23,9 @@ func NewClient(cfg *config.NATSConfig, serviceName string) (*Client, error) {
 	if serviceName == "" {
 		return nil, fmt.Errorf("service name is required")
 	}
+	if len(cfg.URLs) == 0 {
+		return nil, fmt.Errorf("NATS URLs are required but none provided - please set NATS_URLS environment variable")
+	}
 
 	// Generate unique client name using service name and UUIDv7
 	clientName := fmt.Sprintf("zeitwork-%s-%s", serviceName, uuid.GenerateUUID())

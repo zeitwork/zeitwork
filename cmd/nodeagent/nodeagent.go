@@ -8,19 +8,19 @@ import (
 	"syscall"
 
 	"github.com/zeitwork/zeitwork/internal/nodeagent"
-	"github.com/zeitwork/zeitwork/internal/nodeagent/config"
+	"github.com/zeitwork/zeitwork/internal/shared/config"
 	"github.com/zeitwork/zeitwork/internal/shared/logging"
 )
 
 func main() {
 	// Load configuration
-	cfg, err := config.LoadConfig()
+	cfg, err := config.LoadNodeAgentConfig()
 	if err != nil {
 		log.Fatalf("Failed to load configuration: %v", err)
 	}
 
 	// Create logger
-	logger := logging.NewLogger("nodeagent", getEnvOrDefault("LOG_LEVEL", "info"), cfg.Runtime.Mode)
+	logger := logging.NewLogger(cfg.ServiceName, cfg.LogLevel, cfg.Environment)
 
 	// Create node agent service
 	svc, err := nodeagent.NewService(cfg, logger)
@@ -55,11 +55,4 @@ func main() {
 	}
 
 	logger.Info("Node agent service stopped")
-}
-
-func getEnvOrDefault(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
 }
