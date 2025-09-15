@@ -1,0 +1,6 @@
+.env
+.env.example
+build
+.idea
+node_modules
+logs

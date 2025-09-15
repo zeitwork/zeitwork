@@ -107,7 +107,7 @@ func NewService(config *Config, logger *slog.Logger) (*Service, error) {
 	var natsClient *nats.Client
 	if config.NATSConfig != nil {
 		var err error
-		natsClient, err = nats.NewClient(config.NATSConfig)
+		natsClient, err = nats.NewClient(config.NATSConfig, "edgeproxy")
 		if err != nil {
 			return nil, fmt.Errorf("failed to create NATS client: %w", err)
 		}

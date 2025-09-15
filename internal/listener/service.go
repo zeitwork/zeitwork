@@ -67,7 +67,7 @@ func NewService(cfg *Config, logger *slog.Logger) (*Service, error) {
 	}
 
 	// Create NATS client
-	natsClient, err := nats.NewClient(cfg.NATSConfig)
+	natsClient, err := nats.NewClient(cfg.NATSConfig, "listener")
 	if err != nil {
 		return nil, fmt.Errorf("failed to create NATS client: %w", err)
 	}

@@ -54,7 +54,7 @@ func NewService(cfg *config.ManagerConfig, logger *slog.Logger) (*Service, error
 
 	queries := database.New(db)
 
-	natsClient, err := natsClient.NewSimpleClient()
+	natsClient, err := natsClient.NewClient(cfg.NATS, "manager")
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize NATS client: %w", err)
 	}

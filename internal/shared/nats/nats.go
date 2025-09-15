@@ -7,6 +7,7 @@ import (
 
 	"github.com/nats-io/nats.go"
 	"github.com/zeitwork/zeitwork/internal/shared/config"
+	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 )
 
 // Client wraps the NATS connection with simple functionality
@@ -15,14 +16,20 @@ type Client struct {
 }
 
 // NewClient creates a new NATS client with the provided configuration
-func NewClient(cfg *config.NATSConfig) (*Client, error) {
+func NewClient(cfg *config.NATSConfig, serviceName string) (*Client, error) {
 	if cfg == nil {
 		return nil, fmt.Errorf("NATS configuration is required")
 	}
+	if serviceName == "" {
+		return nil, fmt.Errorf("service name is required")
+	}
+
+	// Generate unique client name using service name and UUIDv7
+	clientName := fmt.Sprintf("zeitwork-%s-%s", serviceName, uuid.GenerateUUID())
 
 	// Create connection options for dev-local setup
 	opts := []nats.Option{
-		nats.Name("zeitwork-client"),
+		nats.Name(clientName),
 		nats.MaxReconnects(cfg.MaxReconnects),
 		nats.ReconnectWait(cfg.ReconnectWait),
 		nats.Timeout(cfg.Timeout),
@@ -39,18 +46,6 @@ func NewClient(cfg *config.NATSConfig) (*Client, error) {
 	return &Client{
 		conn: conn,
 	}, nil
-}
-
-// NewSimpleClient creates a NATS client with default local configuration
-func NewSimpleClient() (*Client, error) {
-	cfg := &config.NATSConfig{
-		URLs:          []string{"nats://localhost:4222"},
-		MaxReconnects: -1, // Unlimited reconnects
-		ReconnectWait: nats.DefaultReconnectWait,
-		Timeout:       nats.DefaultTimeout,
-	}
-
-	return NewClient(cfg)
 }
 
 // NOTE: A no-op WithContext(*Client) was removed to avoid method duplication.

@@ -43,12 +43,14 @@ type BuilderConfig struct {
 	BuilderType       string // Type of builder to use (docker, firecracker, etc.)
 	BuildWorkDir      string // Directory where builds are performed
 	ContainerRegistry string // Container registry to push images to
+	NATS              *NATSConfig
 }
 
 // ManagerConfig contains configuration for the manager service
 type ManagerConfig struct {
 	BaseConfig
 	DatabaseURL string
+	NATS        *NATSConfig
 }
 
 // NATSConfig contains configuration for NATS messaging
@@ -97,6 +99,11 @@ func LoadBuilderConfig() (*BuilderConfig, error) {
 	cleanupIntervalMs, _ := strconv.Atoi(getEnvWithPrefix("BUILDER", "CLEANUP_INTERVAL_MS", "300000")) // 5 minutes default
 	shutdownGraceMs, _ := strconv.Atoi(getEnvWithPrefix("BUILDER", "SHUTDOWN_GRACE_MS", "30000"))      // 30 seconds default
 
+	natsConfig, err := LoadNATSConfigWithPrefix("BUILDER")
+	if err != nil {
+		return nil, fmt.Errorf("failed to load NATS config: %w", err)
+	}
+
 	config := &BuilderConfig{
 		BaseConfig:          loadBaseConfigWithPrefix("BUILDER", "builder"),
 		DatabaseURL:         getEnvWithPrefix("BUILDER", "DATABASE_URL", "postgres://localhost/zeitwork"),
@@ -110,6 +117,7 @@ func LoadBuilderConfig() (*BuilderConfig, error) {
 		BuilderType:       getEnvWithPrefix("BUILDER", "TYPE", "docker"),
 		BuildWorkDir:      getEnvWithPrefix("BUILDER", "WORK_DIR", "/tmp/zeitwork-builds"),
 		ContainerRegistry: getEnvWithPrefix("BUILDER", "CONTAINER_REGISTRY", ""),
+		NATS:              natsConfig,
 	}
 
 	if config.DatabaseURL == "" {
@@ -121,9 +129,15 @@ func LoadBuilderConfig() (*BuilderConfig, error) {
 
 // LoadManagerConfig loads configuration for the manager service
 func LoadManagerConfig() (*ManagerConfig, error) {
+	natsConfig, err := LoadNATSConfigWithPrefix("MANAGER")
+	if err != nil {
+		return nil, fmt.Errorf("failed to load NATS config: %w", err)
+	}
+
 	config := &ManagerConfig{
 		BaseConfig:  loadBaseConfigWithPrefix("MANAGER", "manager"),
 		DatabaseURL: getEnvWithPrefix("MANAGER", "DATABASE_URL", "postgres://localhost/zeitwork"),
+		NATS:        natsConfig,
 	}
 
 	if config.DatabaseURL == "" {
@@ -143,6 +157,7 @@ type CertManagerConfig struct {
 	DevBaseDomain  string        // e.g. zeitwork.internal
 	ProdBaseDomain string        // e.g. zeitwork.app
 	LockTimeout    time.Duration // Storage lock timeout/backoff
+	NATS           *NATSConfig
 }
 
 // LoadCertManagerConfig loads configuration for the certmanager service
@@ -150,6 +165,11 @@ func LoadCertManagerConfig() (*CertManagerConfig, error) {
 	pollIntervalMs, _ := strconv.Atoi(getEnvWithPrefix("CERTMANAGER", "POLL_INTERVAL_MS", "900000")) // 15 minutes
 	renewBeforeDays, _ := strconv.Atoi(getEnvWithPrefix("CERTMANAGER", "RENEW_BEFORE_DAYS", "30"))
 	lockTimeoutMs, _ := strconv.Atoi(getEnvWithPrefix("CERTMANAGER", "LOCK_TIMEOUT_MS", "10000"))
+
+	natsConfig, err := LoadNATSConfigWithPrefix("CERTMANAGER")
+	if err != nil {
+		return nil, fmt.Errorf("failed to load NATS config: %w", err)
+	}
 
 	config := &CertManagerConfig{
 		BaseConfig:     loadBaseConfigWithPrefix("CERTMANAGER", "certmanager"),
@@ -160,6 +180,7 @@ func LoadCertManagerConfig() (*CertManagerConfig, error) {
 		DevBaseDomain:  getEnvWithPrefix("CERTMANAGER", "DEV_BASE_DOMAIN", "zeitwork.internal"),
 		ProdBaseDomain: getEnvWithPrefix("CERTMANAGER", "PROD_BASE_DOMAIN", "zeitwork.app"),
 		LockTimeout:    time.Duration(lockTimeoutMs) * time.Millisecond,
+		NATS:           natsConfig,
 	}
 
 	if config.DatabaseURL == "" {

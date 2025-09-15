@@ -52,7 +52,7 @@ func NewService(cfg *config.CertManagerConfig, logger *slog.Logger) (*Service, e
 	}
 
 	// NATS client
-	nc, err := natsClient.NewSimpleClient()
+	nc, err := natsClient.NewClient(cfg.NATS, "certmanager")
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to NATS: %w", err)
 	}
