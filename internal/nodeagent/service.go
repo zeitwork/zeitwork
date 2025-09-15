@@ -63,7 +63,7 @@ func NewService(cfg *config.Config, logger *slog.Logger) (*Service, error) {
 		return nil, fmt.Errorf("failed to load NATS config: %w", err)
 	}
 
-	natsClient, err := sharedNats.NewClient(natsConfig)
+	natsClient, err := sharedNats.NewClient(natsConfig, "nodeagent")
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to NATS: %w", err)
 	}

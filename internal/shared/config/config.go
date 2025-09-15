@@ -2,207 +2,182 @@ package config
 
 import (
 	"fmt"
-	"os"
-	"strconv"
-	"strings"
 	"time"
+
+	"github.com/caarlos0/env/v11"
 )
 
 // BaseConfig contains common configuration for all services
 type BaseConfig struct {
-	ServiceName string
-	LogLevel    string
-	Environment string // development, staging, production
+	ServiceName string `env:"SERVICE_NAME"`
+	LogLevel    string `env:"LOG_LEVEL" envDefault:"info"`
+	Environment string `env:"ENVIRONMENT" envDefault:"development"` // development, staging, production
 }
 
 // NodeAgentConfig contains configuration for the node agent service
 type NodeAgentConfig struct {
-	BaseConfig
-	NodeID      string
-	DatabaseURL string
+	BaseConfig  `envPrefix:"NODEAGENT_"`
+	NodeID      string `env:"NODEAGENT_NODE_ID"`
+	DatabaseURL string `env:"NODEAGENT_DATABASE_URL" required:"true"`
 }
 
 // EdgeProxyConfig contains configuration for the edge proxy service
 type EdgeProxyConfig struct {
-	BaseConfig
-	DatabaseURL string
-	PortHttp    int
-	PortHttps   int
+	BaseConfig  `envPrefix:"EDGEPROXY_"`
+	DatabaseURL string `env:"EDGEPROXY_DATABASE_URL" required:"true"`
+	PortHttp    int    `env:"EDGEPROXY_HTTP_PORT" envDefault:"8080"`
+	PortHttps   int    `env:"EDGEPROXY_HTTPS_PORT" envDefault:"8443"`
 }
 
 type BuilderConfig struct {
-	BaseConfig
-	DatabaseURL         string
-	BuildPollInterval   time.Duration // How often to check for pending builds
-	BuildTimeout        time.Duration // Maximum time for a single build
-	MaxConcurrentBuilds int           // Maximum number of concurrent builds
-	CleanupInterval     time.Duration // How often to check for orphaned builds
-	ShutdownGracePeriod time.Duration // How long to wait for in-flight builds on shutdown
+	BaseConfig          `envPrefix:"BUILDER_"`
+	DatabaseURL         string        `env:"BUILDER_DATABASE_URL" required:"true"`
+	BuildPollInterval   time.Duration `env:"BUILDER_BUILD_POLL_INTERVAL_MS" envDefault:"5s"` // How often to check for pending builds
+	BuildTimeout        time.Duration `env:"BUILDER_BUILD_TIMEOUT_MS" envDefault:"30m"`      // Maximum time for a single build
+	MaxConcurrentBuilds int           `env:"BUILDER_MAX_CONCURRENT_BUILDS" envDefault:"3"`   // Maximum number of concurrent builds
+	CleanupInterval     time.Duration `env:"BUILDER_CLEANUP_INTERVAL_MS" envDefault:"5m"`    // How often to check for orphaned builds
+	ShutdownGracePeriod time.Duration `env:"BUILDER_SHUTDOWN_GRACE_MS" envDefault:"30s"`     // How long to wait for in-flight builds on shutdown
 
 	// Image builder configuration
-	BuilderType       string // Type of builder to use (docker, firecracker, etc.)
-	BuildWorkDir      string // Directory where builds are performed
-	ContainerRegistry string // Container registry to push images to
-	NATS              *NATSConfig
+	BuilderType       string      `env:"BUILDER_TYPE" envDefault:"docker"`                   // Type of builder to use (docker, firecracker, etc.)
+	BuildWorkDir      string      `env:"BUILDER_WORK_DIR" envDefault:"/tmp/zeitwork-builds"` // Directory where builds are performed
+	ContainerRegistry string      `env:"BUILDER_CONTAINER_REGISTRY"`                         // Container registry to push images to
+	NATS              *NATSConfig `envPrefix:"BUILDER_"`
 }
 
 // ManagerConfig contains configuration for the manager service
 type ManagerConfig struct {
-	BaseConfig
-	DatabaseURL string
-	NATS        *NATSConfig
+	BaseConfig  `envPrefix:"MANAGER_"`
+	DatabaseURL string      `env:"MANAGER_DATABASE_URL" required:"true"`
+	NATS        *NATSConfig `envPrefix:"MANAGER_"`
 }
 
 // NATSConfig contains configuration for NATS messaging
 type NATSConfig struct {
-	URLs          []string      // NATS server URLs
-	MaxReconnects int           // Maximum number of reconnect attempts (-1 for unlimited)
-	ReconnectWait time.Duration // Time to wait between reconnect attempts
-	Timeout       time.Duration // Connection timeout
+	URLs          []string      `env:"NATS_URLS" envSeparator:"," required:"true"` // NATS server URLs
+	MaxReconnects int           `env:"NATS_MAX_RECONNECTS" envDefault:"-1"`        // Maximum number of reconnect attempts (-1 for unlimited)
+	ReconnectWait time.Duration `env:"NATS_RECONNECT_WAIT_MS" envDefault:"2s"`     // Time to wait between reconnect attempts
+	Timeout       time.Duration `env:"NATS_TIMEOUT_MS" envDefault:"5s"`            // Connection timeout
 }
 
 // LoadNodeAgentConfig loads configuration for the node agent service
 func LoadNodeAgentConfig() (*NodeAgentConfig, error) {
-	config := &NodeAgentConfig{
-		BaseConfig:  loadBaseConfigWithPrefix("NODEAGENT", "node-agent"),
-		DatabaseURL: getEnvWithPrefix("NODEAGENT", "DATABASE_URL", "postgres://localhost/zeitwork"),
-		NodeID:      getEnvWithPrefix("NODEAGENT", "NODE_ID", ""),
+	config, err := env.ParseAs[NodeAgentConfig]()
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse NodeAgent config: %w", err)
 	}
 
-	return config, nil
+	// Set service name if not provided
+	if config.ServiceName == "" {
+		config.ServiceName = "node-agent"
+	}
+
+	return &config, nil
 }
 
 // LoadEdgeProxyConfig loads configuration for the edge proxy service
 func LoadEdgeProxyConfig() (*EdgeProxyConfig, error) {
-	httpPort, _ := strconv.Atoi(getEnvWithPrefix("EDGEPROXY", "HTTP_PORT", "8080"))
-	httpsPort, _ := strconv.Atoi(getEnvWithPrefix("EDGEPROXY", "HTTPS_PORT", "8443"))
-
-	config := &EdgeProxyConfig{
-		BaseConfig:  loadBaseConfigWithPrefix("EDGEPROXY", "edge-proxy"),
-		DatabaseURL: getEnvWithPrefix("EDGEPROXY", "DATABASE_URL", "postgres://localhost/zeitwork"),
-		PortHttp:    httpPort,
-		PortHttps:   httpsPort,
+	config, err := env.ParseAs[EdgeProxyConfig]()
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse EdgeProxy config: %w", err)
 	}
 
-	if config.DatabaseURL == "" {
-		return nil, fmt.Errorf("DATABASE_URL is required")
+	// Set service name if not provided
+	if config.ServiceName == "" {
+		config.ServiceName = "edge-proxy"
 	}
 
-	return config, nil
+	return &config, nil
 }
 
 // LoadBuilderConfig loads configuration for the builder service
 func LoadBuilderConfig() (*BuilderConfig, error) {
-	buildPollIntervalMs, _ := strconv.Atoi(getEnvWithPrefix("BUILDER", "BUILD_POLL_INTERVAL_MS", "5000"))
-	buildTimeoutMs, _ := strconv.Atoi(getEnvWithPrefix("BUILDER", "BUILD_TIMEOUT_MS", "1800000")) // 30 minutes default
-	maxConcurrentBuilds, _ := strconv.Atoi(getEnvWithPrefix("BUILDER", "MAX_CONCURRENT_BUILDS", "3"))
-	cleanupIntervalMs, _ := strconv.Atoi(getEnvWithPrefix("BUILDER", "CLEANUP_INTERVAL_MS", "300000")) // 5 minutes default
-	shutdownGraceMs, _ := strconv.Atoi(getEnvWithPrefix("BUILDER", "SHUTDOWN_GRACE_MS", "30000"))      // 30 seconds default
-
-	natsConfig, err := LoadNATSConfigWithPrefix("BUILDER")
+	config, err := env.ParseAs[BuilderConfig]()
 	if err != nil {
-		return nil, fmt.Errorf("failed to load NATS config: %w", err)
+		return nil, fmt.Errorf("failed to parse Builder config: %w", err)
 	}
 
-	config := &BuilderConfig{
-		BaseConfig:          loadBaseConfigWithPrefix("BUILDER", "builder"),
-		DatabaseURL:         getEnvWithPrefix("BUILDER", "DATABASE_URL", "postgres://localhost/zeitwork"),
-		BuildPollInterval:   time.Duration(buildPollIntervalMs) * time.Millisecond,
-		BuildTimeout:        time.Duration(buildTimeoutMs) * time.Millisecond,
-		MaxConcurrentBuilds: maxConcurrentBuilds,
-		CleanupInterval:     time.Duration(cleanupIntervalMs) * time.Millisecond,
-		ShutdownGracePeriod: time.Duration(shutdownGraceMs) * time.Millisecond,
-
-		// Image builder configuration
-		BuilderType:       getEnvWithPrefix("BUILDER", "TYPE", "docker"),
-		BuildWorkDir:      getEnvWithPrefix("BUILDER", "WORK_DIR", "/tmp/zeitwork-builds"),
-		ContainerRegistry: getEnvWithPrefix("BUILDER", "CONTAINER_REGISTRY", ""),
-		NATS:              natsConfig,
+	// Set service name if not provided
+	if config.ServiceName == "" {
+		config.ServiceName = "builder"
 	}
 
-	if config.DatabaseURL == "" {
-		return nil, fmt.Errorf("DATABASE_URL is required")
+	// Initialize NATS config if not already set
+	if config.NATS == nil {
+		config.NATS = &NATSConfig{}
 	}
 
-	return config, nil
+	return &config, nil
 }
 
 // LoadManagerConfig loads configuration for the manager service
 func LoadManagerConfig() (*ManagerConfig, error) {
-	natsConfig, err := LoadNATSConfigWithPrefix("MANAGER")
+	config, err := env.ParseAs[ManagerConfig]()
 	if err != nil {
-		return nil, fmt.Errorf("failed to load NATS config: %w", err)
+		return nil, fmt.Errorf("failed to parse Manager config: %w", err)
 	}
 
-	config := &ManagerConfig{
-		BaseConfig:  loadBaseConfigWithPrefix("MANAGER", "manager"),
-		DatabaseURL: getEnvWithPrefix("MANAGER", "DATABASE_URL", "postgres://localhost/zeitwork"),
-		NATS:        natsConfig,
+	// Set service name if not provided
+	if config.ServiceName == "" {
+		config.ServiceName = "manager"
 	}
 
-	if config.DatabaseURL == "" {
-		return nil, fmt.Errorf("DATABASE_URL is required")
+	// Initialize NATS config if not already set
+	if config.NATS == nil {
+		config.NATS = &NATSConfig{}
 	}
 
-	return config, nil
+	return &config, nil
 }
 
 // CertManagerConfig contains configuration for the cert manager service
 type CertManagerConfig struct {
-	BaseConfig
-	DatabaseURL    string
-	PollInterval   time.Duration // How often to reconcile/renew certs
-	RenewBefore    time.Duration // Renew certificates before this remaining validity
-	Provider       string        // local | acme (future)
-	DevBaseDomain  string        // e.g. zeitwork.internal
-	ProdBaseDomain string        // e.g. zeitwork.app
-	LockTimeout    time.Duration // Storage lock timeout/backoff
-	NATS           *NATSConfig
+	BaseConfig     `envPrefix:"CERTMANAGER_"`
+	DatabaseURL    string        `env:"CERTMANAGER_DATABASE_URL" required:"true"`
+	PollInterval   time.Duration `env:"CERTMANAGER_POLL_INTERVAL_MS" envDefault:"15m"`              // How often to reconcile/renew certs
+	RenewBefore    time.Duration `env:"CERTMANAGER_RENEW_BEFORE_DAYS" envDefault:"720h"`            // Renew certificates before this remaining validity (30 days)
+	Provider       string        `env:"CERTMANAGER_PROVIDER" envDefault:"local"`                    // local | acme (future)
+	DevBaseDomain  string        `env:"CERTMANAGER_DEV_BASE_DOMAIN" envDefault:"zeitwork.internal"` // e.g. zeitwork.internal
+	ProdBaseDomain string        `env:"CERTMANAGER_PROD_BASE_DOMAIN" envDefault:"zeitwork.app"`     // e.g. zeitwork.app
+	LockTimeout    time.Duration `env:"CERTMANAGER_LOCK_TIMEOUT_MS" envDefault:"10s"`               // Storage lock timeout/backoff
+	NATS           *NATSConfig   `envPrefix:"CERTMANAGER_"`
 }
 
 // LoadCertManagerConfig loads configuration for the certmanager service
 func LoadCertManagerConfig() (*CertManagerConfig, error) {
-	pollIntervalMs, _ := strconv.Atoi(getEnvWithPrefix("CERTMANAGER", "POLL_INTERVAL_MS", "900000")) // 15 minutes
-	renewBeforeDays, _ := strconv.Atoi(getEnvWithPrefix("CERTMANAGER", "RENEW_BEFORE_DAYS", "30"))
-	lockTimeoutMs, _ := strconv.Atoi(getEnvWithPrefix("CERTMANAGER", "LOCK_TIMEOUT_MS", "10000"))
-
-	natsConfig, err := LoadNATSConfigWithPrefix("CERTMANAGER")
+	config, err := env.ParseAs[CertManagerConfig]()
 	if err != nil {
-		return nil, fmt.Errorf("failed to load NATS config: %w", err)
+		return nil, fmt.Errorf("failed to parse CertManager config: %w", err)
 	}
 
-	config := &CertManagerConfig{
-		BaseConfig:     loadBaseConfigWithPrefix("CERTMANAGER", "certmanager"),
-		DatabaseURL:    getEnvWithPrefix("CERTMANAGER", "DATABASE_URL", "postgres://localhost/zeitwork"),
-		PollInterval:   time.Duration(pollIntervalMs) * time.Millisecond,
-		RenewBefore:    time.Duration(renewBeforeDays) * 24 * time.Hour,
-		Provider:       getEnvWithPrefix("CERTMANAGER", "PROVIDER", "local"),
-		DevBaseDomain:  getEnvWithPrefix("CERTMANAGER", "DEV_BASE_DOMAIN", "zeitwork.internal"),
-		ProdBaseDomain: getEnvWithPrefix("CERTMANAGER", "PROD_BASE_DOMAIN", "zeitwork.app"),
-		LockTimeout:    time.Duration(lockTimeoutMs) * time.Millisecond,
-		NATS:           natsConfig,
+	// Set service name if not provided
+	if config.ServiceName == "" {
+		config.ServiceName = "certmanager"
 	}
 
-	if config.DatabaseURL == "" {
-		return nil, fmt.Errorf("DATABASE_URL is required")
+	// Initialize NATS config if not already set
+	if config.NATS == nil {
+		config.NATS = &NATSConfig{}
 	}
 
-	return config, nil
+	return &config, nil
 }
 
 // LoadListenerConfig loads configuration for the listener service
 func LoadListenerConfig() (*BaseConfig, error) {
-	config := loadBaseConfigWithPrefix("LISTENER", "listener")
-	return &config, nil
-}
-
-// loadBaseConfigWithPrefix loads common configuration for all services with service prefix support
-func loadBaseConfigWithPrefix(servicePrefix, serviceName string) BaseConfig {
-	return BaseConfig{
-		ServiceName: serviceName,
-		LogLevel:    getEnvWithPrefix(servicePrefix, "LOG_LEVEL", "info"),
-		Environment: getEnvWithPrefix(servicePrefix, "ENVIRONMENT", "development"),
+	config, err := env.ParseAsWithOptions[BaseConfig](env.Options{
+		Prefix: "LISTENER_",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse Listener config: %w", err)
 	}
+
+	// Set service name if not provided
+	if config.ServiceName == "" {
+		config.ServiceName = "listener"
+	}
+
+	return &config, nil
 }
 
 // LoadNATSConfig loads NATS configuration with dev-local defaults
@@ -212,71 +187,20 @@ func LoadNATSConfig() (*NATSConfig, error) {
 
 // LoadNATSConfigWithPrefix loads NATS configuration with service prefix support
 func LoadNATSConfigWithPrefix(servicePrefix string) (*NATSConfig, error) {
-	urls := getEnvSliceWithPrefix(servicePrefix, "NATS_URLS", []string{"nats://localhost:4222"})
+	var config NATSConfig
+	var err error
 
-	maxReconnects, _ := strconv.Atoi(getEnvWithPrefix(servicePrefix, "NATS_MAX_RECONNECTS", "-1"))
-	reconnectWaitMs, _ := strconv.Atoi(getEnvWithPrefix(servicePrefix, "NATS_RECONNECT_WAIT_MS", "2000"))
-	timeoutMs, _ := strconv.Atoi(getEnvWithPrefix(servicePrefix, "NATS_TIMEOUT_MS", "5000"))
-
-	config := &NATSConfig{
-		URLs:          urls,
-		MaxReconnects: maxReconnects,
-		ReconnectWait: time.Duration(reconnectWaitMs) * time.Millisecond,
-		Timeout:       time.Duration(timeoutMs) * time.Millisecond,
-	}
-
-	return config, nil
-}
-
-// getEnvSlice gets an environment variable as a slice, splitting by comma
-func getEnvSlice(key string, defaultValue []string) []string {
-	if value := os.Getenv(key); value != "" {
-		// Simple comma split - for production, consider using a proper CSV parser
-		result := make([]string, 0)
-		for _, v := range strings.Split(value, ",") {
-			if trimmed := strings.TrimSpace(v); trimmed != "" {
-				result = append(result, trimmed)
-			}
-		}
-		if len(result) > 0 {
-			return result
-		}
-	}
-	return defaultValue
-}
-
-// getEnvSliceWithPrefix gets a service-prefixed environment variable as a slice, with fallback
-func getEnvSliceWithPrefix(servicePrefix, key string, defaultValue []string) []string {
-	// Try service-prefixed version first
 	if servicePrefix != "" {
-		prefixedKey := servicePrefix + "_" + key
-		if result := getEnvSlice(prefixedKey, nil); result != nil {
-			return result
-		}
+		config, err = env.ParseAsWithOptions[NATSConfig](env.Options{
+			Prefix: servicePrefix + "_",
+		})
+	} else {
+		config, err = env.ParseAs[NATSConfig]()
 	}
 
-	// Fall back to unprefixed version
-	return getEnvSlice(key, defaultValue)
-}
-
-// getEnvOrDefault gets an environment variable or returns a default value
-func getEnvOrDefault(key, defaultValue string) string {
-	if value := os.Getenv(key); value != "" {
-		return value
-	}
-	return defaultValue
-}
-
-// getEnvWithPrefix tries to get a service-prefixed environment variable first, then falls back to the unprefixed version
-func getEnvWithPrefix(servicePrefix, key, defaultValue string) string {
-	// Try service-prefixed version first (e.g., BUILDER_DATABASE_URL)
-	if servicePrefix != "" {
-		prefixedKey := servicePrefix + "_" + key
-		if value := os.Getenv(prefixedKey); value != "" {
-			return value
-		}
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse NATS config: %w", err)
 	}
 
-	// Fall back to unprefixed version (e.g., DATABASE_URL)
-	return getEnvOrDefault(key, defaultValue)
+	return &config, nil
 }
