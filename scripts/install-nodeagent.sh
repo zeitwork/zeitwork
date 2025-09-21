@@ -48,9 +48,24 @@ main() {
 
   mkdir -p "${work_dir}" "${env_dir}"
 
+  # Build strategy:
+  # 1) If an artifact already exists, prefer it and skip building
+  # 2) Ensure Go is available (install from go.dev if missing)
+  # 3) Build locally with the host Go toolchain
   if (( do_build == 1 )); then
-    echo "[INFO] Building ${service_name}..."
-    (cd "${repo_root}" && go build -o "${build_artifact}" ./cmd/nodeagent)
+    if [[ -f "${build_artifact}" ]]; then
+      echo "[INFO] Found existing artifact at ${build_artifact}; skipping build."
+      do_build=0
+    fi
+  fi
+
+  if (( do_build == 1 )); then
+    if ! command -v go >/dev/null 2>&1; then
+      echo "[INFO] Go toolchain not found; running scripts/install-go.sh"
+      "${repo_root}/scripts/install-go.sh"
+    fi
+    echo "[INFO] Building ${service_name} with local Go toolchain..."
+    (cd "${repo_root}" && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags "-s -w" -o "${build_artifact}" ./cmd/nodeagent)
   else
     echo "[INFO] Skipping build (using existing artifact if present)"
   fi
