@@ -12,34 +12,9 @@ set -e
 
 REGISTRY="ghcr.io/zeitwork"
 PUSH_IMAGES=false
-SPECIFIC_SERVICE=""
-
-# Parse arguments
-while [[ $# -gt 0 ]]; do
-  case $1 in
-    --push)
-      PUSH_IMAGES=true
-      shift
-      ;;
-    builder|certmanager|edgeproxy|listener|manager)
-      SPECIFIC_SERVICE=$1
-      shift
-      ;;
-    *)
-      echo "Unknown argument: $1"
-      echo "Usage: $0 [--push] [service_name]"
-      echo "Available services: builder, certmanager, edgeproxy, listener, manager"
-      exit 1
-      ;;
-  esac
-done
 
 # Define services
-if [[ -n "$SPECIFIC_SERVICE" ]]; then
-  SERVICES=("$SPECIFIC_SERVICE")
-else
-  SERVICES=("builder" "certmanager" "edgeproxy" "listener" "manager")
-fi
+SERVICES=("builder" "certmanager" "listener" "manager", "web")
 
 # Get current git commit hash for tagging
 GIT_COMMIT=$(git rev-parse --short HEAD)

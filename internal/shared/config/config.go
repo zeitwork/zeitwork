@@ -34,9 +34,14 @@ type NodeAgentDockerRuntimeConfig struct {
 
 // NodeAgentFirecrackerRuntimeConfig contains Firecracker-specific configuration
 type NodeAgentFirecrackerRuntimeConfig struct {
-	ContainerdSocket    string `env:"NODEAGENT_FIRECRACKER_CONTAINERD_SOCKET" envDefault:"/run/firecracker-containerd/containerd.sock"`
-	ContainerdNamespace string `env:"NODEAGENT_FIRECRACKER_CONTAINERD_NAMESPACE" envDefault:"firecracker-system"`
-	RuntimeConfigPath   string `env:"NODEAGENT_FIRECRACKER_RUNTIME_CONFIG_PATH" envDefault:"/etc/containerd/firecracker-runtime.json"`
+	// Standalone Firecracker runtime image paths (preferred)
+	DefaultKernelPath string `env:"NODEAGENT_FIRECRACKER_DEFAULT_KERNEL_PATH" envDefault:"/var/lib/zeitwork/firecracker/zeitwork-vmlinux.bin"`
+	DefaultRootfsPath string `env:"NODEAGENT_FIRECRACKER_DEFAULT_ROOTFS_PATH" envDefault:"/var/lib/zeitwork/firecracker/zeitwork-rootfs.img"`
+
+	// Optional: firecracker-containerd integration (not used by default)
+	ContainerdSocket    string `env:"NODEAGENT_FIRECRACKER_CONTAINERD_SOCKET" envDefault:""`
+	ContainerdNamespace string `env:"NODEAGENT_FIRECRACKER_CONTAINERD_NAMESPACE" envDefault:""`
+	RuntimeConfigPath   string `env:"NODEAGENT_FIRECRACKER_RUNTIME_CONFIG_PATH" envDefault:""`
 }
 
 // NodeAgentConfig contains configuration for the node agent service

@@ -76,6 +76,8 @@ func NewService(cfg *sharedConfig.NodeAgentConfig, logger *slog.Logger) (*Servic
 			EnableAutoCleanup: cfg.Runtime.DockerConfig.EnableAutoCleanup,
 		},
 		FirecrackerConfig: &config.FirecrackerRuntimeConfig{
+			DefaultKernelPath:   cfg.Runtime.FirecrackerConfig.DefaultKernelPath,
+			DefaultRootfsPath:   cfg.Runtime.FirecrackerConfig.DefaultRootfsPath,
 			ContainerdSocket:    cfg.Runtime.FirecrackerConfig.ContainerdSocket,
 			ContainerdNamespace: cfg.Runtime.FirecrackerConfig.ContainerdNamespace,
 			RuntimeConfigPath:   cfg.Runtime.FirecrackerConfig.RuntimeConfigPath,
