@@ -29,11 +29,14 @@ require_root() { if [[ $EUID -ne 0 ]]; then err "Please run as root"; exit 1; fi
 
 cleanup_existing() {
   log "Cleaning up existing Firecracker instances, taps, sockets, and jailer dirs"
-  pkill -f firecracker || true
-  pkill -f jailer || true
-  for tap in $(ip -o link show | awk -F: '{print $2}' | tr -d ' ' | grep -E '^tap-' || true); do ip link del "$tap" || true; done
-  rm -f /tmp/firecracker*.socket /run/firecracker*.socket || true
+  # Make cleanup fully idempotent and avoid self-termination
+  set +e
+  pkill -x firecracker 2>/dev/null || true
+  pkill -x jailer 2>/dev/null || true
+  for tap in $(ip -o link show | awk -F: '{print $2}' | tr -d ' ' | grep -E '^tap-' || true); do ip link del "$tap" 2>/dev/null || true; done
+  rm -f /tmp/firecracker*.socket /run/firecracker*.socket 2>/dev/null || true
   rm -rf /srv/jailer/firecracker/* 2>/dev/null || true
+  set -e
   ok "Cleanup completed"
 }
 
