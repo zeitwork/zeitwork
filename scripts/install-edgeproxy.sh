@@ -38,6 +38,18 @@ main() {
   script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   repo_root="$(cd "${script_dir}/.." && pwd)"
 
+  # Ensure Go is available for build
+  if ! command -v go >/dev/null 2>&1; then
+    echo "[INFO] Go not found; installing via ${repo_root}/scripts/install-go.sh ..."
+    if [[ ! -f "${repo_root}/scripts/install-go.sh" ]]; then
+      echo "[ERROR] Missing installer: ${repo_root}/scripts/install-go.sh" >&2
+      exit 1
+    fi
+    bash "${repo_root}/scripts/install-go.sh"
+    export PATH="/usr/local/go/bin:${PATH}"
+    echo "[OK] Go installed: $(/usr/local/go/bin/go version)"
+  fi
+
   local service_name="zeitwork-edgeproxy"
   local service_file="/etc/systemd/system/${service_name}.service"
   local bin_target="/usr/local/bin/${service_name}"
