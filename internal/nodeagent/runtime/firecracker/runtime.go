@@ -544,16 +544,35 @@ func (f *FirecrackerRuntime) prepareRootfsWithImage(rootfsPath string, imageTag 
 	}
 
 	// Export docker image filesystem into /app
-	containerIDBytes, err := exec.Command("bash", "-lc", fmt.Sprintf("docker create %s", shellEscape(imageTag))).CombinedOutput()
+	containerIDBytes, err := exec.Command("docker", "create", imageTag).CombinedOutput()
 	if err != nil {
 		f.logger.Error("docker create failed", "image", imageTag, "out", string(containerIDBytes), "err", err)
 		return fmt.Errorf("docker create: %w", err)
 	}
 	containerID := strings.TrimSpace(string(containerIDBytes))
 	defer func() { _ = exec.Command("docker", "rm", "-f", containerID).Run() }()
-	exportCmd := exec.Command("bash", "-lc", fmt.Sprintf("docker export %s | tar -C %s -x", shellEscape(containerID), shellEscape(appDir)))
-	if out, err := exportCmd.CombinedOutput(); err != nil {
-		f.logger.Error("docker export failed", "out", string(out), "err", err)
+
+	// Use docker export with separate arguments to avoid shell escaping issues
+	exportCmd := exec.Command("docker", "export", containerID)
+	exportOut, err := exportCmd.StdoutPipe()
+	if err != nil {
+		return fmt.Errorf("docker export stdout pipe: %w", err)
+	}
+
+	tarCmd := exec.Command("tar", "-C", appDir, "-x")
+	tarCmd.Stdin = exportOut
+
+	if err := exportCmd.Start(); err != nil {
+		return fmt.Errorf("docker export start: %w", err)
+	}
+
+	if err := tarCmd.Run(); err != nil {
+		f.logger.Error("tar extract failed", "err", err)
+		return fmt.Errorf("tar extract: %w", err)
+	}
+
+	if err := exportCmd.Wait(); err != nil {
+		f.logger.Error("docker export failed", "err", err)
 		return fmt.Errorf("docker export: %w", err)
 	}
 
@@ -650,7 +669,7 @@ exec chroot /app /bin/sh /usr/local/bin/app-start.sh
 }
 
 func dockerInspectImageConfig(imageTag string) ([]string, []string, string, error) {
-	cmd := exec.Command("bash", "-lc", fmt.Sprintf("docker image inspect %s --format '{{json .Config}}'", shellEscape(imageTag)))
+	cmd := exec.Command("docker", "image", "inspect", imageTag, "--format", "{{json .Config}}")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, nil, "", err
@@ -674,6 +693,7 @@ func composeArgs(entry, cmd []string) []string {
 }
 
 func shellEscape(s string) string {
+	// Simple shell escaping for single quotes
 	return strings.ReplaceAll(s, "'", "'\\''")
 }
 
