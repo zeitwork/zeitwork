@@ -151,11 +151,7 @@ func (l *Loader) dbInstanceToRuntime(ctx context.Context, dbInstance *database.I
 			"image_id", imageID,
 			"error", err)
 		// Use fallback format
-		registry := l.imageRegistry
-		if registry == "" {
-			registry = "localhost:5001"
-		}
-		imageTag = fmt.Sprintf("%s/zeitwork/%s:latest", registry, imageID[:8])
+		imageTag = fmt.Sprintf("%s/zeitwork/%s:latest", l.imageRegistry, imageID[:8])
 	}
 
 	// Use database enum directly as runtime state
@@ -208,11 +204,7 @@ func (l *Loader) dbInstanceToRuntimeFromGetById(ctx context.Context, dbInstance 
 			"image_id", imageID,
 			"error", err)
 		// Use fallback format
-		registry := l.imageRegistry
-		if registry == "" {
-			registry = "localhost:5001"
-		}
-		imageTag = fmt.Sprintf("%s/zeitwork/%s:latest", registry, imageID[:8])
+		imageTag = fmt.Sprintf("%s/zeitwork/%s:latest", l.imageRegistry, imageID[:8])
 	}
 
 	// Use database enum directly as runtime state
@@ -261,11 +253,7 @@ func (l *Loader) getImageTag(ctx context.Context, imageID string) (string, error
 			l.logger.Warn("Image not found in database, using fallback format",
 				"image_id", imageID)
 			// Fallback to placeholder format if image not found
-			registry := l.imageRegistry
-			if registry == "" {
-				registry = "localhost:5001"
-			}
-			return fmt.Sprintf("%s/zeitwork/%s:latest", registry, imageID[:8]), nil
+			return fmt.Sprintf("%s/zeitwork/%s:latest", l.imageRegistry, imageID[:8]), nil
 		}
 		return "", fmt.Errorf("failed to query image: %w", err)
 	}

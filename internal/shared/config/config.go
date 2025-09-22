@@ -46,14 +46,15 @@ type NodeAgentFirecrackerRuntimeConfig struct {
 
 // NodeAgentConfig contains configuration for the node agent service
 type NodeAgentConfig struct {
-	BaseConfig   `envPrefix:"NODEAGENT_"`
-	Port         string        `env:"NODEAGENT_PORT" envDefault:"8081"`
-	NodeID       string        `env:"NODEAGENT_NODE_ID"`
-	RegionID     string        `env:"NODEAGENT_REGION_ID"`
-	DatabaseURL  string        `env:"NODEAGENT_DATABASE_URL" required:"true"`
-	PollInterval time.Duration `env:"NODEAGENT_POLL_INTERVAL" envDefault:"5s"`
-	NATS         *NATSConfig   `envPrefix:"NODEAGENT_"`
-	Runtime      *NodeAgentRuntimeConfig
+	BaseConfig        `envPrefix:"NODEAGENT_"`
+	Port              string        `env:"NODEAGENT_PORT" envDefault:"8081"`
+	NodeID            string        `env:"NODEAGENT_NODE_ID"`
+	RegionID          string        `env:"NODEAGENT_REGION_ID"`
+	DatabaseURL       string        `env:"NODEAGENT_DATABASE_URL" required:"true"`
+	PollInterval      time.Duration `env:"NODEAGENT_POLL_INTERVAL" envDefault:"5s"`
+	ContainerRegistry string        `env:"NODEAGENT_CONTAINER_REGISTRY" envDefault:"localhost:5001"`
+	NATS              *NATSConfig   `envPrefix:"NODEAGENT_"`
+	Runtime           *NodeAgentRuntimeConfig
 }
 
 // EdgeProxyConfig contains configuration for the edge proxy service

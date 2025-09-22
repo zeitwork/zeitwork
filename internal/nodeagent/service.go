@@ -90,14 +90,11 @@ func NewService(cfg *sharedConfig.NodeAgentConfig, logger *slog.Logger) (*Servic
 		return nil, fmt.Errorf("failed to initialize runtime: %w", err)
 	}
 
-	// Get image registry configuration for state manager
-	imageRegistry := ""
-	if cfg.Runtime.DockerConfig != nil {
-		imageRegistry = cfg.Runtime.DockerConfig.ImageRegistry
-	}
+	// Get container registry configuration for state manager
+	containerRegistry := cfg.ContainerRegistry
 
 	// Initialize state manager
-	stateManager := state.NewManager(logger, nodeID, db, rt, imageRegistry)
+	stateManager := state.NewManager(logger, nodeID, db, rt, containerRegistry)
 
 	// Initialize event handlers
 	instanceCreatedHandler := events.NewInstanceCreatedHandler(stateManager, logger)
