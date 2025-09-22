@@ -62,10 +62,23 @@ main() {
   if (( do_build == 1 )); then
     if ! command -v go >/dev/null 2>&1; then
       echo "[INFO] Go toolchain not found; running scripts/install-go.sh"
-      "${repo_root}/scripts/install-go.sh"
+      bash "${repo_root}/scripts/install-go.sh"
+      # Ensure current shell can find go installed under /usr/local/go/bin
+      if ! command -v go >/dev/null 2>&1 && [[ -x /usr/local/go/bin/go ]]; then
+        export PATH="/usr/local/go/bin:${PATH}"
+      fi
+    fi
+    # Resolve go binary explicitly to avoid PATH propagation issues from subshell
+    go_bin="$(command -v go || true)"
+    if [[ -z "${go_bin}" && -x /usr/local/go/bin/go ]]; then
+      go_bin="/usr/local/go/bin/go"
+    fi
+    if [[ -z "${go_bin}" ]]; then
+      echo "[ERROR] 'go' was not found even after installation. Aborting." >&2
+      exit 1
     fi
     echo "[INFO] Building ${service_name} with local Go toolchain..."
-    (cd "${repo_root}" && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags "-s -w" -o "${build_artifact}" ./cmd/nodeagent)
+    (cd "${repo_root}" && CGO_ENABLED=0 GOOS=linux "${go_bin}" build -trimpath -ldflags "-s -w" -o "${build_artifact}" ./cmd/nodeagent)
   else
     echo "[INFO] Skipping build (using existing artifact if present)"
   fi
