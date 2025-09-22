@@ -84,10 +84,10 @@ func (d *DockerBuildRuntime) generateImageTag(build *database.ImageBuild) string
 
 	tag := fmt.Sprintf("%s:%s", repoName, shortCommit)
 
-	// Use distribution registry from docker-compose (localhost:5001)
-	// This overrides the configured registry to ensure we use the distribution registry
-	distributionRegistry := "localhost:5001"
-	tag = fmt.Sprintf("%s/%s", distributionRegistry, tag)
+	// Use configured registry if available
+	if d.config.Registry != "" {
+		tag = fmt.Sprintf("%s/%s", d.config.Registry, tag)
+	}
 
 	return tag
 }
@@ -185,15 +185,15 @@ func (d *DockerBuildRuntime) pushDockerImage(ctx context.Context, imageTag strin
 	// Read the push output line by line to handle streaming response properly
 	var pushLog strings.Builder
 	scanner := bufio.NewScanner(pushResponse)
-	
+
 	// Track if we encountered any errors in the push stream
 	var lastError string
-	
+
 	for scanner.Scan() {
 		line := scanner.Text()
 		pushLog.WriteString(line)
 		pushLog.WriteString("\n")
-		
+
 		// Parse JSON to check for errors in the push stream
 		var pushStatus struct {
 			Error       string `json:"error,omitempty"`
@@ -201,7 +201,7 @@ func (d *DockerBuildRuntime) pushDockerImage(ctx context.Context, imageTag strin
 				Message string `json:"message,omitempty"`
 			} `json:"errorDetail,omitempty"`
 		}
-		
+
 		if err := json.Unmarshal([]byte(line), &pushStatus); err == nil {
 			if pushStatus.Error != "" {
 				lastError = pushStatus.Error
@@ -210,7 +210,7 @@ func (d *DockerBuildRuntime) pushDockerImage(ctx context.Context, imageTag strin
 			}
 		}
 	}
-	
+
 	// Check for scanner errors (this will catch EOF and other read errors)
 	if err := scanner.Err(); err != nil {
 		// Don't treat EOF as an error if we got some output
@@ -218,7 +218,7 @@ func (d *DockerBuildRuntime) pushDockerImage(ctx context.Context, imageTag strin
 			d.logger.Warn("Error reading push output stream", "error", err, "tag", imageTag, "output_length", pushLog.Len())
 		}
 	}
-	
+
 	// Check if there was an error reported in the push stream
 	if lastError != "" {
 		return pushLog.String(), fmt.Errorf("docker push failed: %s", lastError)
