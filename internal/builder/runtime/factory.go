@@ -16,8 +16,9 @@ func NewBuildRuntime(cfg *sharedConfig.BuilderConfig, logger *slog.Logger) (type
 	switch cfg.BuilderType {
 	case "docker":
 		dockerConfig := config.DockerRuntimeConfig{
-			WorkDir:  cfg.BuildWorkDir,
-			Registry: cfg.ContainerRegistry,
+			WorkDir:          cfg.BuildWorkDir,
+			Registry:         cfg.ContainerRegistry,
+			InsecureRegistry: cfg.InsecureRegistry,
 		}
 		return docker.NewDockerBuildRuntime(dockerConfig, logger.With("runtime", "docker"))
 

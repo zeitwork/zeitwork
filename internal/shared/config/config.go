@@ -78,6 +78,7 @@ type BuilderConfig struct {
 	BuilderType       string      `env:"BUILDER_TYPE" envDefault:"docker"`                   // Type of builder to use (docker, firecracker, etc.)
 	BuildWorkDir      string      `env:"BUILDER_WORK_DIR" envDefault:"/tmp/zeitwork-builds"` // Directory where builds are performed
 	ContainerRegistry string      `env:"BUILDER_CONTAINER_REGISTRY"`                         // Container registry to push images to
+	InsecureRegistry  bool        `env:"BUILDER_INSECURE_REGISTRY" envDefault:"true"`        // Allow insecure (HTTP) registry connections
 	NATS              *NATSConfig `envPrefix:"BUILDER_"`
 }
 
