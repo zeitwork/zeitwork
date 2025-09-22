@@ -14,7 +14,7 @@ REGISTRY="ghcr.io/zeitwork"
 PUSH_IMAGES=false
 
 # Define services
-SERVICES=("builder" "certmanager" "listener" "manager", "web")
+SERVICES=("builder" "certmanager" "listener" "manager" "web")
 
 # Get current git commit hash for tagging
 GIT_COMMIT=$(git rev-parse --short HEAD)
