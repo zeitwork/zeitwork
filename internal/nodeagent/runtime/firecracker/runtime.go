@@ -121,7 +121,7 @@ func (f *FirecrackerRuntime) CreateInstance(ctx context.Context, spec *types.Ins
 	cfgPath := filepath.Join(instDir, "vm-config.json")
 	data := vmConfigData{
 		KernelImagePath: f.config.DefaultKernelPath,
-		BootArgs:        "console=ttyS0 reboot=k panic=1 pci=off",
+		BootArgs:        "console=ttyS0 reboot=k panic=1 pci=off root=/dev/vda",
 		RootfsPath:      rootfsDst,
 		TapDevice:       tapName,
 		VCPUCount:       defaultResources(f.config, spec).VCPUs,
