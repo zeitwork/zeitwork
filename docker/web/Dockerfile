@@ -14,24 +14,27 @@ RUN curl https://bun.sh/install | bash -s
 ENV PATH="${PATH}:/root/.bun/bin"
 
 # Install dependencies in a separate layer for better caching
-FROM base AS install
-RUN mkdir -p /temp/dev
-COPY package.json /temp/dev/
-RUN cd /temp/dev && bun install
+FROM base AS deps
+WORKDIR /usr/src/app
+COPY bun.lock package.json ./
+COPY apps/web/package.json apps/web/package.json
+COPY packages/database/package.json packages/database/package.json
+RUN bun install --ignore-scripts
 
 # Copy dependencies and source code
-FROM base AS prerelease
-COPY --from=install /temp/dev/node_modules node_modules
-COPY apps/web .
-
-# Build the project
-RUN bun run build
+FROM base AS build
+WORKDIR /usr/src/app
+COPY --from=deps /usr/src/app/node_modules ./node_modules
+COPY apps/web ./apps/web
+COPY packages/database ./packages/database
+# Build the project inside the workspace
+RUN bun --cwd ./apps/web run postinstall
+RUN bun --cwd ./apps/web build
 
 # Prepare the final production image
 FROM base AS release
-COPY --from=install /temp/dev/node_modules node_modules
-COPY --from=prerelease /usr/src/app/.output .output
-COPY --from=prerelease /usr/src/app/package.json .
+WORKDIR /usr/src/app
+COPY --from=build /usr/src/app/apps/web/.output ./.output
 
 # Run the app
 EXPOSE 3000

@@ -12,19 +12,48 @@ set -e
 
 REGISTRY="ghcr.io/zeitwork"
 PUSH_IMAGES=false
+SPECIFIC_SERVICE=""
 
 # Define services
 SERVICES=("builder" "certmanager" "listener" "manager" "web")
+
+# Parse command line arguments
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --push)
+      PUSH_IMAGES=true
+      shift
+      ;;
+    *)
+      # Check if it's a valid service name
+      if [[ " ${SERVICES[*]} " =~ " $1 " ]]; then
+        SPECIFIC_SERVICE="$1"
+      else
+        echo "Error: Unknown service '$1'"
+        echo "Available services: ${SERVICES[*]}"
+        exit 1
+      fi
+      shift
+      ;;
+  esac
+done
 
 # Get current git commit hash for tagging
 GIT_COMMIT=$(git rev-parse --short HEAD)
 TIMESTAMP=$(date +%Y%m%d-%H%M%S)
 
+# Determine which services to build
+if [[ -n "$SPECIFIC_SERVICE" ]]; then
+  SERVICES_TO_BUILD=("$SPECIFIC_SERVICE")
+else
+  SERVICES_TO_BUILD=("${SERVICES[@]}")
+fi
+
 echo "Building zeitwork services..."
 echo "Registry: $REGISTRY"
 echo "Git commit: $GIT_COMMIT"
 echo "Push images: $PUSH_IMAGES"
-echo "Services: ${SERVICES[*]}"
+echo "Services to build: ${SERVICES_TO_BUILD[*]}"
 echo ""
 
 # Function to build and optionally push an image
@@ -67,7 +96,7 @@ if [[ "$PUSH_IMAGES" == "true" ]]; then
 fi
 
 # Build and push each service
-for service in "${SERVICES[@]}"; do
+for service in "${SERVICES_TO_BUILD[@]}"; do
   build_and_push "$service"
 done
 
@@ -76,7 +105,7 @@ echo "🎉 All done!"
 if [[ "$PUSH_IMAGES" == "true" ]]; then
   echo ""
   echo "Images pushed to GitHub Container Registry:"
-  for service in "${SERVICES[@]}"; do
+  for service in "${SERVICES_TO_BUILD[@]}"; do
     echo "  - $REGISTRY/$service:latest"
     echo "  - $REGISTRY/$service:$GIT_COMMIT"
     echo "  - $REGISTRY/$service:$TIMESTAMP"
@@ -84,5 +113,9 @@ if [[ "$PUSH_IMAGES" == "true" ]]; then
 else
   echo ""
   echo "To push images to registry, run:"
-  echo "  $0 --push"
+  if [[ -n "$SPECIFIC_SERVICE" ]]; then
+    echo "  $0 --push $SPECIFIC_SERVICE"
+  else
+    echo "  $0 --push"
+  fi
 fi

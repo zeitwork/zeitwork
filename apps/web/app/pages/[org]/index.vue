@@ -20,10 +20,12 @@ const { data: projects } = await useFetch(`/api/projects`)
 // Check if GitHub App is installed
 const hasGitHubInstallation = computed(() => !!organisation.value?.installationId)
 
+const config = useRuntimeConfig()
+
 // GitHub App installation URL
 const githubAppInstallUrl = computed(() => {
   const appName = "zeitwork" // Your GitHub App name
-  const redirectUri = `http://localhost:3000/auth/github` // in prod: https://zeitwork.com/auth/github
+  const redirectUri = `${config.appUrl}/auth/github` // in prod: https://zeitwork.com/auth/github
   return `https://github.com/apps/${appName}/installations/new?redirect_uri=${redirectUri}`
 })
 
