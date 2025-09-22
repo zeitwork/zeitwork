@@ -9,14 +9,14 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
     return
   }
 
-  const { loggedIn, session } = useUserSession()
+  const { loggedIn, user } = useUserSession()
 
-  if (!loggedIn.value) {
+  if (!loggedIn.value || !user.value?.username) {
     return navigateTo("/login")
   }
 
   // if logged in, and on / then redirect to the orgs page
   if (to.path === "/" && loggedIn.value) {
-    return navigateTo(`/${session.value?.username}`)
+    return navigateTo(`/${user.value?.username}`)
   }
 })
