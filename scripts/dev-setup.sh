@@ -131,6 +131,35 @@ run_migrations() {
     print_success "Database migrations completed"
 }
 
+# Seed database with initial data
+seed_database() {
+    print_status "Seeding database with initial data..."
+    
+    local db_url="postgresql://postgres:postgres@localhost:5432/postgres?sslmode=disable"
+    
+    # Upsert eu-central-1 region
+    print_status "Upserting eu-central-1 region..."
+    docker compose exec -T postgres psql "$db_url" -c "
+        INSERT INTO regions (id, name, code, country, created_at, updated_at) 
+        VALUES (
+            '01994e90-2c67-72c7-be2f-ec9089969c2f',
+            'eu-central-1',
+            'eu-central-1',
+            'DE',
+            NOW(),
+            NOW()
+        )
+        ON CONFLICT (code) 
+        DO UPDATE SET 
+            name = EXCLUDED.name,
+            country = EXCLUDED.country,
+            updated_at = NOW()
+        WHERE regions.deleted_at IS NULL;
+    " > /dev/null
+    
+    print_success "Database seeding completed"
+}
+
 # All environment variables are already exported from .env file at script startup
 
 # Start a service in the background
@@ -220,6 +249,12 @@ main() {
     # Run migrations
     if ! run_migrations; then
         print_error "Failed to run migrations"
+        exit 1
+    fi
+    
+    # Seed database with initial data
+    if ! seed_database; then
+        print_error "Failed to seed database"
         exit 1
     fi
     

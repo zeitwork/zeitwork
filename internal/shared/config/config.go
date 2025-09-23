@@ -76,10 +76,10 @@ type BuilderConfig struct {
 	ShutdownGracePeriod time.Duration `env:"BUILDER_SHUTDOWN_GRACE_PERIOD" envDefault:"30s"` // How long to wait for in-flight builds on shutdown
 
 	// Image builder configuration
-	BuilderType       string      `env:"BUILDER_TYPE" envDefault:"docker"`                   // Type of builder to use (docker, firecracker, etc.)
-	BuildWorkDir      string      `env:"BUILDER_WORK_DIR" envDefault:"/tmp/zeitwork-builds"` // Directory where builds are performed
-	ContainerRegistry string      `env:"BUILDER_CONTAINER_REGISTRY"`                         // Container registry to push images to
-	InsecureRegistry  bool        `env:"BUILDER_INSECURE_REGISTRY" envDefault:"true"`        // Allow insecure (HTTP) registry connections
+	BuilderType       string      `env:"BUILDER_TYPE" envDefault:"docker"`                       // Type of builder to use (docker, firecracker, etc.)
+	BuildWorkDir      string      `env:"BUILDER_WORK_DIR" envDefault:"/tmp/zeitwork-builds"`     // Directory where builds are performed
+	ContainerRegistry string      `env:"BUILDER_CONTAINER_REGISTRY" envDefault:"localhost:5001"` // Container registry to push images to
+	InsecureRegistry  bool        `env:"BUILDER_INSECURE_REGISTRY" envDefault:"true"`            // Allow insecure (HTTP) registry connections
 	NATS              *NATSConfig `envPrefix:"BUILDER_"`
 }
 

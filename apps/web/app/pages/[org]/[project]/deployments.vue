@@ -99,7 +99,7 @@ function deploymentStatusBgColor(status: string) {
 
 <template>
   <div class="flex h-full flex-col overflow-auto">
-    <div class="border-neutral-subtle flex items-center justify-between border-b p-4">
+    <div class="border-neutral-subtle flex h-16 items-center justify-between border-b p-4">
       <div class="text-neutral-strong text-sm">Deployments</div>
       <d-button @click="createDeployment">Create Deployment</d-button>
     </div>
