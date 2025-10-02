@@ -12,6 +12,7 @@ import (
 
 type Querier interface {
 	CreateImage(ctx context.Context, arg *CreateImageParams) (*Image, error)
+	GetActiveRoutes(ctx context.Context) ([]*GetActiveRoutesRow, error)
 	GetInstanceByID(ctx context.Context, id pgtype.UUID) (*GetInstanceByIDRow, error)
 	GetInstancesByNodeID(ctx context.Context, nodeID pgtype.UUID) ([]*GetInstancesByNodeIDRow, error)
 	GetNodeByID(ctx context.Context, id pgtype.UUID) (*GetNodeByIDRow, error)
