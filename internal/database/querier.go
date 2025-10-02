@@ -13,7 +13,10 @@ import (
 type Querier interface {
 	GetInstanceByID(ctx context.Context, id pgtype.UUID) (*GetInstanceByIDRow, error)
 	GetInstancesByNodeID(ctx context.Context, nodeID pgtype.UUID) ([]*GetInstancesByNodeIDRow, error)
+	GetNodeByID(ctx context.Context, id pgtype.UUID) (*GetNodeByIDRow, error)
 	UpdateInstanceState(ctx context.Context, arg *UpdateInstanceStateParams) error
+	UpdateNodeState(ctx context.Context, arg *UpdateNodeStateParams) error
+	UpsertNode(ctx context.Context, arg *UpsertNodeParams) error
 }
 
 var _ Querier = (*Queries)(nil)

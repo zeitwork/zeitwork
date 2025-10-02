@@ -6,13 +6,16 @@ import (
 	"fmt"
 	"log/slog"
 	"math/rand"
+	"os"
+	"runtime"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/samber/lo"
 	"github.com/zeitwork/zeitwork/internal/database"
-	"github.com/zeitwork/zeitwork/internal/nodeagent/runtime"
+	container "github.com/zeitwork/zeitwork/internal/nodeagent/runtime"
 	"github.com/zeitwork/zeitwork/internal/nodeagent/runtime/docker"
+	"github.com/zeitwork/zeitwork/internal/nodeagent/utils"
 	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 )
 
@@ -21,14 +24,16 @@ type Config struct {
 	NodeRegionID    string `env:"NODE_REGION_ID"`
 	NodeDatabaseURL string `env:"NODE_DATABASE_URL"`
 	NodeRuntimeMode string `env:"NODE_RUNTIME_MODE" envDefault:"docker"`
+	NodeIPAddress   string `env:"NODE_IP_ADDRESS"` // External IP address of the node
 }
 
 type Service struct {
-	cfg     Config
-	db      *database.DB
-	runtime runtime.Runtime
-	logger  *slog.Logger
-	nodeID  pgtype.UUID
+	cfg      Config
+	db       *database.DB
+	runtime  container.Runtime
+	logger   *slog.Logger
+	nodeID   pgtype.UUID
+	regionID pgtype.UUID
 }
 
 func NewService(cfg Config, logger *slog.Logger) (*Service, error) {
@@ -38,8 +43,14 @@ func NewService(cfg Config, logger *slog.Logger) (*Service, error) {
 		return nil, fmt.Errorf("invalid node id: %w", err)
 	}
 
+	// Parse region UUID
+	regionUUID, err := uuid.Parse(cfg.NodeRegionID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid region id: %w", err)
+	}
+
 	// Initialize runtime based on mode
-	var rt runtime.Runtime
+	var rt container.Runtime
 	switch cfg.NodeRuntimeMode {
 	case "docker":
 		rt, err = docker.NewDockerRuntime(logger)
@@ -59,13 +70,78 @@ func NewService(cfg Config, logger *slog.Logger) (*Service, error) {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
-	return &Service{
-		cfg:     cfg,
-		db:      db,
-		runtime: rt,
-		logger:  logger,
-		nodeID:  nodeUUID,
-	}, nil
+	svc := &Service{
+		cfg:      cfg,
+		db:       db,
+		runtime:  rt,
+		logger:   logger,
+		nodeID:   nodeUUID,
+		regionID: regionUUID,
+	}
+
+	// Register node in database
+	if err := svc.registerNode(context.Background()); err != nil {
+		return nil, fmt.Errorf("failed to register node: %w", err)
+	}
+
+	return svc, nil
+}
+
+func (s *Service) registerNode(ctx context.Context) error {
+	// Get hostname
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = "unknown"
+	}
+
+	// Get IP address from config or default to empty
+	ipAddress := s.cfg.NodeIPAddress
+	if ipAddress == "" {
+		ipAddress = "0.0.0.0" // Placeholder, should be set via config
+	}
+
+	// Get system resources
+	numCPU := runtime.NumCPU()
+
+	// Get total system memory
+	memoryMB, err := utils.GetSystemMemoryMB()
+	if err != nil {
+		return fmt.Errorf("failed to get system memory: %w", err)
+	}
+
+	resources := map[string]interface{}{
+		"vcpu":   numCPU,
+		"memory": memoryMB,
+	}
+	resourcesJSON, err := json.Marshal(resources)
+	if err != nil {
+		return fmt.Errorf("failed to marshal resources: %w", err)
+	}
+
+	s.logger.Info("registering node",
+		"node_id", s.cfg.NodeID,
+		"region_id", s.cfg.NodeRegionID,
+		"hostname", hostname,
+		"ip", ipAddress,
+		"vcpu", numCPU,
+		"memory_mb", memoryMB,
+	)
+
+	// Upsert node in database
+	err = s.db.Queries().UpsertNode(ctx, &database.UpsertNodeParams{
+		ID:        s.nodeID,
+		RegionID:  s.regionID,
+		Hostname:  hostname,
+		IpAddress: ipAddress,
+		State:     "ready",
+		Resources: resourcesJSON,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to upsert node: %w", err)
+	}
+
+	s.logger.Info("node registered successfully")
+	return nil
 }
 
 func (s *Service) Start() {
@@ -139,9 +215,9 @@ func (s *Service) reconcile(ctx context.Context) error {
 		}
 	}
 
-	runningMap := make(map[string]runtime.Container)
-	for _, container := range runningContainers {
-		runningMap[container.InstanceID] = container
+	runningMap := make(map[string]container.Container)
+	for _, c := range runningContainers {
+		runningMap[c.InstanceID] = c
 	}
 
 	// 4. Compute differences
@@ -153,8 +229,8 @@ func (s *Service) reconcile(ctx context.Context) error {
 	})
 
 	// Instances to stop: running but not in desired state or should be stopped
-	toStop := lo.Filter(runningContainers, func(container runtime.Container, _ int) bool {
-		_, exists := desiredMap[container.InstanceID]
+	toStop := lo.Filter(runningContainers, func(c container.Container, _ int) bool {
+		_, exists := desiredMap[c.InstanceID]
 		return !exists
 	})
 
@@ -165,25 +241,25 @@ func (s *Service) reconcile(ctx context.Context) error {
 
 	// 5. Apply changes
 	// Stop containers that should not be running
-	for _, container := range toStop {
-		s.logger.Info("stopping instance", "instance_id", container.InstanceID)
+	for _, c := range toStop {
+		s.logger.Info("stopping instance", "instance_id", c.InstanceID)
 
-		if err := s.runtime.Stop(ctx, container.InstanceID); err != nil {
+		if err := s.runtime.Stop(ctx, c.InstanceID); err != nil {
 			s.logger.Error("failed to stop container",
-				"instance_id", container.InstanceID,
+				"instance_id", c.InstanceID,
 				"error", err,
 			)
 			continue
 		}
 
 		// Update state in database
-		instanceUUID, _ := uuid.Parse(container.InstanceID)
+		instanceUUID, _ := uuid.Parse(c.InstanceID)
 		if err := s.db.Queries().UpdateInstanceState(ctx, &database.UpdateInstanceStateParams{
 			ID:    instanceUUID,
 			State: database.InstanceStatusesStopped,
 		}); err != nil {
 			s.logger.Error("failed to update instance state",
-				"instance_id", container.InstanceID,
+				"instance_id", c.InstanceID,
 				"error", err,
 			)
 		}

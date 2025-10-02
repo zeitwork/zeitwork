@@ -147,6 +147,8 @@ async function reconcile() {
               updatedAt: new Date(),
             })
             .where(eq(deployments.id, deployment.id));
+        } else if (imageBuild.status === "pending") {
+          return;
         } else {
           throw new Error("Image build status is not valid");
         }
