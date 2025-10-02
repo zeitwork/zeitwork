@@ -7,7 +7,6 @@ import {
   timestamp,
   unique,
   uuid,
-  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { timestamps } from "../utils/timestamps";
 import { imageBuilds, images, instances } from "./platform";

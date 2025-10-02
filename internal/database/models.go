@@ -334,25 +334,6 @@ type Session struct {
 	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
 }
 
-type SslCert struct {
-	ID        pgtype.UUID        `json:"id"`
-	Key       string             `json:"key"`
-	Value     string             `json:"value"`
-	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
-}
-
-type SslLock struct {
-	ID        pgtype.UUID        `json:"id"`
-	Key       string             `json:"key"`
-	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
-}
-
 type User struct {
 	ID              pgtype.UUID        `json:"id"`
 	Name            string             `json:"name"`
