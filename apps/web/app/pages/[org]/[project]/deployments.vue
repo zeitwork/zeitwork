@@ -18,25 +18,17 @@ const { data: deployments, refresh: refreshDeployments } = await useFetch(`/api/
 
 const { isPending, start, stop } = useTimeoutFn(() => {
   refreshDeployments()
-}, 1000)
+}, 500)
 
 start()
 
-watch(
-  deployments,
-  (value) => {
-    const anyPending = value?.some(
-      (deployment) =>
-        deployment.status === "pending" || deployment.status === "building" || deployment.status === "deploying",
-    )
-    if (anyPending) {
-      start()
-    } else {
-      stop()
-    }
-  },
-  { immediate: true },
-)
+watch(isPending, (newVal) => {
+  if (newVal) {
+    start()
+  } else {
+    start()
+  }
+})
 
 async function createDeployment() {
   await $fetch(`/api/deployments`, {
@@ -59,7 +51,7 @@ function renderDate(date: string) {
 }
 
 function formatDeploymentUrl(deployment: any) {
-  return `https://${deployment.domains?.[0].name}:8443`
+  return `http://${deployment.domains?.[0].name}`
 }
 
 function deploymentStatusColor(status: string) {
@@ -74,6 +66,8 @@ function deploymentStatusColor(status: string) {
       return "text-red-500"
     case "active":
       return "text-green-500"
+    case "inactive":
+      return "text-neutral-subtle"
     default:
       return "text-neutral"
   }
@@ -91,6 +85,8 @@ function deploymentStatusBgColor(status: string) {
       return "bg-red-100"
     case "active":
       return "bg-green-100"
+    case "inactive":
+      return "bg-neutral-subtle"
     default:
       return "bg-neutral/10"
   }

@@ -22,6 +22,7 @@
     "@vueuse/core": "^13.5.0",
     "@vueuse/nuxt": "^13.5.0",
     "@vueuse/router": "^13.5.0",
+    "@zeitwork/database": "workspace:*",
     "date-fns": "^4.1.0",
     "drizzle-kit": "^0.31.4",
     "drizzle-orm": "^0.44.4",
@@ -36,11 +37,11 @@
     "octokit": "^5.0.3",
     "postgres": "^3.4.7",
     "reka-ui": "^2.3.2",
+    "stripe": "^19.0.0",
     "uuidv7": "^1.0.2",
     "vue": "^3.5.17",
     "vue-router": "^4.5.1",
-    "zod": "^3.25.76",
-    "@zeitwork/database": "workspace:*"
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.11",

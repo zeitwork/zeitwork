@@ -12,23 +12,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const nodesCreate = `-- name: NodesCreate :one
-INSERT INTO nodes (
-    id,
-    region_id,
-    hostname,
-    ip_address,
-    state,
-    resources
-) VALUES (
-    $1,
-    $2,
-    $3,
-    $4,
-    $5,
-    $6
-)
-RETURNING 
+const getNodeByID = `-- name: GetNodeByID :one
+SELECT 
     id,
     region_id,
     hostname,
@@ -37,9 +22,76 @@ RETURNING
     resources,
     created_at,
     updated_at
+FROM nodes
+WHERE id = $1
 `
 
-type NodesCreateParams struct {
+type GetNodeByIDRow struct {
+	ID        pgtype.UUID        `json:"id"`
+	RegionID  pgtype.UUID        `json:"region_id"`
+	Hostname  string             `json:"hostname"`
+	IpAddress string             `json:"ip_address"`
+	State     string             `json:"state"`
+	Resources json.RawMessage    `json:"resources"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) GetNodeByID(ctx context.Context, id pgtype.UUID) (*GetNodeByIDRow, error) {
+	row := q.db.QueryRow(ctx, getNodeByID, id)
+	var i GetNodeByIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.RegionID,
+		&i.Hostname,
+		&i.IpAddress,
+		&i.State,
+		&i.Resources,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return &i, err
+}
+
+const updateNodeState = `-- name: UpdateNodeState :exec
+UPDATE nodes
+SET state = $2, updated_at = NOW()
+WHERE id = $1
+`
+
+type UpdateNodeStateParams struct {
+	ID    pgtype.UUID `json:"id"`
+	State string      `json:"state"`
+}
+
+func (q *Queries) UpdateNodeState(ctx context.Context, arg *UpdateNodeStateParams) error {
+	_, err := q.db.Exec(ctx, updateNodeState, arg.ID, arg.State)
+	return err
+}
+
+const upsertNode = `-- name: UpsertNode :exec
+INSERT INTO nodes (
+    id,
+    region_id,
+    hostname,
+    ip_address,
+    state,
+    resources,
+    created_at,
+    updated_at
+) VALUES (
+    $1, $2, $3, $4, $5, $6, NOW(), NOW()
+)
+ON CONFLICT (id) 
+DO UPDATE SET
+    hostname = EXCLUDED.hostname,
+    ip_address = EXCLUDED.ip_address,
+    state = EXCLUDED.state,
+    resources = EXCLUDED.resources,
+    updated_at = NOW()
+`
+
+type UpsertNodeParams struct {
 	ID        pgtype.UUID     `json:"id"`
 	RegionID  pgtype.UUID     `json:"region_id"`
 	Hostname  string          `json:"hostname"`
@@ -48,20 +100,8 @@ type NodesCreateParams struct {
 	Resources json.RawMessage `json:"resources"`
 }
 
-type NodesCreateRow struct {
-	ID        pgtype.UUID        `json:"id"`
-	RegionID  pgtype.UUID        `json:"region_id"`
-	Hostname  string             `json:"hostname"`
-	IpAddress string             `json:"ip_address"`
-	State     string             `json:"state"`
-	Resources json.RawMessage    `json:"resources"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-}
-
-// Create a new node
-func (q *Queries) NodesCreate(ctx context.Context, arg *NodesCreateParams) (*NodesCreateRow, error) {
-	row := q.db.QueryRow(ctx, nodesCreate,
+func (q *Queries) UpsertNode(ctx context.Context, arg *UpsertNodeParams) error {
+	_, err := q.db.Exec(ctx, upsertNode,
 		arg.ID,
 		arg.RegionID,
 		arg.Hostname,
@@ -69,264 +109,5 @@ func (q *Queries) NodesCreate(ctx context.Context, arg *NodesCreateParams) (*Nod
 		arg.State,
 		arg.Resources,
 	)
-	var i NodesCreateRow
-	err := row.Scan(
-		&i.ID,
-		&i.RegionID,
-		&i.Hostname,
-		&i.IpAddress,
-		&i.State,
-		&i.Resources,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return &i, err
-}
-
-const nodesGetAll = `-- name: NodesGetAll :many
-SELECT 
-    id,
-    region_id,
-    hostname,
-    ip_address,
-    state,
-    resources,
-    created_at,
-    updated_at
-FROM nodes 
-WHERE deleted_at IS NULL
-ORDER BY created_at DESC
-`
-
-type NodesGetAllRow struct {
-	ID        pgtype.UUID        `json:"id"`
-	RegionID  pgtype.UUID        `json:"region_id"`
-	Hostname  string             `json:"hostname"`
-	IpAddress string             `json:"ip_address"`
-	State     string             `json:"state"`
-	Resources json.RawMessage    `json:"resources"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-}
-
-// Get all nodes
-func (q *Queries) NodesGetAll(ctx context.Context) ([]*NodesGetAllRow, error) {
-	rows, err := q.db.Query(ctx, nodesGetAll)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []*NodesGetAllRow
-	for rows.Next() {
-		var i NodesGetAllRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.RegionID,
-			&i.Hostname,
-			&i.IpAddress,
-			&i.State,
-			&i.Resources,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, &i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const nodesGetByHostname = `-- name: NodesGetByHostname :one
-SELECT 
-    id,
-    region_id,
-    hostname,
-    ip_address,
-    state,
-    resources,
-    created_at,
-    updated_at
-FROM nodes 
-WHERE hostname = $1 
-    AND deleted_at IS NULL
-`
-
-type NodesGetByHostnameRow struct {
-	ID        pgtype.UUID        `json:"id"`
-	RegionID  pgtype.UUID        `json:"region_id"`
-	Hostname  string             `json:"hostname"`
-	IpAddress string             `json:"ip_address"`
-	State     string             `json:"state"`
-	Resources json.RawMessage    `json:"resources"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-}
-
-// Get node by hostname
-func (q *Queries) NodesGetByHostname(ctx context.Context, hostname string) (*NodesGetByHostnameRow, error) {
-	row := q.db.QueryRow(ctx, nodesGetByHostname, hostname)
-	var i NodesGetByHostnameRow
-	err := row.Scan(
-		&i.ID,
-		&i.RegionID,
-		&i.Hostname,
-		&i.IpAddress,
-		&i.State,
-		&i.Resources,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return &i, err
-}
-
-const nodesGetById = `-- name: NodesGetById :one
-SELECT 
-    id,
-    region_id,
-    hostname,
-    ip_address,
-    state,
-    resources,
-    created_at,
-    updated_at
-FROM nodes 
-WHERE id = $1 
-    AND deleted_at IS NULL
-`
-
-type NodesGetByIdRow struct {
-	ID        pgtype.UUID        `json:"id"`
-	RegionID  pgtype.UUID        `json:"region_id"`
-	Hostname  string             `json:"hostname"`
-	IpAddress string             `json:"ip_address"`
-	State     string             `json:"state"`
-	Resources json.RawMessage    `json:"resources"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-}
-
-// Get node by ID
-func (q *Queries) NodesGetById(ctx context.Context, id pgtype.UUID) (*NodesGetByIdRow, error) {
-	row := q.db.QueryRow(ctx, nodesGetById, id)
-	var i NodesGetByIdRow
-	err := row.Scan(
-		&i.ID,
-		&i.RegionID,
-		&i.Hostname,
-		&i.IpAddress,
-		&i.State,
-		&i.Resources,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return &i, err
-}
-
-const nodesGetByRegion = `-- name: NodesGetByRegion :many
-SELECT 
-    id,
-    region_id,
-    hostname,
-    ip_address,
-    state,
-    resources,
-    created_at,
-    updated_at
-FROM nodes 
-WHERE region_id = $1 
-    AND deleted_at IS NULL
-ORDER BY created_at DESC
-`
-
-type NodesGetByRegionRow struct {
-	ID        pgtype.UUID        `json:"id"`
-	RegionID  pgtype.UUID        `json:"region_id"`
-	Hostname  string             `json:"hostname"`
-	IpAddress string             `json:"ip_address"`
-	State     string             `json:"state"`
-	Resources json.RawMessage    `json:"resources"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-}
-
-// Get nodes by region
-func (q *Queries) NodesGetByRegion(ctx context.Context, regionID pgtype.UUID) ([]*NodesGetByRegionRow, error) {
-	rows, err := q.db.Query(ctx, nodesGetByRegion, regionID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []*NodesGetByRegionRow
-	for rows.Next() {
-		var i NodesGetByRegionRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.RegionID,
-			&i.Hostname,
-			&i.IpAddress,
-			&i.State,
-			&i.Resources,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, &i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const nodesUpdateState = `-- name: NodesUpdateState :one
-UPDATE nodes 
-SET state = $2, 
-    updated_at = now()
-WHERE id = $1
-RETURNING 
-    id,
-    region_id,
-    hostname,
-    ip_address,
-    state,
-    resources,
-    created_at,
-    updated_at
-`
-
-type NodesUpdateStateParams struct {
-	ID    pgtype.UUID `json:"id"`
-	State string      `json:"state"`
-}
-
-type NodesUpdateStateRow struct {
-	ID        pgtype.UUID        `json:"id"`
-	RegionID  pgtype.UUID        `json:"region_id"`
-	Hostname  string             `json:"hostname"`
-	IpAddress string             `json:"ip_address"`
-	State     string             `json:"state"`
-	Resources json.RawMessage    `json:"resources"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-}
-
-// Update node state
-func (q *Queries) NodesUpdateState(ctx context.Context, arg *NodesUpdateStateParams) (*NodesUpdateStateRow, error) {
-	row := q.db.QueryRow(ctx, nodesUpdateState, arg.ID, arg.State)
-	var i NodesUpdateStateRow
-	err := row.Scan(
-		&i.ID,
-		&i.RegionID,
-		&i.Hostname,
-		&i.IpAddress,
-		&i.State,
-		&i.Resources,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return &i, err
+	return err
 }

@@ -13,10 +13,10 @@ const links = [
     name: "Deployments",
     to: `/${orgSlug.value}/${projectSlug.value}/deployments`,
   },
-  {
-    name: "Logs",
-    to: `/${orgSlug.value}/${projectSlug.value}/logs`,
-  },
+  // {
+  //   name: "Logs",
+  //   to: `/${orgSlug.value}/${projectSlug.value}/logs`,
+  // },
   {
     name: "Settings",
     to: `/${orgSlug.value}/${projectSlug.value}/settings`,

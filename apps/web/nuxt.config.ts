@@ -47,6 +47,11 @@ export default defineNuxtConfig({
     public: {
       graphEndpoint: process.env.NUXT_PUBLIC_GRAPH_ENDPOINT,
       githubClientId: process.env.NUXT_PUBLIC_GITHUB_CLIENT_ID || "",
+
+      stripe: {
+        planHobbyId: process.env.NUXT_PUBLIC_STRIPE_PLAN_HOBBY_ID || "",
+        planBusinessId: process.env.NUXT_PUBLIC_STRIPE_PLAN_BUSINESS_ID || "",
+      },
     },
 
     oauth: {
@@ -62,6 +67,11 @@ export default defineNuxtConfig({
     githubWebhookSecret: "",
 
     kubeConfig: process.env.NUXT_KUBE_CONFIG || "",
+
+    stripe: {
+      secretKey: process.env.NUXT_STRIPE_SECRET_KEY || "",
+      webhookSecret: process.env.NUXT_STRIPE_WEBHOOK_SECRET || "",
+    },
   },
 
   modules: ["@nuxt/icon", "@nuxt/fonts", "nuxt-auth-utils", "motion-v/nuxt"],

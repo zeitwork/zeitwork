@@ -9,19 +9,19 @@ const links = [
   },
   {
     name: "Domains",
-    to: `/${orgSlug.value}/~/domains`,
+    to: `/${orgSlug.value}/x/domains`,
   },
   {
     name: "Storage",
-    to: `/${orgSlug.value}/~/storages`,
+    to: `/${orgSlug.value}/x/storage`,
   },
   {
     name: "Database",
-    to: `/${orgSlug.value}/~/databases`,
+    to: `/${orgSlug.value}/x/databases`,
   },
   {
     name: "Settings",
-    to: `/${orgSlug.value}/~/settings`,
+    to: `/${orgSlug.value}/x/settings`,
   },
 ]
 </script>

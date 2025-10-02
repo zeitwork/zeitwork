@@ -1,36 +1,48 @@
 package uuid
 
 import (
-	"fmt"
-
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// ParseUUID converts a string UUID to pgtype.UUID
-func ParseUUID(id string) (pgtype.UUID, error) {
-	var pgUUID pgtype.UUID
-	if err := pgUUID.Scan(id); err != nil {
-		return pgUUID, fmt.Errorf("invalid UUID format: %w", err)
-	}
-	return pgUUID, nil
-}
-
-// MustParseUUID converts a string UUID to pgtype.UUID, panicking on error
-func MustParseUUID(id string) pgtype.UUID {
-	pgUUID, err := ParseUUID(id)
+// New generates a new UUID v7 and returns it as a pgtype.UUID
+func New() pgtype.UUID {
+	id, err := uuid.NewV7()
 	if err != nil {
-		panic(fmt.Sprintf("failed to parse UUID %s: %v", id, err))
+		// Fallback to v4 if v7 fails (shouldn't happen)
+		id = uuid.New()
 	}
+	var pgUUID pgtype.UUID
+	pgUUID.Bytes = id
+	pgUUID.Valid = true
 	return pgUUID
 }
 
-// GenerateUUID generates a new UUIDv7 string
-func GenerateUUID() string {
-	return uuid.Must(uuid.NewV7()).String()
+// Parse parses a UUID string and returns it as a pgtype.UUID
+func Parse(s string) (pgtype.UUID, error) {
+	id, err := uuid.Parse(s)
+	if err != nil {
+		return pgtype.UUID{}, err
+	}
+	var pgUUID pgtype.UUID
+	pgUUID.Bytes = id
+	pgUUID.Valid = true
+	return pgUUID, nil
 }
 
-// GeneratePgUUID generates a new UUIDv7 as pgtype.UUID
-func GeneratePgUUID() pgtype.UUID {
-	return MustParseUUID(GenerateUUID())
+// ToString converts a pgtype.UUID to a string
+func ToString(u pgtype.UUID) string {
+	if !u.Valid {
+		return ""
+	}
+	return uuid.UUID(u.Bytes).String()
+}
+
+// MustParse parses a UUID string and returns it as a pgtype.UUID, panicking on error
+func MustParse(s string) pgtype.UUID {
+	pgUUID, err := Parse(s)
+	if err != nil {
+		panic(err)
+	}
+	return pgUUID
 }

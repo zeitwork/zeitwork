@@ -1,60 +1,53 @@
 package main
 
 import (
-	"context"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
 
+	"github.com/caarlos0/env/v11"
 	"github.com/zeitwork/zeitwork/internal/builder"
-	"github.com/zeitwork/zeitwork/internal/shared/config"
-	"github.com/zeitwork/zeitwork/internal/shared/logging"
+	"github.com/zeitwork/zeitwork/internal/shared/zlog"
 )
 
 func main() {
-	// Load configuration
-	cfg, err := config.LoadBuilderConfig()
-	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
-	}
+	// Initialize logger
+	logger := zlog.New(zlog.Config{
+		Level:   "info",
+		Service: "builder",
+	})
 
-	// Create logger
-	logger := logging.NewLogger(cfg.ServiceName, cfg.LogLevel, cfg.Environment)
-
-	// Create builder service
-	svc, err := builder.NewService(cfg, logger)
-	if err != nil {
-		logger.Error("Failed to create builder service", "error", err)
+	// Parse configuration from environment
+	var cfg builder.Config
+	if err := env.Parse(&cfg); err != nil {
+		logger.Error("failed to parse config", "error", err)
 		os.Exit(1)
 	}
-	defer svc.Close()
 
-	// Create context that cancels on interrupt
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Handle shutdown signals
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigChan
-		logger.Info("Received shutdown signal")
-		cancel()
-	}()
-
-	// Start the service
-	logger.Info("Starting builder service",
-		"environment", cfg.Environment,
-		"database_url", cfg.DatabaseURL,
-		"builder_type", cfg.BuilderType,
-		"max_concurrent_builds", cfg.MaxConcurrentBuilds,
+	logger.Info("builder starting",
+		"builder_id", cfg.BuilderID,
+		"runtime_mode", cfg.BuilderRuntimeMode,
 	)
 
-	if err := svc.Start(ctx); err != nil {
-		logger.Error("Service failed", "error", err)
+	// Create service
+	svc, err := builder.NewService(cfg, logger)
+	if err != nil {
+		logger.Error("failed to create service", "error", err)
 		os.Exit(1)
 	}
 
-	logger.Info("Builder service stopped")
+	// Setup graceful shutdown
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+
+	// Start service in a goroutine
+	go svc.Start()
+
+	// Wait for shutdown signal
+	sig := <-sigCh
+	logger.Info("received shutdown signal", "signal", sig)
+
+	// Cleanup
+	svc.Close()
+	logger.Info("builder stopped")
 }

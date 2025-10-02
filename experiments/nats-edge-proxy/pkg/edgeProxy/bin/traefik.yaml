@@ -1,8 +1,0 @@
-api:
-  dashboard: true
-log:
-  format: common
-  level: DEBUG
-providers:
-  http:
-    endpoint: "http://127.0.0.1:8081/config"

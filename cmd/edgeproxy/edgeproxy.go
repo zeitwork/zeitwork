@@ -1,73 +1,59 @@
 package main
 
 import (
-	"context"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
+	"github.com/caarlos0/env/v11"
 	"github.com/zeitwork/zeitwork/internal/edgeproxy"
-	"github.com/zeitwork/zeitwork/internal/shared/config"
-	"github.com/zeitwork/zeitwork/internal/shared/logging"
+	"github.com/zeitwork/zeitwork/internal/shared/zlog"
 )
 
 func main() {
-	// Load configuration
-	cfg, err := config.LoadEdgeProxyConfig()
-	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
-	}
+	// Initialize logger
+	logger := zlog.New(zlog.Config{
+		Level:   "info",
+		Service: "edgeproxy",
+	})
 
-	// Load NATS configuration
-	natsCfg, err := config.LoadNATSConfigWithPrefix("EDGEPROXY")
-	if err != nil {
-		log.Fatalf("Failed to load NATS configuration: %v", err)
-	}
-
-	// Create logger
-	logger := logging.NewLogger(cfg.ServiceName, cfg.LogLevel, cfg.Environment)
-
-	// Create native Go edge proxy service
-	svc, err := edgeproxy.NewService(&edgeproxy.Config{
-		DatabaseURL:        cfg.DatabaseURL,
-		ConfigPollInterval: 30 * time.Second, // Keep polling as fallback
-		NATSConfig:         natsCfg,
-		PortHttp:           cfg.PortHttp,
-		PortHttps:          cfg.PortHttps,
-	}, logger)
-	if err != nil {
-		logger.Error("Failed to create edge proxy service", "error", err)
+	// Parse configuration from environment
+	var cfg edgeproxy.Config
+	if err := env.Parse(&cfg); err != nil {
+		logger.Error("failed to parse config", "error", err)
 		os.Exit(1)
 	}
-	defer svc.Close()
 
-	// Create context that cancels on interrupt
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Handle shutdown signals
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	go func() {
-		<-sigChan
-		logger.Info("Received shutdown signal")
-		cancel()
-	}()
-
-	// Start the service
-	logger.Info("Starting edge proxy service",
-		"environment", cfg.Environment,
-		"database_url", cfg.DatabaseURL,
-		"nats_urls", natsCfg.URLs,
-		"poll_interval", "30s",
+	logger.Info("edgeproxy starting",
+		"edgeproxy_id", cfg.EdgeProxyID,
+		"region_id", cfg.EdgeProxyRegionID,
+		"port", cfg.EdgeProxyPort,
 	)
 
-	if err := svc.Start(ctx); err != nil {
-		logger.Error("Service failed", "error", err)
+	// Create service
+	svc, err := edgeproxy.NewService(cfg, logger)
+	if err != nil {
+		logger.Error("failed to create service", "error", err)
 		os.Exit(1)
 	}
 
-	logger.Info("Edge proxy service stopped")
+	// Setup graceful shutdown
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+
+	// Start service in a goroutine
+	go func() {
+		if err := svc.Start(); err != nil {
+			logger.Error("server error", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	// Wait for shutdown signal
+	sig := <-sigCh
+	logger.Info("received shutdown signal", "signal", sig)
+
+	// Cleanup
+	svc.Close()
+	logger.Info("edgeproxy stopped")
 }

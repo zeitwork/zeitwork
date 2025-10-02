@@ -24,7 +24,7 @@ const variantClasses: { [key: string]: string } = {
   transparent: "text-neutral-700 hover:bg-neutral-subtle active:bg-neutral-strong border border-transparent",
   danger: "bg-red-700 text-white hover:bg-red-600 border border-transparent",
   "danger-light": "text-red-700 bg-red-100 hover:bg-red-200 active:bg-red-300 border border-transparent",
-  outline: "text-neutral-600 border border-neutral-100 hover:bg-neutral-50 active:bg-neutral-100",
+  outline: "text-neutral-600 border border-neutral-800/10 hover:bg-neutral-50 active:bg-neutral-100",
 }
 
 const paddingClasses: { [key: string]: string } = {

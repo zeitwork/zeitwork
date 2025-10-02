@@ -19,4 +19,18 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
   if (to.path === "/" && loggedIn.value) {
     return navigateTo(`/${user.value?.username}`)
   }
+
+  // Check subscription status (skip for onboarding page itself)
+  if (to.path !== "/onboarding") {
+    try {
+      const { data: subscriptionStatus } = await useFetch("/api/subscription/status")
+
+      if (subscriptionStatus.value && !subscriptionStatus.value.hasSubscription) {
+        return navigateTo("/onboarding")
+      }
+    } catch (error) {
+      // If subscription check fails, allow access but log error
+      console.error("Failed to check subscription status:", error)
+    }
+  }
 })

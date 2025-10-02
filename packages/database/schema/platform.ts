@@ -1,5 +1,4 @@
 import {
-  boolean,
   integer,
   jsonb,
   pgEnum,
@@ -90,20 +89,5 @@ export const imageBuilds = pgTable("image_builds", {
   completedAt: timestamp({ withTimezone: true }),
   failedAt: timestamp({ withTimezone: true }),
   //
-  ...timestamps,
-});
-
-export const sslCerts = pgTable("ssl_certs", {
-  id: uuid().primaryKey().$defaultFn(uuidv7),
-  key: text().notNull().unique(), // Certificate key path (e.g., "certificates/acme/example.com/example.com.crt")
-  value: text().notNull(), // Certificate data (base64 encoded)
-  expiresAt: timestamp({ withTimezone: true }),
-  ...timestamps,
-});
-
-export const sslLocks = pgTable("ssl_locks", {
-  id: uuid().primaryKey().$defaultFn(uuidv7),
-  key: text().notNull().unique(), // Lock key
-  expiresAt: timestamp({ withTimezone: true }).notNull(),
   ...timestamps,
 });

@@ -7,7 +7,6 @@ import {
   timestamp,
   unique,
   uuid,
-  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 import { timestamps } from "../utils/timestamps";
 import { imageBuilds, images, instances } from "./platform";
@@ -38,6 +37,9 @@ export const organisations = pgTable("organisations", {
   id: uuid().primaryKey().$defaultFn(uuidv7),
   name: text().notNull(),
   slug: text().notNull().unique(),
+  stripeCustomerId: text(),
+  stripeSubscriptionId: text(),
+  stripeSubscriptionStatus: text(),
   ...timestamps,
 });
 

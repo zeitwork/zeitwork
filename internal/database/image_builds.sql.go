@@ -11,282 +11,48 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const imageBuildsComplete = `-- name: ImageBuildsComplete :one
-UPDATE image_builds 
-SET status = 'completed', 
-    completed_at = now(), 
-    updated_at = now()
-WHERE id = $1
-RETURNING 
+const createImage = `-- name: CreateImage :one
+INSERT INTO images (
     id,
-    status,
-    github_repository,
-    github_commit,
-    image_id,
-    started_at,
-    completed_at,
-    failed_at,
+    name,
+    size,
+    hash,
     created_at,
     updated_at
-`
-
-type ImageBuildsCompleteRow struct {
-	ID               pgtype.UUID        `json:"id"`
-	Status           ImageBuildStatus   `json:"status"`
-	GithubRepository string             `json:"github_repository"`
-	GithubCommit     string             `json:"github_commit"`
-	ImageID          pgtype.UUID        `json:"image_id"`
-	StartedAt        pgtype.Timestamptz `json:"started_at"`
-	CompletedAt      pgtype.Timestamptz `json:"completed_at"`
-	FailedAt         pgtype.Timestamptz `json:"failed_at"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-}
-
-// Mark an image build as completed
-func (q *Queries) ImageBuildsComplete(ctx context.Context, id pgtype.UUID) (*ImageBuildsCompleteRow, error) {
-	row := q.db.QueryRow(ctx, imageBuildsComplete, id)
-	var i ImageBuildsCompleteRow
-	err := row.Scan(
-		&i.ID,
-		&i.Status,
-		&i.GithubRepository,
-		&i.GithubCommit,
-		&i.ImageID,
-		&i.StartedAt,
-		&i.CompletedAt,
-		&i.FailedAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return &i, err
-}
-
-const imageBuildsCreate = `-- name: ImageBuildsCreate :one
-INSERT INTO image_builds (
-    id,
-    status,
-    github_repository,
-    github_commit
 ) VALUES (
-    $1,
-    'pending',
-    $2,
-    $3
+    $1, $2, $3, $4, NOW(), NOW()
 )
-RETURNING 
-    id,
-    status,
-    github_repository,
-    github_commit,
-    image_id,
-    started_at,
-    completed_at,
-    failed_at,
-    created_at,
-    updated_at
+RETURNING id, name, size, hash, created_at, updated_at, deleted_at
 `
 
-type ImageBuildsCreateParams struct {
-	ID               pgtype.UUID `json:"id"`
-	GithubRepository string      `json:"github_repository"`
-	GithubCommit     string      `json:"github_commit"`
+type CreateImageParams struct {
+	ID   pgtype.UUID `json:"id"`
+	Name string      `json:"name"`
+	Size pgtype.Int4 `json:"size"`
+	Hash string      `json:"hash"`
 }
 
-type ImageBuildsCreateRow struct {
-	ID               pgtype.UUID        `json:"id"`
-	Status           ImageBuildStatus   `json:"status"`
-	GithubRepository string             `json:"github_repository"`
-	GithubCommit     string             `json:"github_commit"`
-	ImageID          pgtype.UUID        `json:"image_id"`
-	StartedAt        pgtype.Timestamptz `json:"started_at"`
-	CompletedAt      pgtype.Timestamptz `json:"completed_at"`
-	FailedAt         pgtype.Timestamptz `json:"failed_at"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-}
-
-// Create a new image build
-func (q *Queries) ImageBuildsCreate(ctx context.Context, arg *ImageBuildsCreateParams) (*ImageBuildsCreateRow, error) {
-	row := q.db.QueryRow(ctx, imageBuildsCreate, arg.ID, arg.GithubRepository, arg.GithubCommit)
-	var i ImageBuildsCreateRow
+func (q *Queries) CreateImage(ctx context.Context, arg *CreateImageParams) (*Image, error) {
+	row := q.db.QueryRow(ctx, createImage,
+		arg.ID,
+		arg.Name,
+		arg.Size,
+		arg.Hash,
+	)
+	var i Image
 	err := row.Scan(
 		&i.ID,
-		&i.Status,
-		&i.GithubRepository,
-		&i.GithubCommit,
-		&i.ImageID,
-		&i.StartedAt,
-		&i.CompletedAt,
-		&i.FailedAt,
+		&i.Name,
+		&i.Size,
+		&i.Hash,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.DeletedAt,
 	)
 	return &i, err
 }
 
-const imageBuildsDequeueByID = `-- name: ImageBuildsDequeueByID :one
-UPDATE image_builds
-SET status = 'building',
-    started_at = now(),
-    updated_at = now()
-WHERE id = $1
-  AND status = 'pending'
-RETURNING 
-    id,
-    status,
-    github_repository,
-    github_commit,
-    image_id,
-    started_at,
-    completed_at,
-    failed_at,
-    created_at,
-    updated_at
-`
-
-type ImageBuildsDequeueByIDRow struct {
-	ID               pgtype.UUID        `json:"id"`
-	Status           ImageBuildStatus   `json:"status"`
-	GithubRepository string             `json:"github_repository"`
-	GithubCommit     string             `json:"github_commit"`
-	ImageID          pgtype.UUID        `json:"image_id"`
-	StartedAt        pgtype.Timestamptz `json:"started_at"`
-	CompletedAt      pgtype.Timestamptz `json:"completed_at"`
-	FailedAt         pgtype.Timestamptz `json:"failed_at"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-}
-
-// Atomically move a pending build with the given ID to building status
-func (q *Queries) ImageBuildsDequeueByID(ctx context.Context, id pgtype.UUID) (*ImageBuildsDequeueByIDRow, error) {
-	row := q.db.QueryRow(ctx, imageBuildsDequeueByID, id)
-	var i ImageBuildsDequeueByIDRow
-	err := row.Scan(
-		&i.ID,
-		&i.Status,
-		&i.GithubRepository,
-		&i.GithubCommit,
-		&i.ImageID,
-		&i.StartedAt,
-		&i.CompletedAt,
-		&i.FailedAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return &i, err
-}
-
-const imageBuildsDequeuePending = `-- name: ImageBuildsDequeuePending :one
-UPDATE image_builds 
-SET status = 'building', 
-    started_at = now(), 
-    updated_at = now()
-WHERE id = (
-    SELECT id 
-    FROM image_builds 
-    WHERE status = 'pending' 
-    ORDER BY created_at ASC 
-    LIMIT 1
-    FOR UPDATE SKIP LOCKED
-)
-RETURNING 
-    id,
-    status,
-    github_repository,
-    github_commit,
-    image_id,
-    started_at,
-    completed_at,
-    failed_at,
-    created_at,
-    updated_at
-`
-
-type ImageBuildsDequeuePendingRow struct {
-	ID               pgtype.UUID        `json:"id"`
-	Status           ImageBuildStatus   `json:"status"`
-	GithubRepository string             `json:"github_repository"`
-	GithubCommit     string             `json:"github_commit"`
-	ImageID          pgtype.UUID        `json:"image_id"`
-	StartedAt        pgtype.Timestamptz `json:"started_at"`
-	CompletedAt      pgtype.Timestamptz `json:"completed_at"`
-	FailedAt         pgtype.Timestamptz `json:"failed_at"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-}
-
-// Get the oldest pending image build and mark it as building
-func (q *Queries) ImageBuildsDequeuePending(ctx context.Context) (*ImageBuildsDequeuePendingRow, error) {
-	row := q.db.QueryRow(ctx, imageBuildsDequeuePending)
-	var i ImageBuildsDequeuePendingRow
-	err := row.Scan(
-		&i.ID,
-		&i.Status,
-		&i.GithubRepository,
-		&i.GithubCommit,
-		&i.ImageID,
-		&i.StartedAt,
-		&i.CompletedAt,
-		&i.FailedAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return &i, err
-}
-
-const imageBuildsFail = `-- name: ImageBuildsFail :one
-UPDATE image_builds 
-SET status = 'failed', 
-    failed_at = now(), 
-    updated_at = now()
-WHERE id = $1
-RETURNING 
-    id,
-    status,
-    github_repository,
-    github_commit,
-    image_id,
-    started_at,
-    completed_at,
-    failed_at,
-    created_at,
-    updated_at
-`
-
-type ImageBuildsFailRow struct {
-	ID               pgtype.UUID        `json:"id"`
-	Status           ImageBuildStatus   `json:"status"`
-	GithubRepository string             `json:"github_repository"`
-	GithubCommit     string             `json:"github_commit"`
-	ImageID          pgtype.UUID        `json:"image_id"`
-	StartedAt        pgtype.Timestamptz `json:"started_at"`
-	CompletedAt      pgtype.Timestamptz `json:"completed_at"`
-	FailedAt         pgtype.Timestamptz `json:"failed_at"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-}
-
-// Mark an image build as failed
-func (q *Queries) ImageBuildsFail(ctx context.Context, id pgtype.UUID) (*ImageBuildsFailRow, error) {
-	row := q.db.QueryRow(ctx, imageBuildsFail, id)
-	var i ImageBuildsFailRow
-	err := row.Scan(
-		&i.ID,
-		&i.Status,
-		&i.GithubRepository,
-		&i.GithubCommit,
-		&i.ImageID,
-		&i.StartedAt,
-		&i.CompletedAt,
-		&i.FailedAt,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return &i, err
-}
-
-const imageBuildsGetById = `-- name: ImageBuildsGetById :one
+const getPendingImageBuild = `-- name: GetPendingImageBuild :one
 SELECT 
     id,
     status,
@@ -298,11 +64,15 @@ SELECT
     failed_at,
     created_at,
     updated_at
-FROM image_builds 
-WHERE id = $1
+FROM image_builds
+WHERE status = 'pending'
+  AND started_at IS NULL
+ORDER BY created_at ASC
+LIMIT 1
+FOR UPDATE SKIP LOCKED
 `
 
-type ImageBuildsGetByIdRow struct {
+type GetPendingImageBuildRow struct {
 	ID               pgtype.UUID        `json:"id"`
 	Status           ImageBuildStatus   `json:"status"`
 	GithubRepository string             `json:"github_repository"`
@@ -315,10 +85,9 @@ type ImageBuildsGetByIdRow struct {
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 }
 
-// Get image build by ID
-func (q *Queries) ImageBuildsGetById(ctx context.Context, id pgtype.UUID) (*ImageBuildsGetByIdRow, error) {
-	row := q.db.QueryRow(ctx, imageBuildsGetById, id)
-	var i ImageBuildsGetByIdRow
+func (q *Queries) GetPendingImageBuild(ctx context.Context) (*GetPendingImageBuildRow, error) {
+	row := q.db.QueryRow(ctx, getPendingImageBuild)
+	var i GetPendingImageBuildRow
 	err := row.Scan(
 		&i.ID,
 		&i.Status,
@@ -334,95 +103,50 @@ func (q *Queries) ImageBuildsGetById(ctx context.Context, id pgtype.UUID) (*Imag
 	return &i, err
 }
 
-const imageBuildsResetStale = `-- name: ImageBuildsResetStale :many
-UPDATE image_builds 
-SET status = 'pending',
-    started_at = NULL,
-    updated_at = now()
-WHERE status = 'building' 
-  AND started_at < NOW() - ($1 || ' minutes')::INTERVAL
-RETURNING 
-    id,
-    status,
-    github_repository,
-    github_commit,
-    image_id,
-    started_at,
-    completed_at,
-    failed_at,
-    created_at,
-    updated_at
-`
-
-type ImageBuildsResetStaleRow struct {
-	ID               pgtype.UUID        `json:"id"`
-	Status           ImageBuildStatus   `json:"status"`
-	GithubRepository string             `json:"github_repository"`
-	GithubCommit     string             `json:"github_commit"`
-	ImageID          pgtype.UUID        `json:"image_id"`
-	StartedAt        pgtype.Timestamptz `json:"started_at"`
-	CompletedAt      pgtype.Timestamptz `json:"completed_at"`
-	FailedAt         pgtype.Timestamptz `json:"failed_at"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-}
-
-// Reset builds that have been "building" for too long (using minutes parameter)
-func (q *Queries) ImageBuildsResetStale(ctx context.Context, dollar_1 pgtype.Text) ([]*ImageBuildsResetStaleRow, error) {
-	rows, err := q.db.Query(ctx, imageBuildsResetStale, dollar_1)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []*ImageBuildsResetStaleRow
-	for rows.Next() {
-		var i ImageBuildsResetStaleRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.Status,
-			&i.GithubRepository,
-			&i.GithubCommit,
-			&i.ImageID,
-			&i.StartedAt,
-			&i.CompletedAt,
-			&i.FailedAt,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, &i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const imageBuildsUpdateImageId = `-- name: ImageBuildsUpdateImageId :one
+const updateImageBuildCompleted = `-- name: UpdateImageBuildCompleted :exec
 UPDATE image_builds
-SET image_id = $2,
-    updated_at = now()
+SET 
+    status = 'completed',
+    image_id = $2,
+    completed_at = NOW(),
+    updated_at = NOW()
 WHERE id = $1
-RETURNING 
-    id,
-    image_id
 `
 
-type ImageBuildsUpdateImageIdParams struct {
+type UpdateImageBuildCompletedParams struct {
 	ID      pgtype.UUID `json:"id"`
 	ImageID pgtype.UUID `json:"image_id"`
 }
 
-type ImageBuildsUpdateImageIdRow struct {
-	ID      pgtype.UUID `json:"id"`
-	ImageID pgtype.UUID `json:"image_id"`
+func (q *Queries) UpdateImageBuildCompleted(ctx context.Context, arg *UpdateImageBuildCompletedParams) error {
+	_, err := q.db.Exec(ctx, updateImageBuildCompleted, arg.ID, arg.ImageID)
+	return err
 }
 
-// Set image_id for an image build
-func (q *Queries) ImageBuildsUpdateImageId(ctx context.Context, arg *ImageBuildsUpdateImageIdParams) (*ImageBuildsUpdateImageIdRow, error) {
-	row := q.db.QueryRow(ctx, imageBuildsUpdateImageId, arg.ID, arg.ImageID)
-	var i ImageBuildsUpdateImageIdRow
-	err := row.Scan(&i.ID, &i.ImageID)
-	return &i, err
+const updateImageBuildFailed = `-- name: UpdateImageBuildFailed :exec
+UPDATE image_builds
+SET 
+    status = 'failed',
+    failed_at = NOW(),
+    updated_at = NOW()
+WHERE id = $1
+`
+
+func (q *Queries) UpdateImageBuildFailed(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, updateImageBuildFailed, id)
+	return err
+}
+
+const updateImageBuildStarted = `-- name: UpdateImageBuildStarted :exec
+UPDATE image_builds
+SET 
+    status = 'building',
+    started_at = NOW(),
+    updated_at = NOW()
+WHERE id = $1
+`
+
+func (q *Queries) UpdateImageBuildStarted(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, updateImageBuildStarted, id)
+	return err
 }

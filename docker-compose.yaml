@@ -1,39 +1,13 @@
 name: "zeitwork"
 
-volumes:
-  registry_data:
-
-networks:
-  zeitwork:
-    name: zeitwork
-    enable_ipv6: true
-    driver: bridge
-    ipam:
-      driver: default
-      config:
-        - subnet: "172.20.0.0/16"
-          gateway: "172.20.0.1"
-        - subnet: "fd12::/16" # ULA range for generated IPv6 addresses
-          gateway: "fd12::1"
-
 services:
-  nats:
-    image: nats:2-alpine
-    ports:
-      - "4222:4222"
-      - "6222:6222"
-      - "8222:8222"
-  postgres:
-    image: postgres:17-alpine
+  db:
+    image: postgres:18-alpine
     ports:
       - "5432:5432"
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
-    command:
-      - postgres
-      - -c
-      - wal_level=logical
   s3:
     image: minio/minio:latest
     ports:
@@ -42,17 +16,3 @@ services:
       - MINIO_ACCESS_KEY=minioadmin
       - MINIO_SECRET_KEY=minioadmin
     command: server /data
-  distribution:
-    image: distribution/distribution:3
-    ports:
-      - "5001:5000"
-    environment:
-      - REGISTRY_STORAGE=filesystem
-      - REGISTRY_STORAGE_FILESYSTEM_ROOTDIRECTORY=/var/lib/registry
-      - REGISTRY_STORAGE_DELETE_ENABLED=true
-    volumes:
-      - registry_data:/var/lib/registry
-  helloworld:
-    image: hello-world:latest
-    networks:
-      - zeitwork

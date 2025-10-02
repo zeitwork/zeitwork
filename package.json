@@ -9,7 +9,8 @@
     "db:push": "bun --cwd ./packages/database drizzle-kit push",
     "db:studio": "bun --cwd ./packages/database drizzle-kit studio",
     "db:check": "bun --cwd ./packages/database drizzle-kit check",
-    "web:dev": "bun --cwd ./apps/web dev"
+    "web:dev": "bun --cwd ./apps/web dev",
+    "api:start": "bun --cwd ./apps/api start"
   },
   "devDependencies": {
     "@types/bun": "latest"

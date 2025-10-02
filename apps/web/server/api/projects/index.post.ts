@@ -20,6 +20,9 @@ export default defineEventHandler(async (event) => {
   const { secure } = await requireUserSession(event)
   if (!secure) throw createError({ statusCode: 401, message: "Unauthorized" })
 
+  // Require active subscription to create projects
+  await requireSubscription(event)
+
   const body = await readValidatedBody(event, bodySchema.parse)
 
   const github = useGitHub()
