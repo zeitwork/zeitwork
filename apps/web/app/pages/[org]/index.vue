@@ -35,7 +35,7 @@ const justInstalled = computed(() => route.query.installed === "true")
 
 <template>
   <div class="@container flex flex-col gap-4 p-4">
-    <template v-if="true">
+    <template v-if="false">
       <!-- Success message after installation -->
       <div
         v-if="justInstalled"
