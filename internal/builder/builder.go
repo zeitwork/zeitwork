@@ -69,20 +69,24 @@ func (s *Service) Start() {
 		s.logger.Info("starting build loop")
 
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-		if err := s.buildNext(ctx); err != nil {
+		err := s.buildNext(ctx)
+		cancel()
+
+		if err != nil {
 			if err.Error() != "no pending builds" {
 				s.logger.Error("build failed", "error", err)
 			} else {
 				s.logger.Info("no pending builds")
+				// Only sleep if there are no pending builds
+				offset := time.Duration(rand.Intn(11)-5) * time.Second
+				sleepDuration := 15*time.Second + offset
+				s.logger.Info("sleeping", "duration", sleepDuration)
+				time.Sleep(sleepDuration)
 			}
+		} else {
+			// Build completed successfully, check for next build immediately
+			s.logger.Info("build completed, checking for next build immediately")
 		}
-		cancel()
-
-		// Sleep 15s +/- 5s random offset
-		offset := time.Duration(rand.Intn(11)-5) * time.Second
-		sleepDuration := 15*time.Second + offset
-		s.logger.Info("sleeping", "duration", sleepDuration)
-		time.Sleep(sleepDuration)
 	}
 }
 

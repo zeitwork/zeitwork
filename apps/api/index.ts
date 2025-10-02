@@ -439,77 +439,155 @@ async function reconcile() {
     );
   }
 
+  // Group active deployments by project/environment
+  const deploymentGroups = new Map<string, typeof activeDeployments>();
   for (const deployment of activeDeployments) {
-    // check if there is a newer deployment for the project/environment
-    // if the current deployment is older than 5 minutes then mark it as inactive
-    // btw deployment.id are uuidv7
+    const key = `${deployment.projectId}-${deployment.environmentId}`;
+    if (!deploymentGroups.has(key)) {
+      deploymentGroups.set(key, []);
+    }
+    deploymentGroups.get(key)!.push(deployment);
+  }
 
-    await useDrizzle().transaction(async (tx) => {
-      // check if there is a newer active deployment for the project/environment
-      const [newerActiveDeployment] = await tx
-        .select()
-        .from(deployments)
-        .where(
-          and(
-            gt(deployments.id, deployment.id),
-            eq(deployments.projectId, deployment.projectId),
-            eq(deployments.environmentId, deployment.environmentId),
-            eq(deployments.status, "active")
-          )
-        );
+  // Process each group
+  for (const [groupKey, groupDeployments] of deploymentGroups) {
+    // Sort by ID descending (newest first, since UUIDv7 is time-ordered)
+    const sortedDeployments = groupDeployments.sort((a, b) => {
+      if (a.id > b.id) return -1;
+      if (a.id < b.id) return 1;
+      return 0;
+    });
 
-      if (newerActiveDeployment) {
+    console.log(`[RECONCILE] Processing deployment group ${groupKey}`, {
+      totalActive: sortedDeployments.length,
+    });
+
+    // Keep the latest deployment (index 0) active
+    const latest = sortedDeployments[0];
+    if (!latest) continue;
+
+    console.log(`[DEPLOYMENT:${latest.id}] Latest deployment, keeping active`);
+
+    // Process the second deployment (N-1)
+    if (sortedDeployments.length > 1) {
+      const prior = sortedDeployments[1];
+      if (!prior) continue;
+
+      const fiveMinutesAgo = addMinutes(new Date(), -5);
+      const latestBecameActiveAt = latest.updatedAt;
+
+      if (isBefore(latestBecameActiveAt, fiveMinutesAgo)) {
+        // Latest has been active for more than 5 minutes, stop the prior deployment
         console.log(
-          `[DEPLOYMENT:${deployment.id}] Newer active deployment found, marking as inactive`,
+          `[DEPLOYMENT:${prior.id}] Prior deployment grace period expired, marking as inactive`,
           {
-            newerDeploymentId: newerActiveDeployment.id,
+            latestDeploymentId: latest.id,
+            minutesSinceLatestActive: Math.round(
+              (new Date().getTime() - latestBecameActiveAt.getTime()) / 60000
+            ),
           }
         );
 
-        await tx
-          .update(deployments)
-          .set({
-            status: "inactive",
-            updatedAt: new Date(),
-          })
-          .where(eq(deployments.id, deployment.id));
-
-        // Mark instances from old deployment as stopping
-        const deploymentInstancesList = await tx
-          .select()
-          .from(deploymentInstances)
-          .where(eq(deploymentInstances.deploymentId, deployment.id));
-
-        for (const di of deploymentInstancesList) {
+        await useDrizzle().transaction(async (tx) => {
           await tx
-            .update(instances)
+            .update(deployments)
             .set({
-              state: "stopping",
+              status: "inactive",
               updatedAt: new Date(),
             })
-            .where(eq(instances.id, di.instanceId));
-        }
+            .where(eq(deployments.id, prior.id));
 
-        if (deploymentInstancesList.length > 0) {
+          // Mark instances as stopping
+          const deploymentInstancesList = await tx
+            .select()
+            .from(deploymentInstances)
+            .where(eq(deploymentInstances.deploymentId, prior.id));
+
+          for (const di of deploymentInstancesList) {
+            await tx
+              .update(instances)
+              .set({
+                state: "stopping",
+                updatedAt: new Date(),
+              })
+              .where(eq(instances.id, di.instanceId));
+          }
+
+          if (deploymentInstancesList.length > 0) {
+            console.log(
+              `[DEPLOYMENT:${prior.id}] Marked ${deploymentInstancesList.length} instance(s) as stopping`
+            );
+          }
+
           console.log(
-            `[DEPLOYMENT:${deployment.id}] Marked ${deploymentInstancesList.length} instance(s) as stopping`
+            `[DEPLOYMENT:${prior.id}] State changed: active → inactive (grace period expired)`
           );
-        }
-
-        console.log(
-          `[DEPLOYMENT:${deployment.id}] State changed: active → inactive (superseded by active deployment)`
-        );
+        });
       } else {
-        // Refresh active status
-        await tx
-          .update(deployments)
-          .set({
-            status: "active",
-            updatedAt: new Date(),
-          })
-          .where(eq(deployments.id, deployment.id));
+        console.log(
+          `[DEPLOYMENT:${prior.id}] Prior deployment in grace period, keeping active`,
+          {
+            latestDeploymentId: latest.id,
+            minutesSinceLatestActive: Math.round(
+              (new Date().getTime() - latestBecameActiveAt.getTime()) / 60000
+            ),
+          }
+        );
       }
-    });
+    }
+
+    // Process all older deployments (N-2, N-3, etc.) - stop them immediately
+    if (sortedDeployments.length > 2) {
+      const olderDeployments = sortedDeployments.slice(2);
+      console.log(
+        `[RECONCILE] Found ${olderDeployments.length} old deployment(s) to stop immediately`
+      );
+
+      for (const oldDeployment of olderDeployments) {
+        console.log(
+          `[DEPLOYMENT:${oldDeployment.id}] Old deployment, marking as inactive immediately`,
+          {
+            latestDeploymentId: latest.id,
+          }
+        );
+
+        await useDrizzle().transaction(async (tx) => {
+          await tx
+            .update(deployments)
+            .set({
+              status: "inactive",
+              updatedAt: new Date(),
+            })
+            .where(eq(deployments.id, oldDeployment.id));
+
+          // Mark instances as stopping
+          const deploymentInstancesList = await tx
+            .select()
+            .from(deploymentInstances)
+            .where(eq(deploymentInstances.deploymentId, oldDeployment.id));
+
+          for (const di of deploymentInstancesList) {
+            await tx
+              .update(instances)
+              .set({
+                state: "stopping",
+                updatedAt: new Date(),
+              })
+              .where(eq(instances.id, di.instanceId));
+          }
+
+          if (deploymentInstancesList.length > 0) {
+            console.log(
+              `[DEPLOYMENT:${oldDeployment.id}] Marked ${deploymentInstancesList.length} instance(s) as stopping`
+            );
+          }
+
+          console.log(
+            `[DEPLOYMENT:${oldDeployment.id}] State changed: active → inactive (superseded)`
+          );
+        });
+      }
+    }
   }
 
   // inactive deployments

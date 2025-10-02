@@ -18,25 +18,9 @@ const { data: deployments, refresh: refreshDeployments } = await useFetch(`/api/
 
 const { isPending, start, stop } = useTimeoutFn(() => {
   refreshDeployments()
-}, 1000)
+}, 500)
 
 start()
-
-watch(
-  deployments,
-  (value) => {
-    const anyPending = value?.some(
-      (deployment) =>
-        deployment.status === "pending" || deployment.status === "building" || deployment.status === "deploying",
-    )
-    if (anyPending) {
-      start()
-    } else {
-      stop()
-    }
-  },
-  { immediate: true },
-)
 
 async function createDeployment() {
   await $fetch(`/api/deployments`, {
