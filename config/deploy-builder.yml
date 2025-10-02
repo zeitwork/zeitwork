@@ -1,0 +1,44 @@
+# Builder Service Deployment Configuration
+service: zeitwork-builder
+
+# Builder container image
+image: zeitwork/builder
+
+# Deploy to single EU-West server
+servers:
+  web:
+    hosts:
+      - 67.213.127.213 # [eu-west-1] - Primary builder node
+    options:
+      volume:
+        - /var/run/docker.sock:/var/run/docker.sock
+    proxy: false
+
+# Registry configuration
+registry:
+  server: ghcr.io
+  username: tomhaerter
+  password:
+    - KAMAL_REGISTRY_PASSWORD
+
+# Builder configuration
+builder:
+  arch: amd64
+  context: .
+  dockerfile: docker/builder/Dockerfile
+
+# Environment variables
+env:
+  clear:
+    BUILDER_RUNTIME_MODE: docker
+    BUILDER_WORK_DIR: /tmp/zeitwork-builder
+    BUILDER_ID: 0199bf3c-997d-7b64-ab65-7a6e27d735bb
+  secret:
+    - BUILDER_DATABASE_URL:NUXT_DSN
+    - BUILDER_REGISTRY_URL
+    - BUILDER_REGISTRY_USER
+    - BUILDER_REGISTRY_PASS
+
+# SSH configuration
+ssh:
+  user: ubuntu

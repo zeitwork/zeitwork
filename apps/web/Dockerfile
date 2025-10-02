@@ -1,5 +1,5 @@
 ARG NODE_VERSION=23-alpine
-ARG BUN_VERSION=1.2.19
+ARG BUN_VERSION=1.2.23
 
 # Use the official Node.js image
 # See available tags at https://hub.docker.com/_/node

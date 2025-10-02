@@ -3,10 +3,14 @@ package docker
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
+	"os/exec"
+	"strings"
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
@@ -15,26 +19,96 @@ import (
 
 const (
 	labelInstanceID = "zeitwork.instance.id"
-	networkName     = "zeitwork-network"
+	networkName     = "zeitwork-br0" // Tailscale regional bridge network
 )
+
+// Config holds configuration for Docker runtime
+type Config struct {
+	RegistryURL  string // Registry URL (e.g., "ghcr.io/yourorg")
+	RegistryUser string // Registry username
+	RegistryPass string // Registry password or token
+}
 
 // DockerRuntime implements the Runtime interface using Docker
 type DockerRuntime struct {
 	client *client.Client
 	logger *slog.Logger
+	cfg    Config
 }
 
 // NewDockerRuntime creates a new Docker runtime
-func NewDockerRuntime(logger *slog.Logger) (*DockerRuntime, error) {
+func NewDockerRuntime(cfg Config, logger *slog.Logger) (*DockerRuntime, error) {
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {
 		return nil, fmt.Errorf("failed to create docker client: %w", err)
 	}
 
-	return &DockerRuntime{
+	dr := &DockerRuntime{
 		client: cli,
 		logger: logger,
-	}, nil
+		cfg:    cfg,
+	}
+
+	// Authenticate to registry if configured
+	if cfg.RegistryURL != "" {
+		logger.Info("registry configured, authenticating",
+			"registry_url", cfg.RegistryURL,
+			"registry_user", cfg.RegistryUser,
+		)
+		if err := dr.dockerLogin(context.Background()); err != nil {
+			return nil, fmt.Errorf("failed to authenticate to registry: %w", err)
+		}
+		logger.Info("successfully authenticated to registry")
+	} else {
+		logger.Info("no registry configured, using local Docker only")
+	}
+
+	return dr, nil
+}
+
+// dockerLogin authenticates to the configured registry
+func (d *DockerRuntime) dockerLogin(ctx context.Context) error {
+	if d.cfg.RegistryURL == "" {
+		return nil // No registry configured
+	}
+
+	if d.cfg.RegistryUser == "" || d.cfg.RegistryPass == "" {
+		return fmt.Errorf("registry URL configured but missing credentials")
+	}
+
+	// Extract registry host from URL (e.g., "ghcr.io/yourorg" -> "ghcr.io")
+	registryHost := d.cfg.RegistryURL
+	if strings.Contains(registryHost, "/") {
+		registryHost = strings.Split(registryHost, "/")[0]
+	}
+
+	d.logger.Info("[REGISTRY] logging in to registry",
+		"registry_host", registryHost,
+		"username", d.cfg.RegistryUser,
+	)
+
+	cmd := exec.CommandContext(ctx, "docker", "login", registryHost,
+		"--username", d.cfg.RegistryUser,
+		"--password-stdin")
+
+	// Pass password via stdin for security
+	cmd.Stdin = strings.NewReader(d.cfg.RegistryPass)
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		d.logger.Error("[REGISTRY] docker login failed",
+			"registry_host", registryHost,
+			"error", err,
+			"output", string(output),
+		)
+		return fmt.Errorf("docker login failed: %w: %s", err, string(output))
+	}
+
+	d.logger.Info("[REGISTRY] successfully logged in to registry",
+		"registry_host", registryHost,
+	)
+
+	return nil
 }
 
 // Start creates and starts a container
@@ -46,9 +120,37 @@ func (d *DockerRuntime) Start(ctx context.Context, instanceID, imageName, ipAddr
 		"network", networkName,
 	)
 
-	// Pull image
-	// For MVP, we assume the image is already pulled or available
-	// In production, you'd want to pull it here
+	// Pull image if not already available
+	d.logger.Info("[REGISTRY] pulling image",
+		"instance_id", instanceID,
+		"image", imageName,
+	)
+
+	pullOptions := image.PullOptions{}
+	pullReader, err := d.client.ImagePull(ctx, imageName, pullOptions)
+	if err != nil {
+		d.logger.Error("[REGISTRY] failed to pull image",
+			"instance_id", instanceID,
+			"image", imageName,
+			"error", err,
+		)
+		return fmt.Errorf("failed to pull image: %w", err)
+	}
+	defer pullReader.Close()
+
+	// Consume pull output (required for pull to complete)
+	_, err = io.Copy(io.Discard, pullReader)
+	if err != nil {
+		d.logger.Warn("[REGISTRY] failed to read pull output",
+			"instance_id", instanceID,
+			"error", err,
+		)
+	}
+
+	d.logger.Info("[REGISTRY] image pulled successfully",
+		"instance_id", instanceID,
+		"image", imageName,
+	)
 
 	// Convert env vars to array
 	env := make([]string, 0, len(envVars))
@@ -76,6 +178,28 @@ func (d *DockerRuntime) Start(ctx context.Context, instanceID, imageName, ipAddr
 			NanoCPUs: int64(vcpus * 1e9),
 			Memory:   int64(memory * 1024 * 1024), // memory in MB
 		},
+	}
+
+	// Verify the regional bridge network exists
+	networks, err := d.client.NetworkList(ctx, network.ListOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to list networks: %w", err)
+	}
+
+	networkExists := false
+	for _, net := range networks {
+		if net.Name == networkName {
+			networkExists = true
+			break
+		}
+	}
+
+	if !networkExists {
+		d.logger.Error("regional bridge network not found",
+			"network_name", networkName,
+			"instance_id", instanceID,
+		)
+		return fmt.Errorf("regional bridge network '%s' not found - ensure Tailscale setup script has been run", networkName)
 	}
 
 	// Configure network settings with static IP

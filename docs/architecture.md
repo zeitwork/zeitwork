@@ -10,15 +10,17 @@ we will try to build it using docker if there is a Dockerfile in the root dir OR
 
 once build we will try to deploy it
 
-we have a service nodeagent that runs on metal servers
+we have a service nodeagent that runs on metal servers with kvm support
 
-there we have kata containers
+we run images using firecracker
 
-we use containerd to run the customers code with kata containers and cloud hypervisor on the metal services
+the nodeagent is also has a reverse proxy
 
-each vm has a global unique id, each vm has a global unique internal ip
+we know what instances run on our node and we know what instances run on other nodes
 
-all nodeagents are in a internal privat network with tailscale
+if the incoming request Host header has a instance on our node, we route to that instance
+
+if not we route to another node, to that reverse proxy, which will then handle the routing to the instance
 
 the edge proxy is a simple go http proxy that routes incoming requests (has a Host header) to the targeted service
 
@@ -32,15 +34,7 @@ this is a mvp. polling is fine :)
 
 all state lives in a centralized postgres database
 
-we want to use https://gitlab.com/gitlab-org/container-registry to store the containers
-
-we have a global s3 bucket that we use for the container-registry storage engine
-
-we deploy the frontend (web app) and backend using kamal-deploy.org
-
 we always assume that servers are running latest ubuntu
-
-we want to manage our infrastructure using pulumi ie tailscale and cloudflare
 
 the backend should be using a task queue approach that relies on the database. just write tasks to the backend. the backend just will try to do that work one by one
 

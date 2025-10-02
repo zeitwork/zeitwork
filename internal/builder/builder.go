@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -18,10 +19,13 @@ import (
 )
 
 type Config struct {
-	BuilderID          string `env:"BUILDER_ID"`
-	BuilderDatabaseURL string `env:"BUILDER_DATABASE_URL"`
-	BuilderRuntimeMode string `env:"BUILDER_RUNTIME_MODE" envDefault:"docker"`
-	BuilderWorkDir     string `env:"BUILDER_WORK_DIR" envDefault:"/tmp/zeitwork-builder"`
+	BuilderID           string `env:"BUILDER_ID"`
+	BuilderDatabaseURL  string `env:"BUILDER_DATABASE_URL"`
+	BuilderRuntimeMode  string `env:"BUILDER_RUNTIME_MODE" envDefault:"docker"`
+	BuilderWorkDir      string `env:"BUILDER_WORK_DIR" envDefault:"/tmp/zeitwork-builder"`
+	BuilderRegistryURL  string `env:"BUILDER_REGISTRY_URL"`  // e.g., "ghcr.io/yourorg" - empty means local Docker only
+	BuilderRegistryUser string `env:"BUILDER_REGISTRY_USER"` // Registry username for authentication
+	BuilderRegistryPass string `env:"BUILDER_REGISTRY_PASS"` // Registry password or token
 }
 
 type Service struct {
@@ -54,6 +58,20 @@ func NewService(cfg Config, logger *slog.Logger) (*Service, error) {
 		db:        db,
 		logger:    logger,
 		builderID: builderUUID,
+	}
+
+	// Authenticate to registry if configured
+	if cfg.BuilderRegistryURL != "" {
+		logger.Info("registry configured, authenticating",
+			"registry_url", cfg.BuilderRegistryURL,
+			"registry_user", cfg.BuilderRegistryUser,
+		)
+		if err := svc.dockerLogin(context.Background()); err != nil {
+			return nil, fmt.Errorf("failed to authenticate to registry: %w", err)
+		}
+		logger.Info("successfully authenticated to registry")
+	} else {
+		logger.Info("no registry configured, using local Docker only")
 	}
 
 	return svc, nil
@@ -174,10 +192,18 @@ func (s *Service) buildNext(ctx context.Context) error {
 		"repository", build.GithubRepository,
 	)
 
-	// Build image
+	// Create image record first to get the image ID for naming
+	imageID := uuid.New()
+	s.logger.Info("generating image ID for build",
+		"build_id", buildID,
+		"image_id", uuid.ToString(imageID),
+	)
+
+	// Build image with the proper name based on repository
 	imageName := s.generateImageName(build.GithubRepository, build.GithubCommit)
 	s.logger.Info("building docker image",
 		"build_id", buildID,
+		"image_id", uuid.ToString(imageID),
 		"image_name", imageName,
 		"source_dir", repoDir,
 	)
@@ -195,6 +221,28 @@ func (s *Service) buildNext(ctx context.Context) error {
 		"build_id", buildID,
 		"image_name", imageName,
 	)
+
+	// Push to registry if configured
+	if s.cfg.BuilderRegistryURL != "" {
+		s.logger.Info("pushing image to registry",
+			"build_id", buildID,
+			"image_name", imageName,
+			"registry_url", s.cfg.BuilderRegistryURL,
+		)
+		if err := s.pushImage(ctx, imageName); err != nil {
+			s.logger.Error("failed to push image to registry",
+				"build_id", buildID,
+				"image_name", imageName,
+				"error", err,
+			)
+			s.markFailed(ctx, build.ID)
+			return fmt.Errorf("failed to push image: %w", err)
+		}
+		s.logger.Info("image pushed to registry successfully",
+			"build_id", buildID,
+			"image_name", imageName,
+		)
+	}
 
 	// Get image details
 	s.logger.Info("inspecting image details",
@@ -218,8 +266,7 @@ func (s *Service) buildNext(ctx context.Context) error {
 		"hash", imageHash,
 	)
 
-	// Create image record
-	imageID := uuid.New()
+	// Create image record (imageID was generated earlier for naming)
 	s.logger.Info("creating image record in database",
 		"build_id", buildID,
 		"image_id", uuid.ToString(imageID),
@@ -354,23 +401,34 @@ func (s *Service) buildImage(ctx context.Context, repoDir, imageName string) err
 	}
 	s.logger.Info("Dockerfile found", "path", dockerfilePath)
 
-	// Build using docker
+	// Build using docker build
 	s.logger.Info("executing docker build",
 		"image_name", imageName,
 		"context_dir", repoDir,
 	)
+
 	cmd := exec.CommandContext(ctx, "docker", "build", "-t", imageName, ".")
 	cmd.Dir = repoDir
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
 
-	if err := cmd.Run(); err != nil {
+	// Capture both stdout and stderr
+	output, err := cmd.CombinedOutput()
+
+	// Always log the output for debugging
+	if len(output) > 0 {
+		s.logger.Info("docker build output",
+			"image_name", imageName,
+			"output", string(output),
+		)
+	}
+
+	if err != nil {
 		s.logger.Error("docker build failed",
 			"image_name", imageName,
 			"context_dir", repoDir,
 			"error", err,
+			"output", string(output),
 		)
-		return fmt.Errorf("docker build failed: %w", err)
+		return fmt.Errorf("docker build failed: %w: %s", err, string(output))
 	}
 
 	s.logger.Info("docker build completed successfully",
@@ -400,11 +458,119 @@ func (s *Service) getImageDetails(ctx context.Context, imageName string) (int64,
 	return size, imageHash, nil
 }
 
-func (s *Service) generateImageName(repository, commit string) string {
-	// Format: org/repo:commit-short
-	shortCommit := commit
-	if len(commit) > 7 {
-		shortCommit = commit[:7]
+func (s *Service) generateImageName(githubRepository string, commit string) string {
+	// Format: [registry/]zeitwork-image-${user}-${repo}:commit
+	// Example: ghcr.io/zeitwork/zeitwork-image-tomharter-myapp:abc1234567890abcdef
+	//       or zeitwork-image-tomharter-myapp:abc1234567890abcdef (local)
+
+	// Parse repository (format: "username/repo-name")
+	parts := strings.Split(githubRepository, "/")
+	user := "unknown"
+	repo := "unknown"
+
+	if len(parts) >= 2 {
+		user = parts[0]
+		repo = parts[1]
+	} else if len(parts) == 1 {
+		repo = parts[0]
 	}
-	return fmt.Sprintf("%s:%s", repository, shortCommit)
+
+	// Sanitize: replace non-alphanumeric chars with hyphens and convert to lowercase
+	sanitize := func(s string) string {
+		var result strings.Builder
+		for _, r := range s {
+			if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') {
+				result.WriteRune(r)
+			} else {
+				result.WriteRune('-')
+			}
+		}
+		return strings.ToLower(result.String())
+	}
+
+	sanitizedUser := sanitize(user)
+	sanitizedRepo := sanitize(repo)
+
+	// Use full commit hash (no shortening)
+	imageName := fmt.Sprintf("zeitwork-image-%s-%s:%s", sanitizedUser, sanitizedRepo, commit)
+
+	// Add registry prefix if configured
+	if s.cfg.BuilderRegistryURL != "" {
+		// Ensure registry URL doesn't have trailing slash
+		registryURL := strings.TrimSuffix(s.cfg.BuilderRegistryURL, "/")
+		imageName = fmt.Sprintf("%s/%s", registryURL, imageName)
+	}
+
+	return imageName
+}
+
+// dockerLogin authenticates to the configured registry
+func (s *Service) dockerLogin(ctx context.Context) error {
+	if s.cfg.BuilderRegistryURL == "" {
+		return nil // No registry configured
+	}
+
+	if s.cfg.BuilderRegistryUser == "" || s.cfg.BuilderRegistryPass == "" {
+		return fmt.Errorf("registry URL configured but missing credentials")
+	}
+
+	// Extract registry host from URL (e.g., "ghcr.io/yourorg" -> "ghcr.io")
+	registryHost := s.cfg.BuilderRegistryURL
+	if strings.Contains(registryHost, "/") {
+		registryHost = strings.Split(registryHost, "/")[0]
+	}
+
+	s.logger.Info("[REGISTRY] logging in to registry",
+		"registry_host", registryHost,
+		"username", s.cfg.BuilderRegistryUser,
+	)
+
+	cmd := exec.CommandContext(ctx, "docker", "login", registryHost,
+		"--username", s.cfg.BuilderRegistryUser,
+		"--password-stdin")
+
+	// Pass password via stdin for security
+	cmd.Stdin = strings.NewReader(s.cfg.BuilderRegistryPass)
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		s.logger.Error("[REGISTRY] docker login failed",
+			"registry_host", registryHost,
+			"error", err,
+			"output", string(output),
+		)
+		return fmt.Errorf("docker login failed: %w: %s", err, string(output))
+	}
+
+	s.logger.Info("[REGISTRY] successfully logged in to registry",
+		"registry_host", registryHost,
+		"output", string(output),
+	)
+
+	return nil
+}
+
+// pushImage pushes the built image to the configured registry
+func (s *Service) pushImage(ctx context.Context, imageName string) error {
+	s.logger.Info("[REGISTRY] pushing image",
+		"image_name", imageName,
+	)
+
+	cmd := exec.CommandContext(ctx, "docker", "push", imageName)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		s.logger.Error("[REGISTRY] docker push failed",
+			"image_name", imageName,
+			"error", err,
+		)
+		return fmt.Errorf("docker push failed: %w", err)
+	}
+
+	s.logger.Info("[REGISTRY] image pushed successfully",
+		"image_name", imageName,
+	)
+
+	return nil
 }

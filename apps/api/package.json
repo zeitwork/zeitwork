@@ -13,6 +13,8 @@
     "typescript": "^5"
   },
   "dependencies": {
-    "date-fns": "^4.1.0"
+    "date-fns": "^4.1.0",
+    "drizzle-orm": "^0.44.4",
+    "postgres": "^3.4.7"
   }
 }

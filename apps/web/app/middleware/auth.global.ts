@@ -9,6 +9,11 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
     return
   }
 
+  // always allow /api
+  if (to.path.startsWith("/api")) {
+    return
+  }
+
   const { loggedIn, user } = useUserSession()
 
   if (!loggedIn.value || !user.value?.username) {
@@ -20,17 +25,35 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
     return navigateTo(`/${user.value?.username}`)
   }
 
-  // Check subscription status (skip for onboarding page itself)
-  if (to.path !== "/onboarding") {
-    try {
-      const { data: subscriptionStatus } = await useFetch("/api/subscription/status")
+  // Check subscription status
+  try {
+    const { session } = useUserSession()
+    const isOnboarding = to.path === "/onboarding"
+    const justCompletedCheckout = to.query.checkout === "success"
 
-      if (subscriptionStatus.value && !subscriptionStatus.value.hasSubscription) {
-        return navigateTo("/onboarding")
-      }
-    } catch (error) {
-      // If subscription check fails, allow access but log error
-      console.error("Failed to check subscription status:", error)
+    // If we have a subscribed status in session and we're not on onboarding
+    // and didn't just complete checkout, skip API call
+    if (session.value?.hasSubscription && !isOnboarding && !justCompletedCheckout) {
+      return
     }
+
+    // Fetch subscription status if:
+    // - We're on onboarding (to potentially redirect away if subscribed)
+    // - We don't have a subscribed status in session
+    // - User just completed checkout (need to refresh their status)
+    const subscriptionStatus = await $fetch("/api/subscription/status")
+
+    // If on onboarding page and has subscription, redirect to user org
+    if (isOnboarding && subscriptionStatus?.hasSubscription) {
+      return navigateTo(`/${user.value.username}`)
+    }
+
+    // If not on onboarding page and no subscription, redirect to onboarding
+    if (!isOnboarding && subscriptionStatus && !subscriptionStatus.hasSubscription) {
+      return navigateTo("/onboarding")
+    }
+  } catch (error) {
+    // If subscription check fails, allow access but log error
+    console.error("Failed to check subscription status:", error)
   }
 })

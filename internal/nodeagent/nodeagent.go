@@ -13,24 +13,31 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/samber/lo"
 	"github.com/zeitwork/zeitwork/internal/database"
+	"github.com/zeitwork/zeitwork/internal/nodeagent/proxy"
 	container "github.com/zeitwork/zeitwork/internal/nodeagent/runtime"
 	"github.com/zeitwork/zeitwork/internal/nodeagent/runtime/docker"
+	"github.com/zeitwork/zeitwork/internal/nodeagent/runtime/firecracker"
 	"github.com/zeitwork/zeitwork/internal/nodeagent/utils"
 	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 )
 
 type Config struct {
-	NodeID          string `env:"NODE_ID"`
-	NodeRegionID    string `env:"NODE_REGION_ID"`
-	NodeDatabaseURL string `env:"NODE_DATABASE_URL"`
-	NodeRuntimeMode string `env:"NODE_RUNTIME_MODE" envDefault:"docker"`
-	NodeIPAddress   string `env:"NODE_IP_ADDRESS"` // External IP address of the node
+	NodeID           string `env:"NODE_ID"`
+	NodeRegionID     string `env:"NODE_REGION_ID"`
+	NodeDatabaseURL  string `env:"NODE_DATABASE_URL"`
+	NodeRuntimeMode  string `env:"NODE_RUNTIME_MODE" envDefault:"docker"`
+	NodeIPAddress    string `env:"NODE_IP_ADDRESS"`                    // External IP address of the node
+	NodeProxyAddr    string `env:"NODE_PROXY_ADDR" envDefault:":8080"` // Reverse proxy listen address
+	NodeRegistryURL  string `env:"NODE_REGISTRY_URL"`                  // Registry URL for pulling images (e.g., "ghcr.io/yourorg")
+	NodeRegistryUser string `env:"NODE_REGISTRY_USER"`                 // Registry username for authentication
+	NodeRegistryPass string `env:"NODE_REGISTRY_PASS"`                 // Registry password or token
 }
 
 type Service struct {
 	cfg      Config
 	db       *database.DB
 	runtime  container.Runtime
+	proxy    *proxy.Proxy
 	logger   *slog.Logger
 	nodeID   pgtype.UUID
 	regionID pgtype.UUID
@@ -53,13 +60,31 @@ func NewService(cfg Config, logger *slog.Logger) (*Service, error) {
 	var rt container.Runtime
 	switch cfg.NodeRuntimeMode {
 	case "docker":
-		rt, err = docker.NewDockerRuntime(logger)
+		dockerCfg := docker.Config{
+			RegistryURL:  cfg.NodeRegistryURL,
+			RegistryUser: cfg.NodeRegistryUser,
+			RegistryPass: cfg.NodeRegistryPass,
+		}
+		rt, err = docker.NewDockerRuntime(dockerCfg, logger)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create docker runtime: %w", err)
 		}
-	case "kata":
-		// TODO: implement kata runtime
-		return nil, fmt.Errorf("kata runtime not yet implemented")
+	case "firecracker":
+		fcCfg := firecracker.Config{
+			FirecrackerBinary: "/opt/firecracker/firecracker",
+			KernelImagePath:   "/opt/firecracker/vmlinux",
+			KernelArgs:        "console=ttyS0 reboot=k panic=1 pci=off",
+			ConfigDir:         "/var/lib/firecracker-runtime/configs",
+			RootfsDir:         "/var/lib/firecracker-runtime/rootfs",
+			SocketDir:         "/var/lib/firecracker-runtime/sockets",
+			RegistryURL:       cfg.NodeRegistryURL,
+			RegistryUser:      cfg.NodeRegistryUser,
+			RegistryPass:      cfg.NodeRegistryPass,
+		}
+		rt, err = firecracker.NewFirecrackerRuntime(fcCfg, logger)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create firecracker runtime: %w", err)
+		}
 	default:
 		return nil, fmt.Errorf("unknown runtime mode: %s", cfg.NodeRuntimeMode)
 	}
@@ -70,10 +95,18 @@ func NewService(cfg Config, logger *slog.Logger) (*Service, error) {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
 
+	// Initialize proxy
+	proxyCfg := proxy.Config{
+		ListenAddr:     cfg.NodeProxyAddr,
+		UpdateInterval: 10 * time.Second,
+	}
+	prx := proxy.NewProxy(proxyCfg, db, logger.With("component", "proxy"))
+
 	svc := &Service{
 		cfg:      cfg,
 		db:       db,
 		runtime:  rt,
+		proxy:    prx,
 		logger:   logger,
 		nodeID:   nodeUUID,
 		regionID: regionUUID,
@@ -96,9 +129,6 @@ func (s *Service) registerNode(ctx context.Context) error {
 
 	// Get IP address from config or default to empty
 	ipAddress := s.cfg.NodeIPAddress
-	if ipAddress == "" {
-		ipAddress = "0.0.0.0" // Placeholder, should be set via config
-	}
 
 	// Get system resources
 	numCPU := runtime.NumCPU()
@@ -150,6 +180,11 @@ func (s *Service) Start() {
 		"runtime", s.cfg.NodeRuntimeMode,
 	)
 
+	// Start the reverse proxy
+	if err := s.proxy.Start(context.Background()); err != nil {
+		s.logger.Error("failed to start proxy", "error", err)
+	}
+
 	for {
 		s.logger.Info("starting reconciliation loop")
 
@@ -169,6 +204,15 @@ func (s *Service) Start() {
 
 func (s *Service) Close() {
 	s.logger.Info("shutting down nodeagent")
+
+	// Stop proxy
+	if s.proxy != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if err := s.proxy.Stop(ctx); err != nil {
+			s.logger.Error("failed to stop proxy", "error", err)
+		}
+	}
 
 	if s.runtime != nil {
 		if err := s.runtime.Close(); err != nil {
@@ -317,6 +361,7 @@ func (s *Service) reconcile(ctx context.Context) error {
 	// Start containers that should be running
 	for _, inst := range toStart {
 		instanceID := uuid.ToString(inst.ID)
+
 		s.logger.Info("starting instance",
 			"instance_id", instanceID,
 			"image", inst.ImageName,

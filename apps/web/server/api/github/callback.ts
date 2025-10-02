@@ -11,81 +11,160 @@ const querySchema = z.object({
 })
 
 export default defineEventHandler(async (event) => {
-  const session = await requireUserSession(event)
-  const { secure } = session
+  try {
+    const session = await requireUserSession(event)
+    const { secure } = session
 
-  if (!secure) throw createError({ statusCode: 401, message: "Unauthorized" })
+    if (!secure) {
+      throw createError({ statusCode: 401, message: "Unauthorized" })
+    }
 
-  const { installation_id: installationId, setup_action: setupAction } = await getValidatedQuery(
-    event,
-    querySchema.parse,
-  )
+    // Validate query parameters
+    let query
+    try {
+      query = await getValidatedQuery(event, querySchema.parse)
+    } catch (error: any) {
+      throw createError({
+        statusCode: 400,
+        message: "Invalid GitHub callback parameters",
+      })
+    }
 
-  const [user] = await useDrizzle().select().from(users).where(eq(users.id, secure.userId)).limit(1)
-  if (!user.githubAccountId) {
-    throw createError({ statusCode: 401, message: "Unauthorized" })
-  }
+    const { installation_id: installationId, setup_action: setupAction } = query
 
-  const [organisation] = await useDrizzle()
-    .select()
-    .from(organisations)
-    .where(eq(organisations.id, secure.organisationId))
-    .limit(1)
-  if (!organisation) {
-    throw createError({ statusCode: 401, message: "Unauthorized" })
-  }
+    // Get user
+    let user
+    try {
+      const [foundUser] = await useDrizzle().select().from(users).where(eq(users.id, secure.userId)).limit(1)
+      user = foundUser
+    } catch (error) {
+      console.error("[GitHub API - callback] Database error fetching user:", error)
+      throw createError({
+        statusCode: 500,
+        message: "Failed to fetch user data",
+      })
+    }
 
-  const { data: verfiedInstallation, error: verfiedInstallationError } = await verifyInstallationForUser({
-    event,
-    installationId,
-  })
-  if (verfiedInstallationError) {
-    throw createError({ statusCode: 401, message: "Unauthorized" })
-  }
+    if (!user) {
+      throw createError({
+        statusCode: 404,
+        message: "User not found",
+      })
+    }
 
-  switch (setupAction) {
-    case "install":
-      // Create the installation record
-      await useDrizzle()
-        .insert(githubInstallations)
-        .values({
-          userId: secure.userId,
-          githubAccountId: user.githubAccountId,
-          githubInstallationId: installationId,
-          organisationId: secure.organisationId,
-        })
-        .onConflictDoUpdate({
-          target: [githubInstallations.githubInstallationId],
-          set: {
-            organisationId: secure.organisationId,
-          },
-        })
+    if (!user.githubAccountId) {
+      throw createError({
+        statusCode: 400,
+        message: "User is not linked to a GitHub account",
+      })
+    }
 
-      return sendRedirect(event, `/${organisation.slug}?installed=true`)
-    case "update":
-      // Upsert the installation record
-      await useDrizzle()
-        .insert(githubInstallations)
-        .values({
-          organisationId: secure.organisationId,
-          githubInstallationId: installationId,
-          githubAccountId: user.githubAccountId,
-          userId: secure.userId,
-        })
-        .onConflictDoUpdate({
-          target: [githubInstallations.githubInstallationId],
-          set: {
-            organisationId: secure.organisationId,
-          },
-        })
+    // Get organisation
+    let organisation
+    try {
+      const [foundOrg] = await useDrizzle()
+        .select()
+        .from(organisations)
+        .where(eq(organisations.id, secure.organisationId))
+        .limit(1)
+      organisation = foundOrg
+    } catch (error) {
+      console.error("[GitHub API - callback] Database error fetching organisation:", error)
+      throw createError({
+        statusCode: 500,
+        message: "Failed to fetch organisation data",
+      })
+    }
 
-      return sendRedirect(event, `/${organisation.slug}?installed=true`)
+    if (!organisation) {
+      throw createError({
+        statusCode: 404,
+        message: "Organisation not found",
+      })
+    }
+
+    // Verify installation
+    const { data: verifiedInstallation, error: verifiedInstallationError } = await verifyInstallationForUser({
+      event,
+      installationId,
+    })
+
+    if (verifiedInstallationError) {
+      console.error(
+        `[GitHub API - callback] Installation verification failed for installation ${installationId}:`,
+        verifiedInstallationError,
+      )
+      throw createError({
+        statusCode: 403,
+        message: "Unable to verify GitHub installation. Please ensure the app is properly installed.",
+      })
+    }
+
+    if (!verifiedInstallation) {
+      throw createError({
+        statusCode: 404,
+        message: "GitHub installation not found",
+      })
+    }
+
+    // Process setup action
+    try {
+      switch (setupAction) {
+        case "install":
+          await useDrizzle()
+            .insert(githubInstallations)
+            .values({
+              userId: secure.userId,
+              githubAccountId: user.githubAccountId,
+              githubInstallationId: installationId,
+              organisationId: secure.organisationId,
+            })
+            .onConflictDoUpdate({
+              target: [githubInstallations.githubInstallationId],
+              set: {
+                organisationId: secure.organisationId,
+              },
+            })
+
+          return sendRedirect(event, `/${organisation.slug}?installed=true`)
+
+        case "update":
+          await useDrizzle()
+            .insert(githubInstallations)
+            .values({
+              organisationId: secure.organisationId,
+              githubInstallationId: installationId,
+              githubAccountId: user.githubAccountId,
+              userId: secure.userId,
+            })
+            .onConflictDoUpdate({
+              target: [githubInstallations.githubInstallationId],
+              set: {
+                organisationId: secure.organisationId,
+              },
+            })
+
+          return sendRedirect(event, `/${organisation.slug}?installed=true`)
+      }
+    } catch (error) {
+      console.error(`[GitHub API - callback] Database error during ${setupAction}:`, error)
+      throw createError({
+        statusCode: 500,
+        message: "Failed to save GitHub installation",
+      })
+    }
+  } catch (error: any) {
+    // If it's already an H3Error, rethrow it
+    if (error.statusCode) {
+      throw error
+    }
+
+    throw createError({
+      statusCode: 500,
+      message: "An unexpected error occurred during GitHub installation",
+    })
   }
 })
-
-async function useOctokit({ accessToken, installationId }: { accessToken: string; installationId: number }) {
-  return new Octokit({ auth: accessToken })
-}
 
 async function verifyInstallationForUser({
   event,
@@ -97,20 +176,42 @@ async function verifyInstallationForUser({
   try {
     const userSession = await getUserSession(event)
 
-    const octokit = new Octokit({ auth: userSession!.secure!.tokens.access_token })
+    if (!userSession?.secure?.tokens?.access_token) {
+      return { data: null, error: new Error("Missing authentication token") }
+    }
 
-    const { data: userInstallationResult } = await octokit.rest.apps.listInstallationsForAuthenticatedUser()
+    const octokit = new Octokit({ auth: userSession.secure.tokens.access_token })
+
+    let userInstallationResult
+    try {
+      const response = await octokit.rest.apps.listInstallationsForAuthenticatedUser()
+      userInstallationResult = response.data
+    } catch (error: any) {
+      console.error("[GitHub API - verifyInstallation] Failed to list installations:", error)
+      return {
+        data: null,
+        error: new Error(`Failed to fetch installations: ${error.message || "Unknown error"}`),
+      }
+    }
 
     const installations = userInstallationResult.installations
 
-    if (!installations) {
-      return { data: null, error: new Error("Unauthorized") }
+    if (!installations || installations.length === 0) {
+      return { data: null, error: new Error("No GitHub installations found") }
     }
 
     const installation = installations.find((installation) => installation.id === installationId)
 
+    if (!installation) {
+      return { data: null, error: new Error("Installation not found for this user") }
+    }
+
     return { data: installation, error: null }
-  } catch (error) {
-    return { data: null, error: new Error("Unauthorized") }
+  } catch (error: any) {
+    console.error("[GitHub API - verifyInstallation] Unexpected error:", error)
+    return {
+      data: null,
+      error: new Error(`Verification failed: ${error.message || "Unknown error"}`),
+    }
   }
 }

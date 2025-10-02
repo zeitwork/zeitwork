@@ -18,7 +18,7 @@ const { data: deployments, refresh: refreshDeployments } = await useFetch(`/api/
 
 const { isPending, start, stop } = useTimeoutFn(() => {
   refreshDeployments()
-}, 500)
+}, 1000)
 
 start()
 
@@ -30,14 +30,23 @@ watch(isPending, (newVal) => {
   }
 })
 
+const isCreatingDeployment = ref(false)
+
 async function createDeployment() {
-  await $fetch(`/api/deployments`, {
-    method: "POST",
-    body: {
-      projectSlug,
-    },
-  })
-  await refreshDeployments()
+  isCreatingDeployment.value = true
+  try {
+    await $fetch(`/api/deployments`, {
+      method: "POST",
+      body: {
+        projectSlug,
+      },
+    })
+    await refreshDeployments()
+  } catch (error) {
+    console.error("Failed to create deployment:", error)
+  } finally {
+    isCreatingDeployment.value = false
+  }
 }
 
 function renderDate(date: string) {
@@ -97,7 +106,7 @@ function deploymentStatusBgColor(status: string) {
   <div class="flex h-full flex-col overflow-auto">
     <div class="border-neutral-subtle flex h-16 items-center justify-between border-b p-4">
       <div class="text-neutral-strong text-sm">Deployments</div>
-      <d-button @click="createDeployment">Create Deployment</d-button>
+      <d-button @click="createDeployment" :loading="isCreatingDeployment">Create Deployment</d-button>
     </div>
     <div class="flex-1 overflow-auto">
       <div

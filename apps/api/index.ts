@@ -10,7 +10,7 @@ import {
   regions,
 } from "../../packages/database/schema";
 import { useDrizzle } from "./drizzle";
-import { eq, gt, and, isNull } from "drizzle-orm";
+import { eq, and, isNull, or } from "drizzle-orm";
 import { addMinutes, isAfter, isBefore } from "date-fns";
 import * as dns from "node:dns";
 
@@ -25,15 +25,60 @@ async function reconcile() {
     throw new Error("No nodes found");
   }
 
-  // pending deployments
-  const pendingDeployments = await useDrizzle()
+  // pending deployments - only process one per organization to avoid overload
+  const allPendingDeployments = await useDrizzle()
     .select()
     .from(deployments)
     .where(eq(deployments.status, "pending"));
 
+  if (allPendingDeployments.length > 0) {
+    console.log(
+      `[RECONCILE] Found ${allPendingDeployments.length} pending deployment(s)`
+    );
+  }
+
+  // Get all active deployments (building or deploying) to check which orgs are busy
+  const activeDeploymentsForOrgs = await useDrizzle()
+    .select()
+    .from(deployments)
+    .where(
+      or(
+        eq(deployments.status, "building"),
+        eq(deployments.status, "deploying")
+      )
+    );
+
+  // Create a set of organization IDs that already have active deployments
+  const busyOrgIds = new Set(
+    activeDeploymentsForOrgs.map((d) => d.organisationId)
+  );
+
+  if (busyOrgIds.size > 0) {
+    console.log(
+      `[RECONCILE] ${busyOrgIds.size} organization(s) already have active deployments`
+    );
+  }
+
+  // Group by organisation_id and take only the first deployment from each organization
+  // that doesn't already have an active deployment
+  const orgDeploymentMap = new Map<string, (typeof allPendingDeployments)[0]>();
+  for (const deployment of allPendingDeployments) {
+    // Skip if this organization already has an active deployment
+    if (busyOrgIds.has(deployment.organisationId)) {
+      continue;
+    }
+
+    // Take only the first pending deployment per organization
+    if (!orgDeploymentMap.has(deployment.organisationId)) {
+      orgDeploymentMap.set(deployment.organisationId, deployment);
+    }
+  }
+
+  const pendingDeployments = Array.from(orgDeploymentMap.values());
+
   if (pendingDeployments.length > 0) {
     console.log(
-      `[RECONCILE] Found ${pendingDeployments.length} pending deployment(s)`
+      `[RECONCILE] Processing ${pendingDeployments.length} deployment(s) (1 per organization, skipping busy orgs)`
     );
   }
 
@@ -157,11 +202,21 @@ async function reconcile() {
 
         if (imageBuild.status === "completed") {
           const region = regionList[0];
-          const node = nodeList[0];
+          if (!region) {
+            console.error(`[DEPLOYMENT:${deployment.id}] No regions available`);
+            throw new Error("No region found");
+          }
 
-          if (!region || !node) {
+          const node = nodeList.find((n) => n.regionId === region.id);
+
+          if (!node) {
             console.error(
-              `[DEPLOYMENT:${deployment.id}] No region or node available`
+              `[DEPLOYMENT:${deployment.id}] No region or node available`,
+              {
+                regionId: region?.id,
+                nodesInRegion: nodeList.filter((n) => n.regionId === region?.id)
+                  .length,
+              }
             );
             throw new Error("Region or node not found");
           }
@@ -203,7 +258,7 @@ async function reconcile() {
           });
 
           // Allocate an IP address for the instance
-          const allocatedIP = await allocateIPAddress();
+          const allocatedIP = await allocateIPAddress(region.id);
 
           console.log(
             `[DEPLOYMENT:${deployment.id}] Allocated IP for instance`,
@@ -358,11 +413,21 @@ async function reconcile() {
           }
 
           const region = regionList[0];
-          const node = nodeList[0];
+          if (!region) {
+            console.error(`[DEPLOYMENT:${deployment.id}] No regions available`);
+            throw new Error("No region found");
+          }
 
-          if (!region || !node) {
+          const node = nodeList.find((n) => n.regionId === region.id);
+
+          if (!node) {
             console.error(
-              `[DEPLOYMENT:${deployment.id}] No region or node available`
+              `[DEPLOYMENT:${deployment.id}] No region or node available`,
+              {
+                regionId: region?.id,
+                nodesInRegion: nodeList.filter((n) => n.regionId === region?.id)
+                  .length,
+              }
             );
             throw new Error("Region or node not found");
           }
@@ -374,7 +439,7 @@ async function reconcile() {
           });
 
           // Allocate an IP address for the instance
-          const allocatedIP = await allocateIPAddress();
+          const allocatedIP = await allocateIPAddress(region.id);
 
           console.log(
             `[DEPLOYMENT:${deployment.id}] Allocated IP for instance`,
@@ -461,6 +526,63 @@ async function reconcile() {
         console.log(
           `[DEPLOYMENT:${deployment.id}] State changed: deploying → active (instance running)`
         );
+        continue;
+      }
+
+      // Check if any instance has failed status
+      let hasFailedInstance = false;
+      for (const di of deploymentInstancesList) {
+        const instance = await useDrizzle().query.instances.findFirst({
+          where: eq(instances.id, di.instanceId),
+        });
+
+        if (instance && instance.state === "failed") {
+          hasFailedInstance = true;
+          break;
+        }
+      }
+
+      if (hasFailedInstance) {
+        console.log(
+          `[DEPLOYMENT:${deployment.id}] Instance failed, marking deployment as failed`
+        );
+
+        await useDrizzle().transaction(async (tx) => {
+          await tx
+            .update(deployments)
+            .set({
+              status: "failed",
+              updatedAt: new Date(),
+            })
+            .where(eq(deployments.id, deployment.id));
+
+          // mark all instances associated with this deployment as stopping
+          const deploymentInstancesList = await tx
+            .select()
+            .from(deploymentInstances)
+            .where(eq(deploymentInstances.deploymentId, deployment.id));
+
+          for (const di of deploymentInstancesList) {
+            await tx
+              .update(instances)
+              .set({
+                state: "stopping",
+                updatedAt: new Date(),
+              })
+              .where(eq(instances.id, di.instanceId));
+          }
+
+          if (deploymentInstancesList.length > 0) {
+            console.log(
+              `[DEPLOYMENT:${deployment.id}] Marked ${deploymentInstancesList.length} instance(s) as stopping`
+            );
+          }
+
+          console.log(
+            `[DEPLOYMENT:${deployment.id}] State changed: deploying → failed (instance failed)`
+          );
+        });
+
         continue;
       }
 
@@ -959,6 +1081,53 @@ async function reconcile() {
   }
 }
 
+/*** HELPER FUNCTIONS ***/
+
+/**
+ * Allocates a single /32 IP address for a Firecracker VM
+ * Uses 10.77.0.0/16 range organized into /29 subnets for networking
+ *
+ * Architecture:
+ * - Each VM index maps to a /29 subnet with tap device
+ * - Tap device uses .1 address, VM gets single .2 address (/32)
+ * - Example: VM index 0 gets 10.77.0.2/32, tap at 10.77.0.1/29
+ * - Example: VM index 1 gets 10.77.0.10/32, tap at 10.77.0.9/29
+ *
+ * This allows up to 8192 VMs (indices 0-8191)
+ */
+async function allocateIPAddress(regionId: string): Promise<string> {
+  // Get all existing IP addresses from instances (all regions share same internal IP space)
+  const existingInstances = await useDrizzle()
+    .select({ ipAddress: instances.ipAddress })
+    .from(instances);
+
+  const usedIPs = new Set<string>();
+
+  // Add all used IPs to the set
+  existingInstances.forEach((inst) => usedIPs.add(inst.ipAddress));
+
+  // Allocate single /32 IP addresses from 10.77.0.0/16 range
+  // VMs are organized into /29 subnets for tap device networking
+  // Each /29 has: .0 (network), .1 (tap), .2 (VM /32), .3-.6 (unused), .7 (broadcast)
+  for (let vmIndex = 0; vmIndex < 8192; vmIndex++) {
+    const offset = vmIndex * 8; // Each VM gets 8 IPs worth of space
+    const octet3 = Math.floor(offset / 256);
+    const octet4 = (offset % 256) + 2; // .2 is the VM's single /32 address
+    const candidateIP = `10.77.${octet3}.${octet4}`;
+
+    if (!usedIPs.has(candidateIP)) {
+      console.log(
+        `[IP_ALLOCATE] Allocated /32 IP: ${candidateIP} (VM index ${vmIndex})`
+      );
+      return candidateIP;
+    }
+  }
+
+  throw new Error(
+    `No available IP addresses in 10.77.0.0/16 range (all 8192 VM slots used)`
+  );
+}
+
 console.log("[API] Starting reconciliation loop");
 
 while (true) {
@@ -972,47 +1141,4 @@ while (true) {
     console.error("[RECONCILE] Reconciliation cycle failed:", error);
   }
   await new Promise((resolve) => setTimeout(resolve, 1000));
-}
-
-/*** HELPER FUNCTIONS ***/
-
-/**
- * Allocates an unused IP address from the 10.0.0.0/8 subnet
- * Queries all existing instance IPs and returns the next available one
- */
-async function allocateIPAddress(): Promise<string> {
-  // Get all existing IP addresses from instances and nodes
-  const existingInstances = await useDrizzle()
-    .select({ ipAddress: instances.ipAddress })
-    .from(instances);
-  const existingNodes = await useDrizzle()
-    .select({ ipAddress: nodes.ipAddress })
-    .from(nodes);
-
-  const usedIPs = new Set<string>();
-
-  // Add all used IPs to the set
-  existingInstances.forEach((inst) => usedIPs.add(inst.ipAddress));
-  existingNodes.forEach((node) => usedIPs.add(node.ipAddress));
-
-  // Reserve special IPs
-  usedIPs.add("10.0.0.0"); // Network address
-  usedIPs.add("10.0.0.1"); // Gateway
-  usedIPs.add("127.0.0.1"); // Localhost
-
-  // Start from 10.0.0.2 and find the first available IP
-  // We'll search in the 10.0.0.0/16 range for now (plenty of IPs)
-  for (let octet2 = 0; octet2 <= 255; octet2++) {
-    for (let octet3 = 0; octet3 <= 255; octet3++) {
-      for (let octet4 = 2; octet4 <= 254; octet4++) {
-        const candidateIP = `10.${octet2}.${octet3}.${octet4}`;
-        if (!usedIPs.has(candidateIP)) {
-          console.log(`[IP_ALLOCATE] Allocated IP: ${candidateIP}`);
-          return candidateIP;
-        }
-      }
-    }
-  }
-
-  throw new Error("No available IP addresses in 10.0.0.0/8 subnet");
 }

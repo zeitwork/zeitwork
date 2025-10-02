@@ -1,0 +1,48 @@
+#!/bin/sh
+# Mount essential filesystems
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev || true
+
+# Setup network
+ip addr add {{.IPAddress}}/16 dev eth0
+ip link set eth0 up
+ip route add default via 172.16.0.1
+
+# Setup DNS
+echo "nameserver 8.8.8.8" > /etc/resolv.conf
+
+# Set up PATH to include common Docker locations
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
+# Set HOME if not set
+export HOME="${HOME:-/root}"
+
+# Change to working directory
+{{if .WorkingDir}}cd "{{.WorkingDir}}"{{else}}cd /{{end}}
+
+# Export environment variables
+{{range $key, $value := .EnvVars}}export {{$key}}="{{$value}}"
+{{end}}
+
+# Start the application using the image's entrypoint and cmd
+{{if .Entrypoint}}
+# Find and execute entrypoint with cmd as arguments
+# Try to locate entrypoint if it's not an absolute path
+ENTRYPOINT="{{index .Entrypoint 0}}"
+if [ ! -f "$ENTRYPOINT" ] && [ "${ENTRYPOINT#/}" = "$ENTRYPOINT" ]; then
+    # Not an absolute path, try to find it
+    FOUND=$(command -v "$ENTRYPOINT" 2>/dev/null || find /usr/local -name "$ENTRYPOINT" 2>/dev/null | head -1)
+    if [ -n "$FOUND" ]; then
+        ENTRYPOINT="$FOUND"
+    fi
+fi
+exec "$ENTRYPOINT" {{range $i, $v := .Entrypoint}}{{if ne $i 0}}"{{$v}}" {{end}}{{end}}{{range .Cmd}}"{{.}}" {{end}}
+{{else if .Cmd}}
+# Execute cmd directly (no entrypoint)
+exec {{range .Cmd}}"{{.}}" {{end}}
+{{else}}
+# Fallback to shell if no entrypoint or cmd
+exec /bin/sh
+{{end}}
+

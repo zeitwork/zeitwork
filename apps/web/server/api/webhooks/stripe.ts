@@ -1,4 +1,4 @@
-import { organisations } from "@zeitwork/database/schema"
+import { organisations, organisationMembers } from "@zeitwork/database/schema"
 import { eq } from "drizzle-orm"
 import type Stripe from "stripe"
 
@@ -83,6 +83,8 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
     return
   }
 
+  const isNewSubscription = !organisation.stripeSubscriptionId
+
   // Update organization with subscription details
   await useDrizzle()
     .update(organisations)
@@ -93,6 +95,48 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
     .where(eq(organisations.id, organisation.id))
 
   console.log(`Updated subscription for org ${organisation.id}: ${subscription.status}`)
+
+  // Track subscription events
+  const posthog = usePostHog()
+
+  // Find the user associated with this organization to track against their user ID
+  const [orgMember] = await useDrizzle()
+    .select()
+    .from(organisationMembers)
+    .where(eq(organisationMembers.organisationId, organisation.id))
+    .limit(1)
+
+  if (orgMember) {
+    if (isNewSubscription && subscription.status === "active") {
+      // Track successful subscription
+      posthog.capture({
+        distinctId: orgMember.userId.toString(),
+        event: "subscription_created",
+        properties: {
+          organisation_id: organisation.id,
+          organisation_slug: organisation.slug,
+          subscription_id: subscription.id,
+          subscription_status: subscription.status,
+          plan_id: subscription.items.data[0]?.price.id,
+          plan_amount: subscription.items.data[0]?.price.unit_amount,
+          plan_currency: subscription.items.data[0]?.price.currency,
+          plan_interval: subscription.items.data[0]?.price.recurring?.interval,
+        },
+      })
+    } else {
+      // Track subscription update
+      posthog.capture({
+        distinctId: orgMember.userId.toString(),
+        event: "subscription_updated",
+        properties: {
+          organisation_id: organisation.id,
+          organisation_slug: organisation.slug,
+          subscription_id: subscription.id,
+          subscription_status: subscription.status,
+        },
+      })
+    }
+  }
 }
 
 async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
@@ -119,6 +163,28 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
     .where(eq(organisations.id, organisation.id))
 
   console.log(`Subscription deleted for org ${organisation.id}`)
+
+  // Track subscription cancellation
+  const posthog = usePostHog()
+
+  // Find the user associated with this organization to track against their user ID
+  const [orgMember] = await useDrizzle()
+    .select()
+    .from(organisationMembers)
+    .where(eq(organisationMembers.organisationId, organisation.id))
+    .limit(1)
+
+  if (orgMember) {
+    posthog.capture({
+      distinctId: orgMember.userId.toString(),
+      event: "subscription_canceled",
+      properties: {
+        organisation_id: organisation.id,
+        organisation_slug: organisation.slug,
+        subscription_id: subscription.id,
+      },
+    })
+  }
 }
 
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {

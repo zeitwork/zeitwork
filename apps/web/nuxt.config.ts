@@ -11,29 +11,9 @@ export default defineNuxtConfig({
   },
 
   compatibilityDate: "latest",
+  ssr: false,
   future: { compatibilityVersion: 4 },
-  fonts: {
-    experimental: { disableLocalFallbacks: true },
-  },
-
-  // routeRules: {
-  //   "/": {
-  //     ssr: true,
-  //   },
-  //   "/auth/github/callback": {
-  //     ssr: false,
-  //   },
-  // },
-  // ssr: false,
-
-  routeRules: {
-    "/": {
-      ssr: true,
-    },
-    "/**": {
-      ssr: false,
-    },
-  },
+  fonts: { experimental: { disableLocalFallbacks: true } },
 
   vite: { plugins: [tailwindcss()] },
 
@@ -51,6 +31,12 @@ export default defineNuxtConfig({
       stripe: {
         planHobbyId: process.env.NUXT_PUBLIC_STRIPE_PLAN_HOBBY_ID || "",
         planBusinessId: process.env.NUXT_PUBLIC_STRIPE_PLAN_BUSINESS_ID || "",
+      },
+
+      posthog: {
+        publicKey: process.env.NUXT_PUBLIC_POSTHOG_PUBLIC_KEY || "",
+        host: process.env.NUXT_PUBLIC_POSTHOG_HOST || "https://us.i.posthog.com",
+        defaults: process.env.NUXT_PUBLIC_POSTHOG_DEFAULTS || "2025-05-24",
       },
     },
 

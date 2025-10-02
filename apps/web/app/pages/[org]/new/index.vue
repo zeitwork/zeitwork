@@ -39,9 +39,17 @@ const filteredProjects = computed(() => {
   return projects.value.filter((project) => project.label.toLowerCase().includes(search.value.toLowerCase()))
 })
 
+const config = useRuntimeConfig()
+
+// GitHub App installation URL
+const githubAppInstallUrl = computed(() => {
+  const appName = "zeitwork"
+  const redirectUri = `${config.appUrl}/auth/github`
+  return `https://github.com/apps/${appName}/installations/new?redirect_uri=${redirectUri}`
+})
+
 function addGitHubAccount() {
-  console.log("addGitHubAccount")
-  window.location.href = `https://github.com/apps/zeitwork/installations/new?redirect_uri=http://localhost:3000/auth/github`
+  window.location.href = githubAppInstallUrl.value
 }
 </script>
 

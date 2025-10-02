@@ -6,9 +6,21 @@ definePageMeta({
 const config = useRuntimeConfig()
 const loading = ref(false)
 const checkoutLoading = ref<string | null>(null)
+const { $posthog } = useNuxtApp()
+
+// Track onboarding page view
+onMounted(() => {
+  $posthog().capture("onboarding_viewed")
+})
 
 async function subscribe(plan: "hobby" | "business") {
   checkoutLoading.value = plan
+
+  // Track plan selection
+  $posthog().capture("plan_selected", {
+    plan: plan,
+    price: plan === "hobby" ? "$5/month" : "$25/month",
+  })
 
   try {
     const priceId = plan === "hobby" ? config.public.stripe.planHobbyId : config.public.stripe.planBusinessId
@@ -26,11 +38,21 @@ async function subscribe(plan: "hobby" | "business") {
     })
 
     if (response?.url) {
+      // Track checkout initiated
+      $posthog().capture("checkout_initiated", {
+        plan: plan,
+        price_id: priceId,
+      })
+
       // Redirect to Stripe checkout
       window.location.href = response.url
     }
   } catch (err) {
     console.error("Failed to create checkout session:", err)
+    $posthog().capture("checkout_failed", {
+      plan: plan,
+      error: err instanceof Error ? err.message : "Unknown error",
+    })
   } finally {
     checkoutLoading.value = null
   }

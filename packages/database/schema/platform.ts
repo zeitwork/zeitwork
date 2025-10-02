@@ -25,6 +25,7 @@ export const nodes = pgTable("nodes", {
     .references(() => regions.id),
   hostname: text().notNull(),
   ipAddress: text().notNull().unique(),
+  // internalIpAddress: text().notNull().unique(),
   state: text().notNull(), // booting, ready, draining, down, terminated, error, unknown
   resources: jsonb().notNull(), // { vcpu: 1, memory: 1024 }
   ...timestamps,
