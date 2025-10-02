@@ -202,6 +202,16 @@ func (s *Service) reconcile(ctx context.Context) error {
 		"container_count", len(runningContainers),
 	)
 
+	// Log running containers with their IPs
+	for _, c := range runningContainers {
+		s.logger.Debug("running container",
+			"instance_id", c.InstanceID,
+			"container_id", c.ID,
+			"ip_address", c.IPAddress,
+			"state", c.State,
+		)
+	}
+
 	// 3. Build maps for comparison
 	desiredMap := make(map[string]*database.GetInstancesByNodeIDRow)
 	stoppingInstances := make([]*database.GetInstancesByNodeIDRow, 0)
@@ -310,6 +320,10 @@ func (s *Service) reconcile(ctx context.Context) error {
 		s.logger.Info("starting instance",
 			"instance_id", instanceID,
 			"image", inst.ImageName,
+			"ip_address", inst.IpAddress,
+			"vcpus", inst.Vcpus,
+			"memory_mb", inst.Memory,
+			"port", inst.DefaultPort,
 		)
 
 		// Update state to starting

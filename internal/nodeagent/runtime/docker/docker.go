@@ -7,12 +7,16 @@ import (
 
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/api/types/filters"
+	"github.com/docker/docker/api/types/network"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 	"github.com/zeitwork/zeitwork/internal/nodeagent/runtime"
 )
 
-const labelInstanceID = "zeitwork.instance.id"
+const (
+	labelInstanceID = "zeitwork.instance.id"
+	networkName     = "zeitwork-network"
+)
 
 // DockerRuntime implements the Runtime interface using Docker
 type DockerRuntime struct {
@@ -39,6 +43,7 @@ func (d *DockerRuntime) Start(ctx context.Context, instanceID, imageName, ipAddr
 		"instance_id", instanceID,
 		"image", imageName,
 		"ip", ipAddress,
+		"network", networkName,
 	)
 
 	// Pull image
@@ -73,11 +78,29 @@ func (d *DockerRuntime) Start(ctx context.Context, instanceID, imageName, ipAddr
 		},
 	}
 
+	// Configure network settings with static IP
+	networkConfig := &network.NetworkingConfig{
+		EndpointsConfig: map[string]*network.EndpointSettings{
+			networkName: {
+				IPAMConfig: &network.EndpointIPAMConfig{
+					IPv4Address: ipAddress,
+				},
+			},
+		},
+	}
+
 	// Create container
-	resp, err := d.client.ContainerCreate(ctx, config, hostConfig, nil, nil, fmt.Sprintf("zeitwork-%s", instanceID))
+	resp, err := d.client.ContainerCreate(ctx, config, hostConfig, networkConfig, nil, fmt.Sprintf("zeitwork-%s", instanceID))
 	if err != nil {
 		return fmt.Errorf("failed to create container: %w", err)
 	}
+
+	d.logger.Info("container created with network config",
+		"instance_id", instanceID,
+		"container_id", resp.ID,
+		"ip_address", ipAddress,
+		"network", networkName,
+	)
 
 	// Start container
 	if err := d.client.ContainerStart(ctx, resp.ID, container.StartOptions{}); err != nil {
@@ -142,11 +165,19 @@ func (d *DockerRuntime) List(ctx context.Context) ([]runtime.Container, error) {
 	result := make([]runtime.Container, 0, len(containers))
 	for _, c := range containers {
 		instanceID := c.Labels[labelInstanceID]
+
+		// Extract IP address from network settings
+		ipAddress := ""
+		if networkSettings, ok := c.NetworkSettings.Networks[networkName]; ok {
+			ipAddress = networkSettings.IPAddress
+		}
+
 		result = append(result, runtime.Container{
 			ID:         c.ID,
 			InstanceID: instanceID,
 			ImageName:  c.Image,
 			State:      c.State,
+			IPAddress:  ipAddress,
 		})
 	}
 
@@ -170,11 +201,19 @@ func (d *DockerRuntime) GetStatus(ctx context.Context, instanceID string) (*runt
 	}
 
 	c := containers[0]
+
+	// Extract IP address from network settings
+	ipAddress := ""
+	if networkSettings, ok := c.NetworkSettings.Networks[networkName]; ok {
+		ipAddress = networkSettings.IPAddress
+	}
+
 	return &runtime.Container{
 		ID:         c.ID,
 		InstanceID: c.Labels[labelInstanceID],
 		ImageName:  c.Image,
 		State:      c.State,
+		IPAddress:  ipAddress,
 	}, nil
 }
 

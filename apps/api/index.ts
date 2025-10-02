@@ -202,6 +202,16 @@ async function reconcile() {
             imageId: deployment.imageId,
           });
 
+          // Allocate an IP address for the instance
+          const allocatedIP = await allocateIPAddress();
+
+          console.log(
+            `[DEPLOYMENT:${deployment.id}] Allocated IP for instance`,
+            {
+              ipAddress: allocatedIP,
+            }
+          );
+
           // create a deployment instance with a instance and mark it as deploying
           const [instance] = await tx
             .insert(instances)
@@ -213,7 +223,7 @@ async function reconcile() {
               vcpus: 2,
               memory: 2048,
               environmentVariables: JSON.stringify({}),
-              ipAddress: "127.0.0.1",
+              ipAddress: allocatedIP,
               imageId: deployment.imageId,
             })
             .returning();
@@ -332,6 +342,100 @@ async function reconcile() {
         .from(deploymentInstances)
         .where(eq(deploymentInstances.deploymentId, deployment.id));
 
+      // If no deployment instances exist, create them (this is a new deploying deployment)
+      if (deploymentInstancesList.length === 0) {
+        console.log(
+          `[DEPLOYMENT:${deployment.id}] Deploying deployment has no instances, creating them`
+        );
+
+        await useDrizzle().transaction(async (tx) => {
+          // Verify deployment has an image
+          if (!deployment.imageId) {
+            console.error(
+              `[DEPLOYMENT:${deployment.id}] Cannot create instances - no image ID`
+            );
+            throw new Error("Deployment has no image");
+          }
+
+          const region = regionList[0];
+          const node = nodeList[0];
+
+          if (!region || !node) {
+            console.error(
+              `[DEPLOYMENT:${deployment.id}] No region or node available`
+            );
+            throw new Error("Region or node not found");
+          }
+
+          console.log(`[DEPLOYMENT:${deployment.id}] Creating instance`, {
+            regionId: region.id,
+            nodeId: node.id,
+            imageId: deployment.imageId,
+          });
+
+          // Allocate an IP address for the instance
+          const allocatedIP = await allocateIPAddress();
+
+          console.log(
+            `[DEPLOYMENT:${deployment.id}] Allocated IP for instance`,
+            {
+              ipAddress: allocatedIP,
+            }
+          );
+
+          // Create instance
+          const [instance] = await tx
+            .insert(instances)
+            .values({
+              state: "pending",
+              regionId: region.id,
+              nodeId: node.id,
+              defaultPort: 3000,
+              vcpus: 2,
+              memory: 2048,
+              environmentVariables: JSON.stringify({}),
+              ipAddress: allocatedIP,
+              imageId: deployment.imageId,
+            })
+            .returning();
+
+          if (!instance) {
+            console.error(
+              `[DEPLOYMENT:${deployment.id}] Failed to create instance record`
+            );
+            throw new Error("Failed to create instance");
+          }
+
+          console.log(`[DEPLOYMENT:${deployment.id}] Instance created`, {
+            instanceId: instance.id,
+          });
+
+          // Create deployment instance link
+          await tx.insert(deploymentInstances).values({
+            deploymentId: deployment.id,
+            instanceId: instance.id,
+            organisationId: deployment.organisationId,
+          });
+
+          console.log(
+            `[DEPLOYMENT:${deployment.id}] Deployment instance link created`
+          );
+
+          // Update deployment timestamp to reset timeout counter
+          await tx
+            .update(deployments)
+            .set({
+              updatedAt: new Date(),
+            })
+            .where(eq(deployments.id, deployment.id));
+        });
+
+        console.log(
+          `[DEPLOYMENT:${deployment.id}] Instances created, waiting for them to start`
+        );
+        continue;
+      }
+
       // Check if any instance is in running state
       let hasRunningInstance = false;
       for (const di of deploymentInstancesList) {
@@ -439,9 +543,88 @@ async function reconcile() {
     );
   }
 
-  // Group active deployments by project/environment
-  const deploymentGroups = new Map<string, typeof activeDeployments>();
+  // Check if active deployments actually have deployment instances and instances
+  // If not, reschedule them
   for (const deployment of activeDeployments) {
+    try {
+      const deploymentInstancesList = await useDrizzle()
+        .select()
+        .from(deploymentInstances)
+        .where(eq(deploymentInstances.deploymentId, deployment.id));
+
+      if (deploymentInstancesList.length === 0) {
+        console.log(
+          `[DEPLOYMENT:${deployment.id}] Active deployment has no deployment instances, rescheduling`,
+          {
+            status: "active → deploying",
+          }
+        );
+
+        await useDrizzle()
+          .update(deployments)
+          .set({
+            status: "deploying",
+            updatedAt: new Date(),
+          })
+          .where(eq(deployments.id, deployment.id));
+
+        console.log(
+          `[DEPLOYMENT:${deployment.id}] State changed: active → deploying (missing deployment instances)`
+        );
+        continue;
+      }
+
+      // Check if the deployment instances have valid instances
+      let hasValidInstance = false;
+      for (const di of deploymentInstancesList) {
+        const instance = await useDrizzle().query.instances.findFirst({
+          where: eq(instances.id, di.instanceId),
+        });
+
+        if (instance) {
+          hasValidInstance = true;
+          break;
+        }
+      }
+
+      if (!hasValidInstance) {
+        console.log(
+          `[DEPLOYMENT:${deployment.id}] Active deployment has no valid instances, rescheduling`,
+          {
+            status: "active → deploying",
+            deploymentInstancesCount: deploymentInstancesList.length,
+          }
+        );
+
+        await useDrizzle()
+          .update(deployments)
+          .set({
+            status: "deploying",
+            updatedAt: new Date(),
+          })
+          .where(eq(deployments.id, deployment.id));
+
+        console.log(
+          `[DEPLOYMENT:${deployment.id}] State changed: active → deploying (missing instances)`
+        );
+      }
+    } catch (error) {
+      console.error(
+        `[DEPLOYMENT:${deployment.id}] Failed to check deployment instances:`,
+        error
+      );
+    }
+  }
+
+  // Refresh active deployments list after potential rescheduling
+  const activeDeploymentsRefreshed = await useDrizzle()
+    .select()
+    .from(deployments)
+    .where(eq(deployments.status, "active"));
+
+  // Group active deployments by project/environment
+  const deploymentGroups = new Map<string, typeof activeDeploymentsRefreshed>();
+  for (const deployment of activeDeploymentsRefreshed) {
     const key = `${deployment.projectId}-${deployment.environmentId}`;
     if (!deploymentGroups.has(key)) {
       deploymentGroups.set(key, []);
@@ -789,4 +972,47 @@ while (true) {
     console.error("[RECONCILE] Reconciliation cycle failed:", error);
   }
   await new Promise((resolve) => setTimeout(resolve, 1000));
+}
+
+/*** HELPER FUNCTIONS ***/
+
+/**
+ * Allocates an unused IP address from the 10.0.0.0/8 subnet
+ * Queries all existing instance IPs and returns the next available one
+ */
+async function allocateIPAddress(): Promise<string> {
+  // Get all existing IP addresses from instances and nodes
+  const existingInstances = await useDrizzle()
+    .select({ ipAddress: instances.ipAddress })
+    .from(instances);
+  const existingNodes = await useDrizzle()
+    .select({ ipAddress: nodes.ipAddress })
+    .from(nodes);
+
+  const usedIPs = new Set<string>();
+
+  // Add all used IPs to the set
+  existingInstances.forEach((inst) => usedIPs.add(inst.ipAddress));
+  existingNodes.forEach((node) => usedIPs.add(node.ipAddress));
+
+  // Reserve special IPs
+  usedIPs.add("10.0.0.0"); // Network address
+  usedIPs.add("10.0.0.1"); // Gateway
+  usedIPs.add("127.0.0.1"); // Localhost
+
+  // Start from 10.0.0.2 and find the first available IP
+  // We'll search in the 10.0.0.0/16 range for now (plenty of IPs)
+  for (let octet2 = 0; octet2 <= 255; octet2++) {
+    for (let octet3 = 0; octet3 <= 255; octet3++) {
+      for (let octet4 = 2; octet4 <= 254; octet4++) {
+        const candidateIP = `10.${octet2}.${octet3}.${octet4}`;
+        if (!usedIPs.has(candidateIP)) {
+          console.log(`[IP_ALLOCATE] Allocated IP: ${candidateIP}`);
+          return candidateIP;
+        }
+      }
+    }
+  }
+
+  throw new Error("No available IP addresses in 10.0.0.0/8 subnet");
 }

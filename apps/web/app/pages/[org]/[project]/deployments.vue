@@ -22,6 +22,14 @@ const { isPending, start, stop } = useTimeoutFn(() => {
 
 start()
 
+watch(isPending, (newVal) => {
+  if (newVal) {
+    start()
+  } else {
+    start()
+  }
+})
+
 async function createDeployment() {
   await $fetch(`/api/deployments`, {
     method: "POST",
