@@ -159,9 +159,9 @@ func (s *Service) Start() {
 		}
 		cancel()
 
-		// Sleep 60s +/- 15s random offset
-		offset := time.Duration(rand.Intn(31)-15) * time.Second
-		sleepDuration := 60*time.Second + offset
+		// Sleep 10s +/- 5s random offset
+		offset := time.Duration(rand.Intn(6)-5) * time.Second
+		sleepDuration := 10*time.Second + offset
 		s.logger.Info("sleeping", "duration", sleepDuration)
 		time.Sleep(sleepDuration)
 	}
@@ -204,7 +204,15 @@ func (s *Service) reconcile(ctx context.Context) error {
 
 	// 3. Build maps for comparison
 	desiredMap := make(map[string]*database.GetInstancesByNodeIDRow)
+	stoppingInstances := make([]*database.GetInstancesByNodeIDRow, 0)
+
 	for _, inst := range desiredInstances {
+		// Handle instances that should be stopped
+		if inst.State == database.InstanceStatusesStopping {
+			stoppingInstances = append(stoppingInstances, inst)
+			continue
+		}
+
 		// Only include instances that should be running
 		if inst.State == database.InstanceStatusesPending ||
 			inst.State == database.InstanceStatusesStarting ||
@@ -237,9 +245,40 @@ func (s *Service) reconcile(ctx context.Context) error {
 	s.logger.Info("computed reconciliation actions",
 		"to_start", len(toStart),
 		"to_stop", len(toStop),
+		"to_shutdown", len(stoppingInstances),
 	)
 
 	// 5. Apply changes
+	// Handle instances marked as stopping - ensure they are stopped
+	for _, inst := range stoppingInstances {
+		instanceID := uuid.ToString(inst.ID)
+		s.logger.Info("shutting down instance", "instance_id", instanceID)
+
+		// Check if container is running
+		if _, exists := runningMap[instanceID]; exists {
+			if err := s.runtime.Stop(ctx, instanceID); err != nil {
+				s.logger.Error("failed to stop container",
+					"instance_id", instanceID,
+					"error", err,
+				)
+				continue
+			}
+		}
+
+		// Update state to stopped
+		if err := s.db.Queries().UpdateInstanceState(ctx, &database.UpdateInstanceStateParams{
+			ID:    inst.ID,
+			State: database.InstanceStatusesStopped,
+		}); err != nil {
+			s.logger.Error("failed to update instance state",
+				"instance_id", instanceID,
+				"error", err,
+			)
+		} else {
+			s.logger.Info("instance stopped", "instance_id", instanceID)
+		}
+	}
+
 	// Stop containers that should not be running
 	for _, c := range toStop {
 		s.logger.Info("stopping instance", "instance_id", c.InstanceID)

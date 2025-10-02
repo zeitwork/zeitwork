@@ -11,9 +11,14 @@ import (
 )
 
 type Querier interface {
+	CreateImage(ctx context.Context, arg *CreateImageParams) (*Image, error)
 	GetInstanceByID(ctx context.Context, id pgtype.UUID) (*GetInstanceByIDRow, error)
 	GetInstancesByNodeID(ctx context.Context, nodeID pgtype.UUID) ([]*GetInstancesByNodeIDRow, error)
 	GetNodeByID(ctx context.Context, id pgtype.UUID) (*GetNodeByIDRow, error)
+	GetPendingImageBuild(ctx context.Context) (*GetPendingImageBuildRow, error)
+	UpdateImageBuildCompleted(ctx context.Context, arg *UpdateImageBuildCompletedParams) error
+	UpdateImageBuildFailed(ctx context.Context, id pgtype.UUID) error
+	UpdateImageBuildStarted(ctx context.Context, id pgtype.UUID) error
 	UpdateInstanceState(ctx context.Context, arg *UpdateInstanceStateParams) error
 	UpdateNodeState(ctx context.Context, arg *UpdateNodeStateParams) error
 	UpsertNode(ctx context.Context, arg *UpsertNodeParams) error

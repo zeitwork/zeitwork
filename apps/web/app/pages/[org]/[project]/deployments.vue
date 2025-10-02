@@ -74,6 +74,8 @@ function deploymentStatusColor(status: string) {
       return "text-red-500"
     case "active":
       return "text-green-500"
+    case "inactive":
+      return "text-neutral-subtle"
     default:
       return "text-neutral"
   }
@@ -91,6 +93,8 @@ function deploymentStatusBgColor(status: string) {
       return "bg-red-100"
     case "active":
       return "bg-green-100"
+    case "inactive":
+      return "bg-neutral-subtle"
     default:
       return "bg-neutral/10"
   }
