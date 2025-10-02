@@ -14,6 +14,9 @@ export default defineEventHandler(async (event) => {
   const { secure } = await requireUserSession(event)
   if (!secure) throw createError({ statusCode: 401, message: "Unauthorized" })
 
+  // Require active subscription to add domains
+  await requireSubscription(event)
+
   const { id: idOrSlug } = await getValidatedRouterParams(event, paramsSchema.parse)
   const { name } = await readValidatedBody(event, bodySchema.parse)
 
@@ -25,7 +28,7 @@ export default defineEventHandler(async (event) => {
     .where(
       and(
         ...(isUuid ? [eq(projects.id, idOrSlug)] : [eq(projects.slug, idOrSlug)]),
-        eq(projects.organisationId, secure.organisationId),
+        eq(projects.organisationId, secure.organisationId!),
       ),
     )
     .limit(1)
@@ -39,7 +42,7 @@ export default defineEventHandler(async (event) => {
     let [existingDomain] = await tx
       .select()
       .from(domains)
-      .where(and(eq(domains.name, name), eq(domains.organisationId, secure.organisationId)))
+      .where(and(eq(domains.name, name), eq(domains.organisationId, secure.organisationId!)))
       .limit(1)
 
     if (!existingDomain) {
@@ -47,7 +50,7 @@ export default defineEventHandler(async (event) => {
         .insert(domains)
         .values({
           name,
-          organisationId: secure.organisationId,
+          organisationId: secure.organisationId!,
         })
         .returning()
       existingDomain = created
@@ -61,7 +64,7 @@ export default defineEventHandler(async (event) => {
         and(
           eq(environmentDomains.projectId, project.id),
           eq(environmentDomains.domainId, existingDomain.id),
-          eq(environmentDomains.organisationId, secure.organisationId),
+          eq(environmentDomains.organisationId, secure.organisationId!),
         ),
       )
       .limit(1)
@@ -71,7 +74,7 @@ export default defineEventHandler(async (event) => {
         projectId: project.id,
         domainId: existingDomain.id,
         environmentId: project.productionEnv.id, // TODO: Get the production environment
-        organisationId: secure.organisationId,
+        organisationId: secure.organisationId!,
       })
     }
 

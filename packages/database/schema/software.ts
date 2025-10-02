@@ -37,6 +37,9 @@ export const organisations = pgTable("organisations", {
   id: uuid().primaryKey().$defaultFn(uuidv7),
   name: text().notNull(),
   slug: text().notNull().unique(),
+  stripeCustomerId: text(),
+  stripeSubscriptionId: text(),
+  stripeSubscriptionStatus: text(),
   ...timestamps,
 });
 

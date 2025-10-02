@@ -11,6 +11,9 @@ export default defineEventHandler(async (event) => {
   const { secure } = await requireUserSession(event)
   if (!secure) throw createError({ statusCode: 401, message: "Unauthorized" })
 
+  // Require active subscription to create deployments
+  await requireSubscription(event)
+
   // Get the project
   const { projectSlug } = await readValidatedBody(event, bodySchema.parse)
 
