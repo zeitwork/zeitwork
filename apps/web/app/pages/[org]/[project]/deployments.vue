@@ -43,7 +43,7 @@ function renderDate(date: string) {
 }
 
 function formatDeploymentUrl(deployment: any) {
-  return `https://${deployment.domains?.[0].name}:8443`
+  return `http://${deployment.domains?.[0].name}`
 }
 
 function deploymentStatusColor(status: string) {
