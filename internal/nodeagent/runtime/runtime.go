@@ -1,6 +1,9 @@
 package runtime
 
-import "context"
+import (
+	"context"
+	"io"
+)
 
 // Container represents a running container instance
 type Container struct {
@@ -25,6 +28,9 @@ type Runtime interface {
 
 	// GetStatus returns the status of a specific container
 	GetStatus(ctx context.Context, instanceID string) (*Container, error)
+
+	// StreamLogs streams logs from a container
+	StreamLogs(ctx context.Context, instanceID string, follow bool) (io.ReadCloser, error)
 
 	// Close cleans up the runtime
 	Close() error

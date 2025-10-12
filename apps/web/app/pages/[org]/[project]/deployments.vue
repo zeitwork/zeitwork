@@ -109,10 +109,11 @@ function deploymentStatusBgColor(status: string) {
       <d-button @click="createDeployment" :loading="isCreatingDeployment">Create Deployment</d-button>
     </div>
     <div class="flex-1 overflow-auto">
-      <div
+      <nuxt-link
         v-for="deployment in deployments"
         :key="deployment.id"
-        class="hover:bg-surface-subtle border-neutral-subtle text-neutral grid grid-cols-[100px_100px_100px_3fr_1fr] items-center gap-2 border-b p-4 text-sm"
+        :to="`/${orgId}/${projectSlug}/deployments/${deployment.id}`"
+        class="hover:bg-surface-subtle border-neutral-subtle text-neutral grid grid-cols-[100px_100px_100px_3fr_1fr] items-center gap-2 border-b p-4 text-sm cursor-pointer"
       >
         <div class="font-mono">{{ deployment.deploymentId }}</div>
         <div>
@@ -128,12 +129,10 @@ function deploymentStatusBgColor(status: string) {
         </div>
         <div class="font-mono">{{ deployment.githubCommit.slice(0, 7) }}</div>
         <div>
-          <nuxt-link :to="formatDeploymentUrl(deployment)" external target="_blank">
-            {{ deployment.domains?.[0]?.name }}
-          </nuxt-link>
+          <span v-if="deployment.domains?.[0]?.name">{{ deployment.domains?.[0]?.name }}</span>
         </div>
         <div class="text-right">{{ renderDate(deployment.createdAt) }}</div>
-      </div>
+      </nuxt-link>
     </div>
   </div>
 </template>

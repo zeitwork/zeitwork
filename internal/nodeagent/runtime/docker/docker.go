@@ -341,6 +341,13 @@ func (d *DockerRuntime) GetStatus(ctx context.Context, instanceID string) (*runt
 	}, nil
 }
 
+// StreamLogs streams logs from a container
+// TODO: Implement Docker log streaming
+func (d *DockerRuntime) StreamLogs(ctx context.Context, instanceID string, follow bool) (io.ReadCloser, error) {
+	d.logger.Warn("StreamLogs not yet implemented for Docker runtime", "instance_id", instanceID)
+	return nil, fmt.Errorf("StreamLogs not implemented for Docker runtime")
+}
+
 // Close cleans up the runtime
 func (d *DockerRuntime) Close() error {
 	return d.client.Close()

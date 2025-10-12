@@ -15,8 +15,12 @@ type Querier interface {
 	GetActiveRoutes(ctx context.Context) ([]*GetActiveRoutesRow, error)
 	GetInstanceByID(ctx context.Context, id pgtype.UUID) (*GetInstanceByIDRow, error)
 	GetInstancesByNodeID(ctx context.Context, nodeID pgtype.UUID) ([]*GetInstancesByNodeIDRow, error)
+	GetLogsByDeploymentId(ctx context.Context, id pgtype.UUID) ([]*Log, error)
+	GetLogsByImageBuildId(ctx context.Context, imageBuildID pgtype.UUID) ([]*Log, error)
+	GetLogsByInstanceId(ctx context.Context, instanceID pgtype.UUID) ([]*Log, error)
 	GetNodeByID(ctx context.Context, id pgtype.UUID) (*GetNodeByIDRow, error)
 	GetPendingImageBuild(ctx context.Context) (*GetPendingImageBuildRow, error)
+	InsertLogs(ctx context.Context, arg []*InsertLogsParams) (int64, error)
 	UpdateImageBuildCompleted(ctx context.Context, arg *UpdateImageBuildCompletedParams) error
 	UpdateImageBuildFailed(ctx context.Context, id pgtype.UUID) error
 	UpdateImageBuildStarted(ctx context.Context, id pgtype.UUID) error

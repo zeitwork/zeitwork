@@ -261,6 +261,18 @@ type Instance struct {
 	DeletedAt            pgtype.Timestamptz `json:"deleted_at"`
 }
 
+type Log struct {
+	ID           pgtype.UUID        `json:"id"`
+	ImageBuildID pgtype.UUID        `json:"image_build_id"`
+	InstanceID   pgtype.UUID        `json:"instance_id"`
+	Level        pgtype.Text        `json:"level"`
+	Message      string             `json:"message"`
+	LoggedAt     pgtype.Timestamptz `json:"logged_at"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
+}
+
 type Node struct {
 	ID        pgtype.UUID        `json:"id"`
 	RegionID  pgtype.UUID        `json:"region_id"`

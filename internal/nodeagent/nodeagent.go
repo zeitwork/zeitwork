@@ -1,6 +1,7 @@
 package nodeagent
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"math/rand"
 	"os"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -33,14 +35,32 @@ type Config struct {
 	NodeRegistryPass string `env:"NODE_REGISTRY_PASS"`                 // Registry password or token
 }
 
+type logEntry struct {
+	level    string
+	message  string
+	loggedAt time.Time
+}
+
+type logBuffer struct {
+	mu          sync.Mutex
+	logs        []logEntry
+	instanceID  pgtype.UUID
+	flushThresh int
+	db          *database.DB
+	ctx         context.Context
+	cancel      context.CancelFunc
+}
+
 type Service struct {
-	cfg      Config
-	db       *database.DB
-	runtime  container.Runtime
-	proxy    *proxy.Proxy
-	logger   *slog.Logger
-	nodeID   pgtype.UUID
-	regionID pgtype.UUID
+	cfg          Config
+	db           *database.DB
+	runtime      container.Runtime
+	proxy        *proxy.Proxy
+	logger       *slog.Logger
+	nodeID       pgtype.UUID
+	regionID     pgtype.UUID
+	logStreams   map[string]context.CancelFunc // track log streaming goroutines
+	logStreamsMu sync.Mutex
 }
 
 func NewService(cfg Config, logger *slog.Logger) (*Service, error) {
@@ -103,13 +123,14 @@ func NewService(cfg Config, logger *slog.Logger) (*Service, error) {
 	prx := proxy.NewProxy(proxyCfg, db, logger.With("component", "proxy"))
 
 	svc := &Service{
-		cfg:      cfg,
-		db:       db,
-		runtime:  rt,
-		proxy:    prx,
-		logger:   logger,
-		nodeID:   nodeUUID,
-		regionID: regionUUID,
+		cfg:        cfg,
+		db:         db,
+		runtime:    rt,
+		proxy:      prx,
+		logger:     logger,
+		nodeID:     nodeUUID,
+		regionID:   regionUUID,
+		logStreams: make(map[string]context.CancelFunc),
 	}
 
 	// Register node in database
@@ -204,6 +225,15 @@ func (s *Service) Start() {
 
 func (s *Service) Close() {
 	s.logger.Info("shutting down nodeagent")
+
+	// Stop all log streaming
+	s.logStreamsMu.Lock()
+	for instanceID, cancel := range s.logStreams {
+		s.logger.Info("stopping log streaming during shutdown", "instance_id", instanceID)
+		cancel()
+	}
+	s.logStreams = make(map[string]context.CancelFunc)
+	s.logStreamsMu.Unlock()
 
 	// Stop proxy
 	if s.proxy != nil {
@@ -308,6 +338,9 @@ func (s *Service) reconcile(ctx context.Context) error {
 		instanceID := uuid.ToString(inst.ID)
 		s.logger.Info("shutting down instance", "instance_id", instanceID)
 
+		// Stop log streaming
+		s.stopLogStreaming(instanceID)
+
 		// Check if container is running
 		if _, exists := runningMap[instanceID]; exists {
 			if err := s.runtime.Stop(ctx, instanceID); err != nil {
@@ -336,6 +369,9 @@ func (s *Service) reconcile(ctx context.Context) error {
 	// Stop containers that should not be running
 	for _, c := range toStop {
 		s.logger.Info("stopping instance", "instance_id", c.InstanceID)
+
+		// Stop log streaming
+		s.stopLogStreaming(c.InstanceID)
 
 		if err := s.runtime.Stop(ctx, c.InstanceID); err != nil {
 			s.logger.Error("failed to stop container",
@@ -458,8 +494,175 @@ func (s *Service) reconcile(ctx context.Context) error {
 				"error", err,
 			)
 		}
+
+		// Start log streaming for this instance
+		s.startLogStreaming(instanceID, inst.ID)
 	}
 
 	s.logger.Info("reconciliation completed")
 	return nil
+}
+
+// newLogBuffer creates a new log buffer for the given instance
+func newLogBuffer(ctx context.Context, db *database.DB, instanceID pgtype.UUID) *logBuffer {
+	ctx, cancel := context.WithCancel(ctx)
+	lb := &logBuffer{
+		logs:        make([]logEntry, 0, 100),
+		instanceID:  instanceID,
+		flushThresh: 100,
+		db:          db,
+		ctx:         ctx,
+		cancel:      cancel,
+	}
+
+	// Start ticker to flush logs every 5 seconds
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				lb.flush()
+			case <-ctx.Done():
+				lb.flush() // Final flush on shutdown
+				return
+			}
+		}
+	}()
+
+	return lb
+}
+
+// append adds a log entry to the buffer
+func (lb *logBuffer) append(level, message string) {
+	lb.mu.Lock()
+	defer lb.mu.Unlock()
+
+	lb.logs = append(lb.logs, logEntry{
+		level:    level,
+		message:  message,
+		loggedAt: time.Now(),
+	})
+
+	// Flush if threshold reached
+	if len(lb.logs) >= lb.flushThresh {
+		go lb.flush()
+	}
+}
+
+// flush writes all buffered logs to the database
+func (lb *logBuffer) flush() {
+	lb.mu.Lock()
+	if len(lb.logs) == 0 {
+		lb.mu.Unlock()
+		return
+	}
+
+	// Copy logs to insert
+	logsToInsert := make([]logEntry, len(lb.logs))
+	copy(logsToInsert, lb.logs)
+	lb.logs = lb.logs[:0] // Clear buffer
+	lb.mu.Unlock()
+
+	// Prepare batch insert
+	params := make([]*database.InsertLogsParams, len(logsToInsert))
+	for i, log := range logsToInsert {
+		params[i] = &database.InsertLogsParams{
+			ID:           uuid.New(),
+			ImageBuildID: pgtype.UUID{Valid: false},
+			InstanceID:   lb.instanceID,
+			Level:        pgtype.Text{String: log.level, Valid: log.level != ""},
+			Message:      log.message,
+			LoggedAt:     pgtype.Timestamptz{Time: log.loggedAt, Valid: true},
+		}
+	}
+
+	// Insert logs
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_, err := lb.db.Queries().InsertLogs(ctx, params)
+	if err != nil {
+		// Log error but don't fail
+		fmt.Fprintf(os.Stderr, "failed to insert instance logs: %v\n", err)
+	}
+}
+
+// close stops the log buffer and flushes remaining logs
+func (lb *logBuffer) close() {
+	if lb.cancel != nil {
+		lb.cancel()
+	}
+	lb.flush()
+}
+
+// startLogStreaming starts streaming logs for an instance
+func (s *Service) startLogStreaming(instanceID string, instanceUUID pgtype.UUID) {
+	s.logger.Info("starting log streaming", "instance_id", instanceID)
+
+	// Check if already streaming
+	s.logStreamsMu.Lock()
+	if _, exists := s.logStreams[instanceID]; exists {
+		s.logStreamsMu.Unlock()
+		s.logger.Info("log streaming already active", "instance_id", instanceID)
+		return
+	}
+
+	// Create context for this log stream
+	ctx, cancel := context.WithCancel(context.Background())
+	s.logStreams[instanceID] = cancel
+	s.logStreamsMu.Unlock()
+
+	// Create log buffer
+	logBuf := newLogBuffer(ctx, s.db, instanceUUID)
+
+	go func() {
+		defer logBuf.close()
+
+		// Try to stream logs
+		logStream, err := s.runtime.StreamLogs(ctx, instanceID, true)
+		if err != nil {
+			s.logger.Warn("failed to start log streaming",
+				"instance_id", instanceID,
+				"error", err,
+			)
+			return
+		}
+		defer logStream.Close()
+
+		// Read logs line by line
+		scanner := bufio.NewScanner(logStream)
+		for scanner.Scan() {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				line := scanner.Text()
+				if line != "" {
+					logBuf.append("info", line)
+				}
+			}
+		}
+
+		if err := scanner.Err(); err != nil {
+			s.logger.Error("log streaming error",
+				"instance_id", instanceID,
+				"error", err,
+			)
+		}
+
+		s.logger.Info("log streaming ended", "instance_id", instanceID)
+	}()
+}
+
+// stopLogStreaming stops streaming logs for an instance
+func (s *Service) stopLogStreaming(instanceID string) {
+	s.logStreamsMu.Lock()
+	defer s.logStreamsMu.Unlock()
+
+	if cancel, exists := s.logStreams[instanceID]; exists {
+		s.logger.Info("stopping log streaming", "instance_id", instanceID)
+		cancel()
+		delete(s.logStreams, instanceID)
+	}
 }

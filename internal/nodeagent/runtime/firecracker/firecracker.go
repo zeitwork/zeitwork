@@ -378,6 +378,36 @@ func (f *FirecrackerRuntime) GetStatus(ctx context.Context, instanceID string) (
 	}, nil
 }
 
+// StreamLogs streams logs from a Firecracker VM's log file
+func (f *FirecrackerRuntime) StreamLogs(ctx context.Context, instanceID string, follow bool) (io.ReadCloser, error) {
+	f.mu.RLock()
+	vm, exists := f.vms[instanceID]
+	f.mu.RUnlock()
+
+	if !exists {
+		return nil, fmt.Errorf("VM not found: %s", instanceID)
+	}
+
+	// Log file path in jailer directory
+	logPath := filepath.Join(vm.JailerDir, "root", "firecracker.log")
+
+	// Open the log file
+	file, err := os.Open(logPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open log file: %w", err)
+	}
+
+	// If not following, just return the file
+	if !follow {
+		return file, nil
+	}
+
+	// If following, we need to implement tail -f functionality
+	// For now, just return the file and let the caller handle re-reading
+	// TODO: Implement proper log following with inotify or similar
+	return file, nil
+}
+
 // Close cleans up the runtime
 func (f *FirecrackerRuntime) Close() error {
 	f.logger.Info("closing firecracker runtime")
@@ -562,7 +592,7 @@ func (f *FirecrackerRuntime) pullAndConvertImage(ctx context.Context, imageName,
 
 	// Create ext4 image
 	f.logger.Info("creating ext4 image")
-	ddCmd := exec.CommandContext(ctx, "dd", "if=/dev/zero", "of="+rootfsPath, "bs=1M", "count=512")
+	ddCmd := exec.CommandContext(ctx, "dd", "if=/dev/zero", "of="+rootfsPath, "bs=1M", "count=5120")
 	if err := ddCmd.Run(); err != nil {
 		return "", fmt.Errorf("dd failed: %w", err)
 	}

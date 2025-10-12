@@ -92,3 +92,13 @@ export const imageBuilds = pgTable("image_builds", {
   //
   ...timestamps,
 });
+
+export const logs = pgTable("logs", {
+  id: uuid().primaryKey().$defaultFn(uuidv7),
+  imageBuildId: uuid().references(() => imageBuilds.id),
+  instanceId: uuid().references(() => instances.id),
+  level: text(), // optional: "info", "error", "warning", etc.
+  message: text().notNull(),
+  loggedAt: timestamp({ withTimezone: true }).notNull(),
+  ...timestamps,
+});

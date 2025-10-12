@@ -1,16 +1,19 @@
 package builder
 
 import (
+	"bufio"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"log/slog"
 	"math/rand"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -26,6 +29,22 @@ type Config struct {
 	BuilderRegistryURL  string `env:"BUILDER_REGISTRY_URL"`  // e.g., "ghcr.io/yourorg" - empty means local Docker only
 	BuilderRegistryUser string `env:"BUILDER_REGISTRY_USER"` // Registry username for authentication
 	BuilderRegistryPass string `env:"BUILDER_REGISTRY_PASS"` // Registry password or token
+}
+
+type logEntry struct {
+	level    string
+	message  string
+	loggedAt time.Time
+}
+
+type logBuffer struct {
+	mu           sync.Mutex
+	logs         []logEntry
+	imageBuildID pgtype.UUID
+	flushThresh  int
+	db           *database.DB
+	ctx          context.Context
+	cancel       context.CancelFunc
 }
 
 type Service struct {
@@ -116,6 +135,99 @@ func (s *Service) Close() {
 	}
 }
 
+// newLogBuffer creates a new log buffer for the given image build
+func newLogBuffer(ctx context.Context, db *database.DB, imageBuildID pgtype.UUID) *logBuffer {
+	ctx, cancel := context.WithCancel(ctx)
+	lb := &logBuffer{
+		logs:         make([]logEntry, 0, 100),
+		imageBuildID: imageBuildID,
+		flushThresh:  100,
+		db:           db,
+		ctx:          ctx,
+		cancel:       cancel,
+	}
+
+	// Start ticker to flush logs every 5 seconds
+	go func() {
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				lb.flush()
+			case <-ctx.Done():
+				lb.flush() // Final flush on shutdown
+				return
+			}
+		}
+	}()
+
+	return lb
+}
+
+// append adds a log entry to the buffer
+func (lb *logBuffer) append(level, message string) {
+	lb.mu.Lock()
+	defer lb.mu.Unlock()
+
+	lb.logs = append(lb.logs, logEntry{
+		level:    level,
+		message:  message,
+		loggedAt: time.Now(),
+	})
+
+	// Flush if threshold reached
+	if len(lb.logs) >= lb.flushThresh {
+		go lb.flush()
+	}
+}
+
+// flush writes all buffered logs to the database
+func (lb *logBuffer) flush() {
+	lb.mu.Lock()
+	if len(lb.logs) == 0 {
+		lb.mu.Unlock()
+		return
+	}
+
+	// Copy logs to insert
+	logsToInsert := make([]logEntry, len(lb.logs))
+	copy(logsToInsert, lb.logs)
+	lb.logs = lb.logs[:0] // Clear buffer
+	lb.mu.Unlock()
+
+	// Prepare batch insert
+	params := make([]*database.InsertLogsParams, len(logsToInsert))
+	for i, log := range logsToInsert {
+		params[i] = &database.InsertLogsParams{
+			ID:           uuid.New(),
+			ImageBuildID: lb.imageBuildID,
+			InstanceID:   pgtype.UUID{Valid: false},
+			Level:        pgtype.Text{String: log.level, Valid: log.level != ""},
+			Message:      log.message,
+			LoggedAt:     pgtype.Timestamptz{Time: log.loggedAt, Valid: true},
+		}
+	}
+
+	// Insert logs
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	_, err := lb.db.Queries().InsertLogs(ctx, params)
+	if err != nil {
+		// Log error but don't fail the build
+		fmt.Fprintf(os.Stderr, "failed to insert logs: %v\n", err)
+	}
+}
+
+// close stops the log buffer and flushes remaining logs
+func (lb *logBuffer) close() {
+	if lb.cancel != nil {
+		lb.cancel()
+	}
+	lb.flush()
+}
+
 func (s *Service) buildNext(ctx context.Context) error {
 	s.logger.Info("querying for pending build")
 
@@ -135,6 +247,12 @@ func (s *Service) buildNext(ctx context.Context) error {
 		"repository", build.GithubRepository,
 		"commit", build.GithubCommit,
 	)
+
+	// Create log buffer for this build
+	logBuf := newLogBuffer(ctx, s.db, build.ID)
+	defer logBuf.close()
+
+	logBuf.append("info", fmt.Sprintf("Starting build for %s @ %s", build.GithubRepository, build.GithubCommit))
 
 	// Mark as building
 	s.logger.Info("transitioning build state: pending → building", "build_id", buildID)
@@ -178,12 +296,14 @@ func (s *Service) buildNext(ctx context.Context) error {
 		"commit", build.GithubCommit,
 		"destination", repoDir,
 	)
-	if err := s.cloneRepo(ctx, build.GithubRepository, build.GithubCommit, repoDir); err != nil {
+	logBuf.append("info", fmt.Sprintf("Cloning repository %s...", build.GithubRepository))
+	if err := s.cloneRepo(ctx, build.GithubRepository, build.GithubCommit, repoDir, logBuf); err != nil {
 		s.logger.Error("failed to clone repository",
 			"build_id", buildID,
 			"repository", build.GithubRepository,
 			"error", err,
 		)
+		logBuf.append("error", fmt.Sprintf("Failed to clone repository: %v", err))
 		s.markFailed(ctx, build.ID)
 		return fmt.Errorf("failed to clone repository: %w", err)
 	}
@@ -191,6 +311,7 @@ func (s *Service) buildNext(ctx context.Context) error {
 		"build_id", buildID,
 		"repository", build.GithubRepository,
 	)
+	logBuf.append("info", "Repository cloned successfully")
 
 	// Create image record first to get the image ID for naming
 	imageID := uuid.New()
@@ -208,12 +329,14 @@ func (s *Service) buildNext(ctx context.Context) error {
 		"source_dir", repoDir,
 	)
 
-	if err := s.buildImage(ctx, repoDir, imageName); err != nil {
+	logBuf.append("info", fmt.Sprintf("Building Docker image %s...", imageName))
+	if err := s.buildImage(ctx, repoDir, imageName, logBuf); err != nil {
 		s.logger.Error("failed to build docker image",
 			"build_id", buildID,
 			"image_name", imageName,
 			"error", err,
 		)
+		logBuf.append("error", fmt.Sprintf("Failed to build image: %v", err))
 		s.markFailed(ctx, build.ID)
 		return fmt.Errorf("failed to build image: %w", err)
 	}
@@ -221,6 +344,7 @@ func (s *Service) buildNext(ctx context.Context) error {
 		"build_id", buildID,
 		"image_name", imageName,
 	)
+	logBuf.append("info", "Docker image built successfully")
 
 	// Push to registry if configured
 	if s.cfg.BuilderRegistryURL != "" {
@@ -229,12 +353,14 @@ func (s *Service) buildNext(ctx context.Context) error {
 			"image_name", imageName,
 			"registry_url", s.cfg.BuilderRegistryURL,
 		)
-		if err := s.pushImage(ctx, imageName); err != nil {
+		logBuf.append("info", "Pushing image to registry...")
+		if err := s.pushImage(ctx, imageName, logBuf); err != nil {
 			s.logger.Error("failed to push image to registry",
 				"build_id", buildID,
 				"image_name", imageName,
 				"error", err,
 			)
+			logBuf.append("error", fmt.Sprintf("Failed to push image: %v", err))
 			s.markFailed(ctx, build.ID)
 			return fmt.Errorf("failed to push image: %w", err)
 		}
@@ -242,6 +368,7 @@ func (s *Service) buildNext(ctx context.Context) error {
 			"build_id", buildID,
 			"image_name", imageName,
 		)
+		logBuf.append("info", "Image pushed to registry successfully")
 	}
 
 	// Get image details
@@ -338,7 +465,7 @@ func (s *Service) markFailed(ctx context.Context, buildID pgtype.UUID) {
 	)
 }
 
-func (s *Service) cloneRepo(ctx context.Context, repository, commit, destDir string) error {
+func (s *Service) cloneRepo(ctx context.Context, repository, commit, destDir string, logBuf *logBuffer) error {
 	// Clone repository
 	repoURL := fmt.Sprintf("https://github.com/%s.git", repository)
 	s.logger.Info("executing git clone",
@@ -347,10 +474,20 @@ func (s *Service) cloneRepo(ctx context.Context, repository, commit, destDir str
 		"destination", destDir,
 	)
 	cmd := exec.CommandContext(ctx, "git", "clone", "--depth", "1", repoURL, destDir)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
 
-	if err := cmd.Run(); err != nil {
+	// Capture output
+	stdout, _ := cmd.StdoutPipe()
+	stderr, _ := cmd.StderrPipe()
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("git clone failed to start: %w", err)
+	}
+
+	// Stream output to log buffer
+	go s.streamOutput(stdout, logBuf, "info")
+	go s.streamOutput(stderr, logBuf, "info")
+
+	if err := cmd.Wait(); err != nil {
 		s.logger.Error("git clone failed",
 			"repository", repository,
 			"url", repoURL,
@@ -367,10 +504,19 @@ func (s *Service) cloneRepo(ctx context.Context, repository, commit, destDir str
 	// Checkout specific commit
 	cmd = exec.CommandContext(ctx, "git", "checkout", commit)
 	cmd.Dir = destDir
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
 
-	if err := cmd.Run(); err != nil {
+	stdout, _ = cmd.StdoutPipe()
+	stderr, _ = cmd.StderrPipe()
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("git checkout failed to start: %w", err)
+	}
+
+	// Stream output to log buffer
+	go s.streamOutput(stdout, logBuf, "info")
+	go s.streamOutput(stderr, logBuf, "info")
+
+	if err := cmd.Wait(); err != nil {
 		s.logger.Error("git checkout failed",
 			"repository", repository,
 			"commit", commit,
@@ -387,7 +533,18 @@ func (s *Service) cloneRepo(ctx context.Context, repository, commit, destDir str
 	return nil
 }
 
-func (s *Service) buildImage(ctx context.Context, repoDir, imageName string) error {
+// streamOutput reads from a reader and appends each line to the log buffer
+func (s *Service) streamOutput(r io.Reader, logBuf *logBuffer, level string) {
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line != "" {
+			logBuf.append(level, line)
+		}
+	}
+}
+
+func (s *Service) buildImage(ctx context.Context, repoDir, imageName string, logBuf *logBuffer) error {
 	// Check if Dockerfile exists
 	dockerfilePath := filepath.Join(repoDir, "Dockerfile")
 	s.logger.Info("checking for Dockerfile",
@@ -410,25 +567,25 @@ func (s *Service) buildImage(ctx context.Context, repoDir, imageName string) err
 	cmd := exec.CommandContext(ctx, "docker", "build", "-t", imageName, ".")
 	cmd.Dir = repoDir
 
-	// Capture both stdout and stderr
-	output, err := cmd.CombinedOutput()
+	// Capture output
+	stdout, _ := cmd.StdoutPipe()
+	stderr, _ := cmd.StderrPipe()
 
-	// Always log the output for debugging
-	if len(output) > 0 {
-		s.logger.Info("docker build output",
-			"image_name", imageName,
-			"output", string(output),
-		)
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("docker build failed to start: %w", err)
 	}
 
-	if err != nil {
+	// Stream output to log buffer
+	go s.streamOutput(stdout, logBuf, "info")
+	go s.streamOutput(stderr, logBuf, "info")
+
+	if err := cmd.Wait(); err != nil {
 		s.logger.Error("docker build failed",
 			"image_name", imageName,
 			"context_dir", repoDir,
 			"error", err,
-			"output", string(output),
 		)
-		return fmt.Errorf("docker build failed: %w: %s", err, string(output))
+		return fmt.Errorf("docker build failed: %w", err)
 	}
 
 	s.logger.Info("docker build completed successfully",
@@ -551,16 +708,26 @@ func (s *Service) dockerLogin(ctx context.Context) error {
 }
 
 // pushImage pushes the built image to the configured registry
-func (s *Service) pushImage(ctx context.Context, imageName string) error {
+func (s *Service) pushImage(ctx context.Context, imageName string, logBuf *logBuffer) error {
 	s.logger.Info("[REGISTRY] pushing image",
 		"image_name", imageName,
 	)
 
 	cmd := exec.CommandContext(ctx, "docker", "push", imageName)
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
 
-	if err := cmd.Run(); err != nil {
+	// Capture output
+	stdout, _ := cmd.StdoutPipe()
+	stderr, _ := cmd.StderrPipe()
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("docker push failed to start: %w", err)
+	}
+
+	// Stream output to log buffer
+	go s.streamOutput(stdout, logBuf, "info")
+	go s.streamOutput(stderr, logBuf, "info")
+
+	if err := cmd.Wait(); err != nil {
 		s.logger.Error("[REGISTRY] docker push failed",
 			"image_name", imageName,
 			"error", err,
