@@ -5,18 +5,11 @@ FROM oven/bun:1.3-alpine
 
 WORKDIR /usr/src/app
 
-# Copy workspace configuration and package files
-COPY package.json ./
-COPY bun.lock ./
-COPY packages/database/package.json ./packages/database/package.json
-COPY apps/api/package.json ./apps/api/package.json
+# Copy all files (node_modules excluded by .dockerignore)
+COPY . .
 
-# Install all dependencies at workspace root (Bun 1.3 handles workspaces)
+# Install all workspace dependencies from root
 RUN bun install
-
-# Copy source code (node_modules excluded by .dockerignore)
-COPY packages/database ./packages/database
-COPY apps/api ./apps/api
 
 # Create non-root user
 RUN addgroup -S zeitwork && adduser -S zeitwork -G zeitwork && \

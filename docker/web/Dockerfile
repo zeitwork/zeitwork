@@ -1,31 +1,28 @@
-ARG NODE_VERSION=23-alpine
-
-# Use the official Node.js image for the final stage
-FROM node:${NODE_VERSION} AS node-base
-
-# Build stage using Bun
-FROM oven/bun:canary-alpine AS build
+# Dependencies stage - use Bun for workspace installation
+FROM oven/bun:1.3-alpine AS deps
 
 WORKDIR /usr/src/app
 
-# Copy workspace configuration and package files
-COPY package.json ./
-COPY bun.lock ./
-COPY apps/web/package.json ./apps/web/package.json
-COPY packages/database/package.json ./packages/database/package.json
+# Copy all files (node_modules excluded by .dockerignore)
+COPY . .
 
-# Copy source code (node_modules excluded by .dockerignore)
-COPY apps/web ./apps/web
-COPY packages/database ./packages/database
-
-# Install all dependencies at workspace root
+# Install all workspace dependencies with Bun
 RUN bun install
 
-# Build the application
-RUN bun --cwd ./apps/web build
+# Build stage - use Node.js for building
+FROM node:alpine AS build
 
-# Production stage with Node.js
-FROM node-base AS release
+WORKDIR /usr/src/app
+
+# Copy source and installed dependencies
+COPY --from=deps /usr/src/app .
+
+# Run postinstall and build with Node
+RUN cd apps/web && npm run postinstall
+RUN cd apps/web && npm run build
+
+# Production stage - use Node.js for runtime
+FROM node:alpine AS release
 
 WORKDIR /usr/src/app
 

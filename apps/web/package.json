@@ -53,6 +53,7 @@
     "typescript": "^5.8.3"
   },
   "trustedDependencies": [
+    "@tailwindcss/vite",
     "@tailwindcss/oxide",
     "esbuild",
     "sharp",
