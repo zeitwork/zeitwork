@@ -4,7 +4,7 @@ ARG NODE_VERSION=23-alpine
 FROM node:${NODE_VERSION} AS node-base
 
 # Build stage using Bun
-FROM oven/bun:1.3-alpine AS build
+FROM oven/bun:canary-alpine AS build
 
 WORKDIR /usr/src/app
 
@@ -14,15 +14,14 @@ COPY bun.lock ./
 COPY apps/web/package.json ./apps/web/package.json
 COPY packages/database/package.json ./packages/database/package.json
 
-# Install all dependencies at workspace root (Bun 1.3 handles workspaces)
-RUN bun install --ignore-scripts
-
 # Copy source code (node_modules excluded by .dockerignore)
 COPY apps/web ./apps/web
 COPY packages/database ./packages/database
 
-# Build the Nuxt application
-RUN bun --cwd ./apps/web run postinstall
+# Install all dependencies at workspace root
+RUN bun install
+
+# Build the application
 RUN bun --cwd ./apps/web build
 
 # Production stage with Node.js
