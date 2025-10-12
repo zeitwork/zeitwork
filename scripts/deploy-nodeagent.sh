@@ -182,9 +182,12 @@ log_info "Successfully fetched secrets from 1Password"
 log_info "Building nodeagent binary for Linux..."
 cd "$PROJECT_ROOT"
 
-GOOS=linux GOARCH=amd64 go build -o "$PROJECT_ROOT/nodeagent" ./cmd/nodeagent
+# Create build directory if it doesn't exist
+mkdir -p "$PROJECT_ROOT/.build"
 
-if [[ ! -f "$PROJECT_ROOT/nodeagent" ]]; then
+GOOS=linux GOARCH=amd64 go build -o "$PROJECT_ROOT/.build/nodeagent" ./cmd/nodeagent
+
+if [[ ! -f "$PROJECT_ROOT/.build/nodeagent" ]]; then
     log_error "Failed to build nodeagent binary"
     exit 1
 fi
@@ -224,7 +227,7 @@ log_info "Deploying to $USER@$HOST..."
 
 # Copy files to temporary location on remote host
 log_info "Copying files to remote host..."
-scp "$PROJECT_ROOT/nodeagent" "$USER@$HOST:/tmp/nodeagent"
+scp "$PROJECT_ROOT/.build/nodeagent" "$USER@$HOST:/tmp/nodeagent"
 scp "$TEMP_ENV_FILE" "$USER@$HOST:/tmp/nodeagent.env"
 scp "$PROJECT_ROOT/config/systemd/nodeagent.service" "$USER@$HOST:/tmp/nodeagent.service"
 

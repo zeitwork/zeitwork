@@ -24,6 +24,11 @@ UPDATE instances
 SET state = $2, updated_at = NOW()
 WHERE id = $1;
 
+-- name: UpdateInstanceIPAddress :exec
+UPDATE instances
+SET ip_address = $2, updated_at = NOW()
+WHERE id = $1;
+
 -- name: GetInstanceByID :one
 SELECT 
     i.id,

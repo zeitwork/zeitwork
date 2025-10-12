@@ -181,6 +181,5 @@ go.work.sum
 # sqlc generated files cache
 .sqlc/
 
-# Deployment configuration and secrets
-.deploy/
-.donotdelete/
+# Build output
+.build/

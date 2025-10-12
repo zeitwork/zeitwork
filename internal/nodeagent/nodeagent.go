@@ -422,6 +422,32 @@ func (s *Service) reconcile(ctx context.Context) error {
 			continue
 		}
 
+		// Get the actual IP address assigned by the runtime
+		status, err := s.runtime.GetStatus(ctx, instanceID)
+		if err != nil {
+			s.logger.Error("failed to get container status",
+				"instance_id", instanceID,
+				"error", err,
+			)
+		} else if status != nil && status.IPAddress != inst.IpAddress {
+			// Update IP address in database if it changed
+			s.logger.Info("updating instance IP address",
+				"instance_id", instanceID,
+				"old_ip", inst.IpAddress,
+				"new_ip", status.IPAddress,
+			)
+
+			if err := s.db.Queries().UpdateInstanceIPAddress(ctx, &database.UpdateInstanceIPAddressParams{
+				ID:        inst.ID,
+				IpAddress: status.IPAddress,
+			}); err != nil {
+				s.logger.Error("failed to update instance IP address",
+					"instance_id", instanceID,
+					"error", err,
+				)
+			}
+		}
+
 		// Update state to running
 		if err := s.db.Queries().UpdateInstanceState(ctx, &database.UpdateInstanceStateParams{
 			ID:    inst.ID,

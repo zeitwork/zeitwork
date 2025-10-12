@@ -274,12 +274,15 @@ type Node struct {
 }
 
 type Organisation struct {
-	ID        pgtype.UUID        `json:"id"`
-	Name      string             `json:"name"`
-	Slug      string             `json:"slug"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
+	ID                       pgtype.UUID        `json:"id"`
+	Name                     string             `json:"name"`
+	Slug                     string             `json:"slug"`
+	CreatedAt                pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt                pgtype.Timestamptz `json:"deleted_at"`
+	StripeCustomerID         pgtype.Text        `json:"stripe_customer_id"`
+	StripeSubscriptionID     pgtype.Text        `json:"stripe_subscription_id"`
+	StripeSubscriptionStatus pgtype.Text        `json:"stripe_subscription_status"`
 }
 
 type OrganisationMember struct {

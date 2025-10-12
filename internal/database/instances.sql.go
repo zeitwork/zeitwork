@@ -145,6 +145,22 @@ func (q *Queries) GetInstancesByNodeID(ctx context.Context, nodeID pgtype.UUID) 
 	return items, nil
 }
 
+const updateInstanceIPAddress = `-- name: UpdateInstanceIPAddress :exec
+UPDATE instances
+SET ip_address = $2, updated_at = NOW()
+WHERE id = $1
+`
+
+type UpdateInstanceIPAddressParams struct {
+	ID        pgtype.UUID `json:"id"`
+	IpAddress string      `json:"ip_address"`
+}
+
+func (q *Queries) UpdateInstanceIPAddress(ctx context.Context, arg *UpdateInstanceIPAddressParams) error {
+	_, err := q.db.Exec(ctx, updateInstanceIPAddress, arg.ID, arg.IpAddress)
+	return err
+}
+
 const updateInstanceState = `-- name: UpdateInstanceState :exec
 UPDATE instances
 SET state = $2, updated_at = NOW()

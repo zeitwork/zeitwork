@@ -20,6 +20,7 @@ type Querier interface {
 	UpdateImageBuildCompleted(ctx context.Context, arg *UpdateImageBuildCompletedParams) error
 	UpdateImageBuildFailed(ctx context.Context, id pgtype.UUID) error
 	UpdateImageBuildStarted(ctx context.Context, id pgtype.UUID) error
+	UpdateInstanceIPAddress(ctx context.Context, arg *UpdateInstanceIPAddressParams) error
 	UpdateInstanceState(ctx context.Context, arg *UpdateInstanceStateParams) error
 	UpdateNodeState(ctx context.Context, arg *UpdateNodeStateParams) error
 	UpsertNode(ctx context.Context, arg *UpsertNodeParams) error
