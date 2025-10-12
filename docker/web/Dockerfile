@@ -1,39 +1,36 @@
 ARG NODE_VERSION=23-alpine
-ARG BUN_VERSION=1.2.19
 
-# Use the official Node.js image
-# See available tags at https://hub.docker.com/_/node
-FROM node:${NODE_VERSION} AS base
+# Use the official Node.js image for the final stage
+FROM node:${NODE_VERSION} AS node-base
+
+# Build stage using Bun
+FROM oven/bun:1.3-alpine AS build
 
 WORKDIR /usr/src/app
 
-# Install Bun in the specified version
-RUN apk update && apk add --no-cache bash curl wget unzip
-RUN curl https://bun.sh/install | bash -s
+# Copy workspace configuration and package files
+COPY package.json ./
+COPY bun.lock ./
+COPY apps/web/package.json ./apps/web/package.json
+COPY packages/database/package.json ./packages/database/package.json
 
-ENV PATH="${PATH}:/root/.bun/bin"
-
-# Install dependencies in a separate layer for better caching
-FROM base AS deps
-WORKDIR /usr/src/app
-COPY bun.lock package.json ./
-COPY apps/web/package.json apps/web/package.json
-COPY packages/database/package.json packages/database/package.json
+# Install all dependencies at workspace root (Bun 1.3 handles workspaces)
 RUN bun install --ignore-scripts
 
-# Copy dependencies and source code
-FROM base AS build
-WORKDIR /usr/src/app
-COPY --from=deps /usr/src/app/node_modules ./node_modules
+# Copy source code (node_modules excluded by .dockerignore)
 COPY apps/web ./apps/web
 COPY packages/database ./packages/database
-# Build the project inside the workspace
+
+# Build the Nuxt application
 RUN bun --cwd ./apps/web run postinstall
 RUN bun --cwd ./apps/web build
 
-# Prepare the final production image
-FROM base AS release
+# Production stage with Node.js
+FROM node-base AS release
+
 WORKDIR /usr/src/app
+
+# Copy built application
 COPY --from=build /usr/src/app/apps/web/.output ./.output
 
 # Run the app

@@ -1,23 +1,20 @@
 # API Service Dockerfile
 # Background worker service for deployment reconciliation
 
-FROM oven/bun:1.3-alpine AS base
+FROM oven/bun:1.3-alpine
 
 WORKDIR /usr/src/app
 
-# Install dependencies in a separate layer for better caching
-FROM base AS deps
-WORKDIR /usr/src/app
-COPY packages/database/package.json packages/database/package.json
-COPY apps/api/package.json apps/api/package.json
-RUN cd packages/database && bun install
-RUN cd apps/api && bun install
+# Copy workspace configuration and package files
+COPY package.json ./
+COPY bun.lock ./
+COPY packages/database/package.json ./packages/database/package.json
+COPY apps/api/package.json ./apps/api/package.json
 
-# Copy dependencies and source code
-FROM base AS release
-WORKDIR /usr/src/app
-COPY --from=deps /usr/src/app/packages/database/node_modules ./packages/database/node_modules
-COPY --from=deps /usr/src/app/apps/api/node_modules ./apps/api/node_modules
+# Install all dependencies at workspace root (Bun 1.3 handles workspaces)
+RUN bun install
+
+# Copy source code (node_modules excluded by .dockerignore)
 COPY packages/database ./packages/database
 COPY apps/api ./apps/api
 
