@@ -58,6 +58,7 @@ builder:
 #
 env:
   clear:
+    NUXT_GITHUB_APP_NAME: zeitwork
     NUXT_OAUTH_GITHUB_REDIRECT_URL: https://app.zeitwork.com/auth/github
     NUXT_APP_URL: https://app.zeitwork.com
     NUXT_PUBLIC_POSTHOG_PUBLIC_KEY: "phc_p3FzN1MiqN636w6viR1nmJeKUpedt4bqYHi6BY3d8pI"

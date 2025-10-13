@@ -22,9 +22,10 @@ export default defineNuxtConfig({
   },
 
   runtimeConfig: {
-    appUrl: process.env.NUXT_APP_URL || "http://localhost:3000",
-
     public: {
+      githubAppName: "zeitwork",
+      appUrl: process.env.NUXT_APP_URL || "http://localhost:3000",
+
       graphEndpoint: process.env.NUXT_PUBLIC_GRAPH_ENDPOINT,
       githubClientId: process.env.NUXT_PUBLIC_GITHUB_CLIENT_ID || "",
 
