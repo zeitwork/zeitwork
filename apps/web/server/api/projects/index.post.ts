@@ -35,6 +35,7 @@ export default defineEventHandler(async (event) => {
 
   let githubInstallationId = null
   let githubRepositoryId = null
+  let githubDefaultBranch = null
   for (const iteration of installations) {
     const { data: repository, error: repositoryError } = await github.repository.get(
       iteration.githubInstallationId,
@@ -44,6 +45,7 @@ export default defineEventHandler(async (event) => {
     if (repository) {
       githubInstallationId = iteration.id
       githubRepositoryId = repository.id
+      githubDefaultBranch = repository.defaultBranch
       break
     }
   }
@@ -85,7 +87,7 @@ export default defineEventHandler(async (event) => {
       .insert(projectEnvironments)
       .values({
         name: "production",
-        branch: "main",
+        branch: githubDefaultBranch || "main",
         projectId: project.id,
         organisationId: secure.organisationId,
       })
