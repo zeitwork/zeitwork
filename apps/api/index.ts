@@ -26,28 +26,24 @@ async function reconcile() {
   }
 
   // pending deployments - only process one per organization to avoid overload
-  const allPendingDeployments = await useDrizzle()
+    const allDeployments = await useDrizzle()
     .select()
     .from(deployments)
-    .where(eq(deployments.status, "pending"));
+    .where(
+      or(
+        eq(deployments.status, "building"),
+        eq(deployments.status, "deploying"),
+        eq(deployments.status, "pending")
+      )
+    );
+  const allPendingDeployments = allDeployments.filter((d) => d.status === "pending");
+  const activeDeploymentsForOrgs = allDeployments.filter((d) => d.status === "building" || d.status === "deploying");
 
   if (allPendingDeployments.length > 0) {
     console.log(
       `[RECONCILE] Found ${allPendingDeployments.length} pending deployment(s)`
     );
   }
-
-  // Get all active deployments (building or deploying) to check which orgs are busy
-  const activeDeploymentsForOrgs = await useDrizzle()
-    .select()
-    .from(deployments)
-    .where(
-      or(
-        eq(deployments.status, "building"),
-        eq(deployments.status, "deploying")
-      )
-    );
-
   // Create a set of organization IDs that already have active deployments
   const busyOrgIds = new Set(
     activeDeploymentsForOrgs.map((d) => d.organisationId)

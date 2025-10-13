@@ -74,8 +74,8 @@ export default defineEventHandler(async (event) => {
             quantity: 1,
           },
         ],
-        success_url: body.returnUrl || `${config.appUrl}/${organisation.slug}?checkout=success`,
-        cancel_url: body.returnUrl || `${config.appUrl}/${organisation.slug}?checkout=cancelled`,
+        success_url: body.returnUrl || `${config.public.appUrl}/${organisation.slug}?checkout=success`,
+        cancel_url: body.returnUrl || `${config.public.appUrl}/${organisation.slug}?checkout=cancelled`,
         metadata: {
           organisationId: organisation.id,
         },
@@ -130,8 +130,8 @@ export default defineEventHandler(async (event) => {
                 quantity: 1,
               },
             ],
-            success_url: body.returnUrl || `${config.appUrl}/${organisation.slug}?checkout=success`,
-            cancel_url: body.returnUrl || `${config.appUrl}/${organisation.slug}?checkout=cancelled`,
+            success_url: body.returnUrl || `${config.public.appUrl}/${organisation.slug}?checkout=success`,
+            cancel_url: body.returnUrl || `${config.public.appUrl}/${organisation.slug}?checkout=cancelled`,
             metadata: {
               organisationId: organisation.id,
             },
