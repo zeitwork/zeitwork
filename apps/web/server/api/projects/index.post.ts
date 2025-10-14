@@ -23,6 +23,19 @@ export default defineEventHandler(async (event) => {
   // Require active subscription to create projects
   await requireSubscription(event)
 
+  // Enforce 5 project limit for all users
+  const existingProjects = await useDrizzle()
+    .select()
+    .from(projects)
+    .where(eq(projects.organisationId, secure.organisationId))
+
+  if (existingProjects.length >= 5) {
+    throw createError({
+      statusCode: 403,
+      message: "Project limit reached (5 projects maximum)",
+    })
+  }
+
   const body = await readValidatedBody(event, bodySchema.parse)
 
   const github = useGitHub()

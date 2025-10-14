@@ -141,15 +141,15 @@ func newLogBuffer(ctx context.Context, db *database.DB, imageBuildID pgtype.UUID
 	lb := &logBuffer{
 		logs:         make([]logEntry, 0, 100),
 		imageBuildID: imageBuildID,
-		flushThresh:  100,
+		flushThresh:  10,
 		db:           db,
 		ctx:          ctx,
 		cancel:       cancel,
 	}
 
-	// Start ticker to flush logs every 5 seconds
+	// Start ticker to flush logs every 1 second
 	go func() {
-		ticker := time.NewTicker(5 * time.Second)
+		ticker := time.NewTicker(1 * time.Second)
 		defer ticker.Stop()
 		for {
 			select {

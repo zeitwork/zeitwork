@@ -378,7 +378,8 @@ func (f *FirecrackerRuntime) GetStatus(ctx context.Context, instanceID string) (
 	}, nil
 }
 
-// StreamLogs streams logs from a Firecracker VM's log file
+// StreamLogs streams logs from a Firecracker VM
+// Reads application stdout/stderr from serial console output (console.log)
 func (f *FirecrackerRuntime) StreamLogs(ctx context.Context, instanceID string, follow bool) (io.ReadCloser, error) {
 	f.mu.RLock()
 	vm, exists := f.vms[instanceID]
@@ -388,23 +389,16 @@ func (f *FirecrackerRuntime) StreamLogs(ctx context.Context, instanceID string, 
 		return nil, fmt.Errorf("VM not found: %s", instanceID)
 	}
 
-	// Log file path in jailer directory
-	logPath := filepath.Join(vm.JailerDir, "root", "firecracker.log")
+	// Read application logs from serial console output
+	// The VM's stdout/stderr goes to console=ttyS0, which Firecracker writes to console.log
+	consoleLogPath := filepath.Join(vm.JailerDir, "root", "console.log")
 
 	// Open the log file
-	file, err := os.Open(logPath)
+	file, err := os.Open(consoleLogPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to open log file: %w", err)
+		return nil, fmt.Errorf("failed to open console log: %w", err)
 	}
 
-	// If not following, just return the file
-	if !follow {
-		return file, nil
-	}
-
-	// If following, we need to implement tail -f functionality
-	// For now, just return the file and let the caller handle re-reading
-	// TODO: Implement proper log following with inotify or similar
 	return file, nil
 }
 
@@ -688,7 +682,7 @@ func (f *FirecrackerRuntime) createVMConfig(instanceID string, vmIndex, vcpus, m
 	config := map[string]interface{}{
 		"boot-source": map[string]interface{}{
 			"kernel_image_path": "vmlinux",
-			"boot_args":         f.cfg.KernelArgs,
+			"boot_args":         f.cfg.KernelArgs + " console=ttyS0",
 		},
 		"drives": []map[string]interface{}{
 			{
@@ -708,6 +702,16 @@ func (f *FirecrackerRuntime) createVMConfig(instanceID string, vmIndex, vcpus, m
 				"guest_mac":     fmt.Sprintf("06:00:AC:10:%02X:%02X", vmIndex, vmIndex+2),
 				"host_dev_name": fmt.Sprintf("tap%d", vmIndex),
 			},
+		},
+		"console": map[string]interface{}{
+			"mode": "File",
+			"path": "console.log",
+		},
+		"logger": map[string]interface{}{
+			"log_path":        "firecracker.log",
+			"level":           "Debug",
+			"show_level":      true,
+			"show_log_origin": true,
 		},
 	}
 
@@ -793,13 +797,17 @@ func (f *FirecrackerRuntime) startFirecrackerProcess(ctx context.Context, instan
 	chownJailCmd.Run()
 
 	// Prepare jailer command
-	// Create log file for firecracker
+	// Create log files for firecracker and serial console
 	logPath := filepath.Join(jailerRoot, "firecracker.log")
-	// Pre-create the log file with proper ownership so Firecracker can write to it
-	if logFile, err := os.Create(logPath); err == nil {
-		logFile.Close()
-		chownLogCmd := exec.Command("chown", uid+":"+gid, logPath)
-		chownLogCmd.Run()
+	consoleLogPath := filepath.Join(jailerRoot, "console.log")
+
+	// Pre-create the log files with proper ownership so Firecracker can write to them
+	for _, path := range []string{logPath, consoleLogPath} {
+		if logFile, err := os.Create(path); err == nil {
+			logFile.Close()
+			chownLogCmd := exec.Command("chown", uid+":"+gid, path)
+			chownLogCmd.Run()
+		}
 	}
 
 	jailerArgs := []string{
@@ -813,6 +821,7 @@ func (f *FirecrackerRuntime) startFirecrackerProcess(ctx context.Context, instan
 		"--log-path", "firecracker.log",
 		"--level", "Debug",
 		"--no-api",
+		"--boot-timer",
 	}
 
 	jailerCmd := exec.CommandContext(ctx, jailerPath, jailerArgs...)

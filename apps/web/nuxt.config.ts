@@ -29,6 +29,7 @@ export default defineNuxtConfig({
       githubClientId: process.env.NUXT_PUBLIC_GITHUB_CLIENT_ID || "",
 
       stripe: {
+        planEarlyAccessId: process.env.NUXT_PUBLIC_STRIPE_PLAN_EARLY_ACCESS_ID || "",
         planHobbyId: process.env.NUXT_PUBLIC_STRIPE_PLAN_HOBBY_ID || "",
         planBusinessId: process.env.NUXT_PUBLIC_STRIPE_PLAN_BUSINESS_ID || "",
       },

@@ -52,6 +52,7 @@ interface EnvVariable {
 }
 
 const envVariables = ref<EnvVariable[]>([{ name: "", value: "" }])
+const errorMessage = ref<string | null>(null)
 
 function addEnvVariable() {
   envVariables.value.push({ name: "", value: "" })
@@ -67,6 +68,7 @@ const repoOwner = computed(() => repo?.split("/")[0])
 const repoName = computed(() => repo?.split("/")[1])
 
 async function createProject() {
+  errorMessage.value = null
   try {
     const result = await $fetch(`/api/projects`, {
       method: "POST",
@@ -80,8 +82,13 @@ async function createProject() {
       },
     })
     navigateTo(`/${org}/${projectName.value}`)
-  } catch (error) {
+  } catch (error: any) {
     console.error("Failed to create project:", error)
+    if (error?.statusCode === 403) {
+      errorMessage.value = error?.data?.message || error?.message || "Project limit reached"
+    } else {
+      errorMessage.value = "Failed to create project. Please try again."
+    }
   }
 }
 </script>
@@ -221,7 +228,10 @@ async function createProject() {
         </div>
         <div class="flex items-center justify-between px-[18px] py-3">
           <DButton variant="transparent" :icon-left="ArrowLeftIcon" :to="`/${org}/new`">Back</DButton>
-          <DButton variant="primary" @click="createProject">Deploy</DButton>
+          <div class="flex flex-col items-end gap-2">
+            <p v-if="errorMessage" class="text-copy-sm text-red-500">{{ errorMessage }}</p>
+            <DButton variant="primary" @click="createProject">Deploy</DButton>
+          </div>
         </div>
       </div>
     </div>

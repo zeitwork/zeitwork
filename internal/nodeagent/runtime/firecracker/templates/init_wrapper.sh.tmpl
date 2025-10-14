@@ -25,6 +25,9 @@ export HOME="${HOME:-/root}"
 {{range $key, $value := .EnvVars}}export {{$key}}="{{$value}}"
 {{end}}
 
+# Redirect stdout and stderr to console so logs are captured
+exec > /dev/console 2>&1
+
 # Start the application using the image's entrypoint and cmd
 {{if .Entrypoint}}
 # Find and execute entrypoint with cmd as arguments
