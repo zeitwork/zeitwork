@@ -18,6 +18,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/zeitwork/zeitwork/internal/database"
+	githubpkg "github.com/zeitwork/zeitwork/internal/shared/github"
 	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 )
 
@@ -26,9 +27,11 @@ type Config struct {
 	BuilderDatabaseURL  string `env:"BUILDER_DATABASE_URL"`
 	BuilderRuntimeMode  string `env:"BUILDER_RUNTIME_MODE" envDefault:"docker"`
 	BuilderWorkDir      string `env:"BUILDER_WORK_DIR" envDefault:"/tmp/zeitwork-builder"`
-	BuilderRegistryURL  string `env:"BUILDER_REGISTRY_URL"`  // e.g., "ghcr.io/yourorg" - empty means local Docker only
-	BuilderRegistryUser string `env:"BUILDER_REGISTRY_USER"` // Registry username for authentication
-	BuilderRegistryPass string `env:"BUILDER_REGISTRY_PASS"` // Registry password or token
+	BuilderRegistryURL  string `env:"BUILDER_REGISTRY_URL"`   // e.g., "ghcr.io/yourorg" - empty means local Docker only
+	BuilderRegistryUser string `env:"BUILDER_REGISTRY_USER"`  // Registry username for authentication
+	BuilderRegistryPass string `env:"BUILDER_REGISTRY_PASS"`  // Registry password or token
+	BuilderGitHubAppID  string `env:"BUILDER_GITHUB_APP_ID"`  // GitHub App ID for private repo access
+	BuilderGitHubAppKey string `env:"BUILDER_GITHUB_APP_KEY"` // GitHub App private key (PEM format)
 }
 
 type logEntry struct {
@@ -295,9 +298,10 @@ func (s *Service) buildNext(ctx context.Context) error {
 		"repository", build.GithubRepository,
 		"commit", build.GithubCommit,
 		"destination", repoDir,
+		"has_installation_id", build.GithubInstallationID.Valid,
 	)
 	logBuf.append("info", fmt.Sprintf("Cloning repository %s...", build.GithubRepository))
-	if err := s.cloneRepo(ctx, build.GithubRepository, build.GithubCommit, repoDir, logBuf); err != nil {
+	if err := s.cloneRepo(ctx, build.GithubRepository, build.GithubCommit, build.GithubInstallationID, repoDir, logBuf); err != nil {
 		s.logger.Error("failed to clone repository",
 			"build_id", buildID,
 			"repository", build.GithubRepository,
@@ -465,12 +469,47 @@ func (s *Service) markFailed(ctx context.Context, buildID pgtype.UUID) {
 	)
 }
 
-func (s *Service) cloneRepo(ctx context.Context, repository, commit, destDir string, logBuf *logBuffer) error {
-	// Clone repository
-	repoURL := fmt.Sprintf("https://github.com/%s.git", repository)
+func (s *Service) cloneRepo(ctx context.Context, repository, commit string, installationID pgtype.UUID, destDir string, logBuf *logBuffer) error {
+	// Determine the clone URL (with or without authentication)
+	var repoURL string
+	var tokenUsed bool
+
+	if installationID.Valid {
+		// Check if GitHub App credentials are configured
+		if s.cfg.BuilderGitHubAppID == "" || s.cfg.BuilderGitHubAppKey == "" {
+			return fmt.Errorf("repository requires GitHub App authentication but credentials are not configured")
+		}
+
+		// Generate installation token for private repo access
+		s.logger.Info("generating GitHub installation token",
+			"repository", repository,
+			"installation_id", uuid.ToString(installationID),
+		)
+
+		tokenService, err := githubpkg.NewTokenService(s.cfg.BuilderGitHubAppID, s.cfg.BuilderGitHubAppKey)
+		if err != nil {
+			return fmt.Errorf("failed to create GitHub token service: %w", err)
+		}
+
+		token, err := tokenService.GetInstallationToken(ctx, s.db, uuid.ToString(installationID))
+		if err != nil {
+			return fmt.Errorf("failed to get GitHub installation token: %w", err)
+		}
+
+		// Use token in clone URL (never log the token itself)
+		repoURL = fmt.Sprintf("https://x-access-token:%s@github.com/%s.git", token, repository)
+		tokenUsed = true
+		s.logger.Info("using authenticated GitHub clone",
+			"repository", repository,
+		)
+	} else {
+		// Return an error if no installation ID is provided
+		return fmt.Errorf("repository requires GitHub App authentication but no installation ID is provided")
+	}
+
 	s.logger.Info("executing git clone",
 		"repository", repository,
-		"url", repoURL,
+		"authenticated", tokenUsed,
 		"destination", destDir,
 	)
 	cmd := exec.CommandContext(ctx, "git", "clone", "--depth", "1", repoURL, destDir)

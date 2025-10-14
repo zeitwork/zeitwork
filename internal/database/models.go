@@ -232,17 +232,18 @@ type Image struct {
 }
 
 type ImageBuild struct {
-	ID               pgtype.UUID        `json:"id"`
-	Status           ImageBuildStatus   `json:"status"`
-	GithubRepository string             `json:"github_repository"`
-	GithubCommit     string             `json:"github_commit"`
-	ImageID          pgtype.UUID        `json:"image_id"`
-	StartedAt        pgtype.Timestamptz `json:"started_at"`
-	CompletedAt      pgtype.Timestamptz `json:"completed_at"`
-	FailedAt         pgtype.Timestamptz `json:"failed_at"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt        pgtype.Timestamptz `json:"deleted_at"`
+	ID                   pgtype.UUID        `json:"id"`
+	Status               ImageBuildStatus   `json:"status"`
+	GithubRepository     string             `json:"github_repository"`
+	GithubCommit         string             `json:"github_commit"`
+	ImageID              pgtype.UUID        `json:"image_id"`
+	StartedAt            pgtype.Timestamptz `json:"started_at"`
+	CompletedAt          pgtype.Timestamptz `json:"completed_at"`
+	FailedAt             pgtype.Timestamptz `json:"failed_at"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt            pgtype.Timestamptz `json:"deleted_at"`
+	GithubInstallationID pgtype.UUID        `json:"github_installation_id"`
 }
 
 type Instance struct {

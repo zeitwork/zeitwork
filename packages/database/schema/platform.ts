@@ -9,6 +9,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { timestamps } from "../utils/timestamps";
 import { uuidv7 } from "uuidv7";
+import { githubInstallations } from "./software";
 
 export const regions = pgTable("regions", {
   id: uuid().primaryKey().$defaultFn(uuidv7),
@@ -83,6 +84,7 @@ export const imageBuilds = pgTable("image_builds", {
   //
   githubRepository: text().notNull(),
   githubCommit: text().notNull(),
+  githubInstallationId: uuid().references(() => githubInstallations.id),
   //
   imageId: uuid().references(() => images.id),
   //

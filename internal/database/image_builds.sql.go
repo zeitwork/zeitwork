@@ -58,6 +58,7 @@ SELECT
     status,
     github_repository,
     github_commit,
+    github_installation_id,
     image_id,
     started_at,
     completed_at,
@@ -73,16 +74,17 @@ FOR UPDATE SKIP LOCKED
 `
 
 type GetPendingImageBuildRow struct {
-	ID               pgtype.UUID        `json:"id"`
-	Status           ImageBuildStatus   `json:"status"`
-	GithubRepository string             `json:"github_repository"`
-	GithubCommit     string             `json:"github_commit"`
-	ImageID          pgtype.UUID        `json:"image_id"`
-	StartedAt        pgtype.Timestamptz `json:"started_at"`
-	CompletedAt      pgtype.Timestamptz `json:"completed_at"`
-	FailedAt         pgtype.Timestamptz `json:"failed_at"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	ID                   pgtype.UUID        `json:"id"`
+	Status               ImageBuildStatus   `json:"status"`
+	GithubRepository     string             `json:"github_repository"`
+	GithubCommit         string             `json:"github_commit"`
+	GithubInstallationID pgtype.UUID        `json:"github_installation_id"`
+	ImageID              pgtype.UUID        `json:"image_id"`
+	StartedAt            pgtype.Timestamptz `json:"started_at"`
+	CompletedAt          pgtype.Timestamptz `json:"completed_at"`
+	FailedAt             pgtype.Timestamptz `json:"failed_at"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
 func (q *Queries) GetPendingImageBuild(ctx context.Context) (*GetPendingImageBuildRow, error) {
@@ -93,6 +95,7 @@ func (q *Queries) GetPendingImageBuild(ctx context.Context) (*GetPendingImageBui
 		&i.Status,
 		&i.GithubRepository,
 		&i.GithubCommit,
+		&i.GithubInstallationID,
 		&i.ImageID,
 		&i.StartedAt,
 		&i.CompletedAt,

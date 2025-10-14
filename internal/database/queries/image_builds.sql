@@ -4,6 +4,7 @@ SELECT
     status,
     github_repository,
     github_commit,
+    github_installation_id,
     image_id,
     started_at,
     completed_at,

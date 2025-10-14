@@ -13,6 +13,7 @@ import (
 type Querier interface {
 	CreateImage(ctx context.Context, arg *CreateImageParams) (*Image, error)
 	GetActiveRoutes(ctx context.Context) ([]*GetActiveRoutesRow, error)
+	GetGithubInstallation(ctx context.Context, id pgtype.UUID) (*GetGithubInstallationRow, error)
 	GetInstanceByID(ctx context.Context, id pgtype.UUID) (*GetInstanceByIDRow, error)
 	GetInstancesByNodeID(ctx context.Context, nodeID pgtype.UUID) ([]*GetInstancesByNodeIDRow, error)
 	GetLogsByDeploymentId(ctx context.Context, id pgtype.UUID) ([]*Log, error)

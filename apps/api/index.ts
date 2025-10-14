@@ -113,6 +113,7 @@ async function reconcile() {
         console.log(`[DEPLOYMENT:${deployment.id}] Creating image build`, {
           repository: project.githubRepository,
           commit: deployment.githubCommit,
+          githubInstallationId: project.githubInstallationId,
         });
 
         const [imageBuild] = await tx
@@ -120,6 +121,7 @@ async function reconcile() {
           .values({
             githubRepository: project.githubRepository,
             githubCommit: deployment.githubCommit,
+            githubInstallationId: project.githubInstallationId,
           })
           .returning();
 
