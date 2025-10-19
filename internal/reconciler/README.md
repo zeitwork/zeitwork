@@ -6,10 +6,24 @@ A production-grade reconciler service that continuously monitors and reconciles 
 
 The reconciler runs in a continuous loop, ensuring that the system converges to its desired state by:
 
+- Initializing infrastructure (regions and load balancers) on first startup
 - Verifying domain ownership via DNS
 - Managing deployment lifecycle transitions
 - Monitoring build timeouts
 - Maintaining a pool of ready VMs
+
+### Startup Initialization
+
+When the reconciler starts, it automatically:
+
+1. **Checks for existing regions**: Queries the database for any configured regions
+2. **Creates default region if none exist**: If no regions are found, creates a default region in Hetzner location "nbg1" (Nuremberg)
+3. **Creates load balancer**: Each region requires a load balancer for routing traffic to VMs. The reconciler creates a Hetzner Load Balancer (type `lb11`) with:
+   - Public IPv4 and IPv6 addresses
+   - Automatic management labels
+   - Association with the region's location
+
+This ensures the system is ready to create and manage VMs immediately after startup, without requiring manual infrastructure provisioning.
 
 ## Architecture
 
@@ -105,18 +119,50 @@ queued → building → ready → inactive
 - `deleting` → Being removed
 - `off` → Stopped but not deleted
 
+## SSH Key Setup
+
+Before running the reconciler, generate SSH keys using the provided script:
+
+```bash
+./scripts/sshkey-gen.sh zeitwork-reconciler-key ./keys
+```
+
+This will generate an ED25519 key pair and output the environment variables to set:
+
+```bash
+export RECONCILER_SSH_PUBLIC_KEY="ssh-ed25519 AAAA..."
+export RECONCILER_SSH_PRIVATE_KEY="LS0tLS1CRUd..."  # base64 encoded
+```
+
+**Important Security Notes:**
+
+- Store the private key securely (secrets manager, encrypted storage, etc.)
+- Never commit keys to version control
+- The private key is base64 encoded for easy environment variable usage
+- The public key will be automatically uploaded to Hetzner on first run
+- Keep the raw key files in a secure location as backup
+
 ## Configuration
 
 Environment variables:
 
-| Variable                             | Required | Default | Description                                 |
-| ------------------------------------ | -------- | ------- | ------------------------------------------- |
-| `RECONCILER_DATABASE_URL`            | Yes      | -       | PostgreSQL connection string                |
-| `RECONCILER_INTERVAL`                | No       | `5s`    | How often to run reconciliation loop        |
-| `RECONCILER_VM_POOL_SIZE`            | No       | `3`     | Minimum number of VMs in pool               |
-| `RECONCILER_BUILD_TIMEOUT`           | No       | `10m`   | Build timeout duration                      |
-| `RECONCILER_DEPLOYMENT_GRACE_PERIOD` | No       | `5m`    | Grace period before superseding deployments |
-| `RECONCILER_LOG_LEVEL`               | No       | `info`  | Log level: debug, info, warn, error         |
+| Variable                              | Required | Default                   | Description                                 |
+| ------------------------------------- | -------- | ------------------------- | ------------------------------------------- |
+| `RECONCILER_DATABASE_URL`             | Yes      | -                         | PostgreSQL connection string                |
+| `RECONCILER_INTERVAL`                 | No       | `5s`                      | How often to run reconciliation loop        |
+| `RECONCILER_VM_POOL_SIZE`             | No       | `3`                       | Minimum number of VMs in pool               |
+| `RECONCILER_BUILD_TIMEOUT`            | No       | `10m`                     | Build timeout duration                      |
+| `RECONCILER_DEPLOYMENT_GRACE_PERIOD`  | No       | `5m`                      | Grace period before superseding deployments |
+| `RECONCILER_LOG_LEVEL`                | No       | `info`                    | Log level: debug, info, warn, error         |
+| `RECONCILER_HETZNER_TOKEN`            | No       | -                         | Hetzner Cloud API token                     |
+| `RECONCILER_HETZNER_SSH_KEY_NAME`     | No       | `zeitwork-reconciler-key` | SSH key name in Hetzner                     |
+| `RECONCILER_HETZNER_SERVER_TYPE`      | No       | `cx22`                    | Hetzner server type                         |
+| `RECONCILER_HETZNER_IMAGE`            | No       | `ubuntu-24.04`            | Hetzner server OS image                     |
+| `RECONCILER_DOCKER_REGISTRY_URL`      | No       | -                         | Docker registry URL                         |
+| `RECONCILER_DOCKER_REGISTRY_USERNAME` | No       | -                         | Docker registry username                    |
+| `RECONCILER_DOCKER_REGISTRY_PASSWORD` | No       | -                         | Docker registry password                    |
+| `RECONCILER_SSH_PUBLIC_KEY`           | Yes      | -                         | SSH public key for server access            |
+| `RECONCILER_SSH_PRIVATE_KEY`          | Yes      | -                         | SSH private key (base64 encoded)            |
 
 ## Building
 

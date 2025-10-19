@@ -1,3 +1,4 @@
+CREATE TYPE "public"."vm_statuses" AS ENUM('running', 'pooling', 'initializing', 'starting', 'stopping', 'off', 'deleting', 'migrating', 'rebuilding', 'unknown');--> statement-breakpoint
 CREATE TYPE "public"."build_statuses" AS ENUM('queued', 'initializing', 'building', 'ready', 'canceled', 'error');--> statement-breakpoint
 CREATE TYPE "public"."deployment_statuses" AS ENUM('queued', 'building', 'ready', 'inactive', 'failed');--> statement-breakpoint
 CREATE TABLE "images" (

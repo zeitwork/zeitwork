@@ -1,0 +1,8 @@
+regions:
+  nbg1:
+    no: 1
+    lb: 4806437
+    proxies:
+      - 111089432
+      - 111089433
+    manager: 111089624

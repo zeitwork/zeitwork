@@ -21,7 +21,7 @@ export const regions = pgTable("regions", {
   ...timestamps,
 });
 
-const vmStatuses = pgEnum("vm_statuses", [
+export const vmStatuses = pgEnum("vm_statuses", [
   "running",
   "pooling", // the vm is in the pool and waiting to be used
   "initializing",

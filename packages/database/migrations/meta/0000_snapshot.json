@@ -1,5 +1,5 @@
 {
-  "id": "80bbd883-cecb-44d9-a2f7-701d7954de8f",
+  "id": "fa1c5ac8-de85-4175-9907-ed6ce69075a9",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -1747,6 +1747,22 @@
     }
   },
   "enums": {
+    "public.vm_statuses": {
+      "name": "vm_statuses",
+      "schema": "public",
+      "values": [
+        "running",
+        "pooling",
+        "initializing",
+        "starting",
+        "stopping",
+        "off",
+        "deleting",
+        "migrating",
+        "rebuilding",
+        "unknown"
+      ]
+    },
     "public.build_statuses": {
       "name": "build_statuses",
       "schema": "public",

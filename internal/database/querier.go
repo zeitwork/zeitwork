@@ -19,6 +19,8 @@ type Querier interface {
 	ClearVMContainer(ctx context.Context, id pgtype.UUID) error
 	// Create a new build for a deployment
 	CreateBuild(ctx context.Context, arg *CreateBuildParams) (*Build, error)
+	// Create a new region
+	CreateRegion(ctx context.Context, arg *CreateRegionParams) (*Region, error)
 	// Create a new VM
 	CreateVM(ctx context.Context, arg *CreateVMParams) (*Vm, error)
 	// Returns active routing information for the edgeproxy
@@ -30,14 +32,23 @@ type Querier interface {
 	GetBuildingDeploymentsWithoutImage(ctx context.Context) ([]*GetBuildingDeploymentsWithoutImageRow, error)
 	// Get building deployments that have an image but no VM assigned
 	GetBuildingDeploymentsWithoutVM(ctx context.Context) ([]*Deployment, error)
+	// Get VMs marked for deletion
+	GetDeletingVMs(ctx context.Context) ([]*Vm, error)
 	// Get failed deployments that need cleanup
 	GetFailedDeployments(ctx context.Context) ([]*Deployment, error)
+	// Get GitHub installation details
+	GetGithubInstallationByID(ctx context.Context, id pgtype.UUID) (*GithubInstallation, error)
 	// Get image details by ID
 	GetImageByID(ctx context.Context, id pgtype.UUID) (*Image, error)
 	// Get inactive deployments that need cleanup
 	GetInactiveDeployments(ctx context.Context) ([]*Deployment, error)
+	// Get the next available region number
+	GetNextRegionNumber(ctx context.Context) (int32, error)
 	// Get the next available VM number
 	GetNextVMNumber(ctx context.Context) (int32, error)
+	// BUILDER QUERIES
+	// Get next pending build with row-level locking
+	GetPendingBuild(ctx context.Context) (*Build, error)
 	// VM QUERIES
 	// Get VMs that are available in the pool
 	GetPoolVMs(ctx context.Context) ([]*Vm, error)
@@ -56,6 +67,12 @@ type Querier interface {
 	GetVMByID(ctx context.Context, id pgtype.UUID) (*Vm, error)
 	// Get count of VMs by region and status
 	GetVMsByRegion(ctx context.Context) ([]*GetVMsByRegionRow, error)
+	// Mark build as building
+	MarkBuildBuilding(ctx context.Context, id pgtype.UUID) error
+	// Mark build as error
+	MarkBuildError(ctx context.Context, id pgtype.UUID) error
+	// Mark build as ready with image_id
+	MarkBuildReady(ctx context.Context, arg *MarkBuildReadyParams) error
 	// Mark a build as error due to timeout
 	MarkBuildTimedOut(ctx context.Context, id pgtype.UUID) error
 	// Mark deployment as failed
@@ -64,12 +81,16 @@ type Querier interface {
 	MarkDeploymentInactive(ctx context.Context, id pgtype.UUID) error
 	// Mark a domain as verified
 	MarkDomainVerified(ctx context.Context, id pgtype.UUID) error
+	// Mark VM as deleted
+	MarkVMDeleted(ctx context.Context, id pgtype.UUID) error
 	// Mark a VM for deletion
 	MarkVMDeleting(ctx context.Context, id pgtype.UUID) error
 	// Mark VM as running after container deployment
 	MarkVMRunning(ctx context.Context, id pgtype.UUID) error
 	// Return a VM to the pool
 	ReturnVMToPool(ctx context.Context, id pgtype.UUID) error
+	// Assign VM to build
+	UpdateBuildVM(ctx context.Context, arg *UpdateBuildVMParams) error
 	// Update deployment with build_id and change status to building
 	UpdateDeploymentWithBuild(ctx context.Context, arg *UpdateDeploymentWithBuildParams) error
 	// Update deployment with image_id

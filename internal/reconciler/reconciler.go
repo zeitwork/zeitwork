@@ -2,14 +2,19 @@ package reconciler
 
 import (
 	"context"
-	"crypto/ed25519"
-	"crypto/rand"
 	_ "embed"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
+	"os"
 	"time"
 
+	"github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/api/types/registry"
+	"github.com/docker/docker/client"
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/zeitwork/zeitwork/internal/database"
@@ -31,12 +36,16 @@ type Config struct {
 
 	// Hetzner configuration
 	HetznerToken           string // Hetzner Cloud API token
-	HetznerSSHKeyName      string // SSH key name in Hetzner
+	HetznerSSHKeyName      string // SSH key name in Hetzner (optional, defaults to "zeitwork-reconciler-key")
 	HetznerServerType      string // Server type (e.g., "cx22")
 	HetznerImage           string // OS image (e.g., "ubuntu-24.04")
 	DockerRegistryURL      string // Docker registry for pulling images
 	DockerRegistryUsername string // Docker registry username
 	DockerRegistryPassword string // Docker registry password
+
+	// SSH configuration
+	SSHPublicKey  string // SSH public key (e.g., "ssh-ed25519 AAAA...")
+	SSHPrivateKey string // SSH private key (base64 encoded)
 }
 
 // Service is the reconciler service
@@ -50,6 +59,9 @@ type Service struct {
 	hcloudClient  *hcloud.Client
 	sshPublicKey  string
 	sshPrivateKey []byte
+
+	// Docker client
+	dockerClient *client.Client
 }
 
 // NewService creates a new reconciler service
@@ -92,11 +104,24 @@ func NewService(cfg Config, logger *slog.Logger) (*Service, error) {
 		logger.Warn("No Hetzner token provided, VM management will not work")
 	}
 
+	// Initialize Docker client (for pulling and saving images)
+	dockerClient, err := client.NewClientWithOpts(
+		client.FromEnv,
+		client.WithAPIVersionNegotiation(),
+	)
+	if err != nil {
+		logger.Warn("failed to create Docker client, image operations will not work", "error", err)
+		dockerClient = nil
+	} else {
+		logger.Info("Docker client initialized")
+	}
+
 	s := &Service{
 		cfg:          cfg,
 		db:           db,
 		logger:       logger,
 		hcloudClient: hcloudClient,
+		dockerClient: dockerClient,
 	}
 
 	// Initialize SSH keys if Hetzner is configured
@@ -120,6 +145,12 @@ func (s *Service) Start(ctx context.Context) error {
 		"build_timeout", s.cfg.BuildTimeout,
 		"deployment_grace_period", s.cfg.DeploymentGracePeriod,
 	)
+
+	// Ensure at least one region exists before starting reconciliation
+	if err := s.ensureRegionExists(ctx); err != nil {
+		s.logger.Error("failed to ensure region exists", "error", err)
+		return fmt.Errorf("failed to ensure region exists: %w", err)
+	}
 
 	ticker := time.NewTicker(s.cfg.ReconcileInterval)
 	defer ticker.Stop()
@@ -155,6 +186,126 @@ func (s *Service) Stop() error {
 	if s.db != nil {
 		s.db.Close()
 	}
+
+	return nil
+}
+
+// ensureRegionExists checks if at least one region exists, and creates one if not
+func (s *Service) ensureRegionExists(ctx context.Context) error {
+	regions, err := s.db.Queries().GetAllRegions(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get regions: %w", err)
+	}
+
+	if len(regions) > 0 {
+		s.logger.Info("regions already exist", "count", len(regions))
+		return nil
+	}
+
+	s.logger.Info("no regions found, creating default region")
+
+	// Use first available Hetzner location from config, or default to "nbg1"
+	defaultLocation := "nbg1"
+
+	// Create region with load balancer
+	if err := s.createRegionWithLoadBalancer(ctx, defaultLocation); err != nil {
+		return fmt.Errorf("failed to create region: %w", err)
+	}
+
+	return nil
+}
+
+// createRegionWithLoadBalancer creates a new region and its associated load balancer
+func (s *Service) createRegionWithLoadBalancer(ctx context.Context, locationName string) error {
+	if s.hcloudClient == nil {
+		return fmt.Errorf("hetzner client not available, cannot create load balancer")
+	}
+
+	s.logger.Info("creating region with load balancer", "location", locationName)
+
+	// Get next region number
+	nextNo, err := s.db.Queries().GetNextRegionNumber(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get next region number: %w", err)
+	}
+
+	// Get Hetzner location
+	location, _, err := s.hcloudClient.Location.GetByName(ctx, locationName)
+	if err != nil {
+		return fmt.Errorf("failed to get location: %w", err)
+	}
+	if location == nil {
+		return fmt.Errorf("location '%s' not found", locationName)
+	}
+
+	// Get load balancer type (smallest one for cost efficiency)
+	lbType, _, err := s.hcloudClient.LoadBalancerType.GetByName(ctx, "lb11")
+	if err != nil {
+		return fmt.Errorf("failed to get load balancer type: %w", err)
+	}
+	if lbType == nil {
+		return fmt.Errorf("load balancer type 'lb11' not found")
+	}
+
+	// Create load balancer
+	lbName := fmt.Sprintf("zeitwork-lb-%d", nextNo)
+	s.logger.Info("creating load balancer", "name", lbName, "location", locationName)
+
+	lbResult, _, err := s.hcloudClient.LoadBalancer.Create(ctx, hcloud.LoadBalancerCreateOpts{
+		Name:             lbName,
+		LoadBalancerType: lbType,
+		Location:         location,
+		PublicInterface:  hcloud.Ptr(true),
+		Labels: map[string]string{
+			"managed-by": "zeitwork",
+			"region":     locationName,
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create load balancer: %w", err)
+	}
+
+	// Wait for load balancer creation
+	if err := s.hcloudClient.Action.WaitFor(ctx, lbResult.Action); err != nil {
+		return fmt.Errorf("failed to wait for load balancer creation: %w", err)
+	}
+
+	lb := lbResult.LoadBalancer
+
+	// Get IPv4 and IPv6 addresses
+	ipv4 := lb.PublicNet.IPv4.IP.String()
+	ipv6 := lb.PublicNet.IPv6.IP.String()
+
+	s.logger.Info("load balancer created",
+		"load_balancer_id", lb.ID,
+		"ipv4", ipv4,
+		"ipv6", ipv6,
+	)
+
+	// Create region in database
+	regionID := uuid.New()
+	region, err := s.db.Queries().CreateRegion(ctx, &database.CreateRegionParams{
+		ID:               regionID,
+		No:               nextNo,
+		Name:             locationName,
+		LoadBalancerIpv4: ipv4,
+		LoadBalancerIpv6: ipv6,
+		LoadBalancerNo:   pgtype.Int4{Int32: int32(lb.ID), Valid: true},
+		FirewallNo:       pgtype.Int4{Valid: false}, // Will be created later if needed
+		NetworkNo:        pgtype.Int4{Valid: false}, // Will be created later if needed
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create region in database: %w", err)
+	}
+
+	s.logger.Info("region created successfully",
+		"region_id", uuid.ToString(region.ID),
+		"region_no", region.No,
+		"name", region.Name,
+		"load_balancer_no", region.LoadBalancerNo.Int32,
+		"ipv4", region.LoadBalancerIpv4,
+		"ipv6", region.LoadBalancerIpv6,
+	)
 
 	return nil
 }
@@ -737,8 +888,86 @@ func (s *Service) reconcileFailedDeployments(ctx context.Context) {
 	}
 }
 
+// reconcileDeletingVMs deletes Hetzner servers for VMs marked for deletion
+func (s *Service) reconcileDeletingVMs(ctx context.Context) {
+	vms, err := s.db.Queries().GetDeletingVMs(ctx)
+	if err != nil {
+		s.logger.Error("failed to get deleting VMs", "error", err)
+		return
+	}
+
+	if len(vms) == 0 {
+		return
+	}
+
+	s.logger.Info("reconciling deleting VMs", "count", len(vms))
+
+	for _, vm := range vms {
+		vmID := uuid.ToString(vm.ID)
+
+		s.logger.Info("deleting Hetzner server",
+			"vm_id", vmID,
+			"vm_no", vm.No,
+		)
+
+		// Delete Hetzner server if client is available
+		if s.hcloudClient != nil {
+			server, _, err := s.hcloudClient.Server.GetByID(ctx, int64(vm.No))
+			if err != nil {
+				s.logger.Error("failed to get Hetzner server for deletion",
+					"vm_id", vmID,
+					"vm_no", vm.No,
+					"error", err,
+				)
+				continue
+			}
+
+			if server != nil {
+				_, _, err := s.hcloudClient.Server.DeleteWithResult(ctx, server)
+				if err != nil {
+					s.logger.Error("failed to delete Hetzner server",
+						"vm_id", vmID,
+						"vm_no", vm.No,
+						"server_id", server.ID,
+						"error", err,
+					)
+					continue
+				}
+
+				s.logger.Info("Hetzner server deleted",
+					"vm_id", vmID,
+					"vm_no", vm.No,
+					"server_id", server.ID,
+				)
+			} else {
+				s.logger.Warn("Hetzner server not found, marking VM as deleted anyway",
+					"vm_id", vmID,
+					"vm_no", vm.No,
+				)
+			}
+		}
+
+		// Mark VM as deleted in database
+		if err := s.db.Queries().MarkVMDeleted(ctx, vm.ID); err != nil {
+			s.logger.Error("failed to mark VM as deleted",
+				"vm_id", vmID,
+				"error", err,
+			)
+			continue
+		}
+
+		s.logger.Info("VM marked as deleted",
+			"vm_id", vmID,
+			"vm_no", vm.No,
+		)
+	}
+}
+
 // reconcileVMs maintains the pool of ready VMs
 func (s *Service) reconcileVMs(ctx context.Context) {
+	// First, delete VMs marked for deletion
+	s.reconcileDeletingVMs(ctx)
+
 	// Get current pool VMs
 	poolVMs, err := s.db.Queries().GetPoolVMs(ctx)
 	if err != nil {
@@ -971,87 +1200,257 @@ func (s *Service) createHetznerServer(ctx context.Context, vm *database.Vm, regi
 // deployContainerToVM deploys a Docker container to a VM
 func (s *Service) deployContainerToVM(ctx context.Context, vm *database.Vm, imageID pgtype.UUID) error {
 	// Get image details from database
-	image, err := s.db.Queries().GetImageByID(ctx, imageID)
+	img, err := s.db.Queries().GetImageByID(ctx, imageID)
 	if err != nil {
 		return fmt.Errorf("failed to get image details: %w", err)
 	}
 
-	// Get the Hetzner server to get IPv6 address
-	server, _, err := s.hcloudClient.Server.GetByID(ctx, int64(vm.No))
-	if err != nil {
-		return fmt.Errorf("failed to get Hetzner server: %w", err)
-	}
-	if server == nil {
-		return fmt.Errorf("hetzner server not found for vm.no=%d", vm.No)
-	}
-
-	// Get IPv6 address for SSH
-	if server.PublicNet.IPv6.IP == nil {
-		return fmt.Errorf("server has no IPv6 address")
-	}
-	ipv6 := server.PublicNet.IPv6.IP.String()
-
-	s.logger.Info("deploying container to VM",
-		"vm_id", uuid.ToString(vm.ID),
-		"vm_no", vm.No,
-		"ipv6", ipv6,
-		"image_id", uuid.ToString(imageID),
-	)
-
-	// Parse private key for SSH
-	signer, err := ssh.ParsePrivateKey(s.sshPrivateKey)
-	if err != nil {
-		return fmt.Errorf("failed to parse private key: %w", err)
-	}
-
-	sshConfig := &ssh.ClientConfig{
-		User:            "root",
-		Auth:            []ssh.AuthMethod{ssh.PublicKeys(signer)},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         10 * time.Second,
-	}
-
-	// Connect via SSH (IPv6)
-	sshAddr := fmt.Sprintf("[%s]:22", ipv6)
-	sshClient, err := ssh.Dial("tcp", sshAddr, sshConfig)
-	if err != nil {
-		return fmt.Errorf("failed to SSH to server: %w", err)
-	}
-	defer sshClient.Close()
-
-	s.logger.Info("SSH connection established", "vm_no", vm.No)
-
-	// Construct full image name from database
-	imageName := fmt.Sprintf("%s/%s:%s", image.Registry, image.Repository, image.Tag)
+	// Construct full image name
+	imageName := fmt.Sprintf("%s/%s:%s", img.Registry, img.Repository, img.Tag)
 	containerName := fmt.Sprintf("zeitwork-deployment-%s", uuid.ToString(vm.ID)[:8])
 
-	s.logger.Info("deploying image",
+	s.logger.Info("deploying container to VM using docker save/load",
+		"vm_id", uuid.ToString(vm.ID),
+		"vm_no", vm.No,
 		"image_name", imageName,
 		"container_name", containerName,
 	)
 
-	// Login to Docker registry (if configured)
-	if s.cfg.DockerRegistryURL != "" && s.cfg.DockerRegistryUsername != "" {
-		loginCmd := fmt.Sprintf("docker login %s -u %s -p '%s'",
-			s.cfg.DockerRegistryURL,
-			s.cfg.DockerRegistryUsername,
-			s.cfg.DockerRegistryPassword,
-		)
-
-		if err := s.executeSSHCommand(sshClient, loginCmd); err != nil {
-			return fmt.Errorf("failed to login to Docker registry: %w", err)
-		}
-
-		s.logger.Info("logged in to Docker registry", "registry", s.cfg.DockerRegistryURL)
+	// 1. Pull image on reconciler (with credentials)
+	if err := s.pullImageLocally(ctx, imageName); err != nil {
+		return fmt.Errorf("failed to pull image locally: %w", err)
 	}
 
+	// 2. Save image to tar file
+	tarPath := fmt.Sprintf("/tmp/zeitwork-image-%s.tar", uuid.ToString(vm.ID)[:8])
+	if err := s.saveImageToTar(ctx, imageName, tarPath); err != nil {
+		return fmt.Errorf("failed to save image to tar: %w", err)
+	}
+	defer os.Remove(tarPath) // Cleanup local tar
+
+	s.logger.Info("image saved to tar",
+		"tar_path", tarPath,
+		"image_name", imageName,
+	)
+
+	// 3. Transfer tar to VM via SCP
+	remoteTarPath := "/tmp/image.tar"
+	if err := s.transferFileToVM(ctx, vm, tarPath, remoteTarPath); err != nil {
+		return fmt.Errorf("failed to transfer image to VM: %w", err)
+	}
+
+	s.logger.Info("image transferred to VM", "vm_no", vm.No)
+
+	// 4. Load image on VM from tar
+	if err := s.loadImageOnVM(ctx, vm, remoteTarPath); err != nil {
+		return fmt.Errorf("failed to load image on VM: %w", err)
+	}
+
+	s.logger.Info("image loaded on VM", "vm_no", vm.No)
+
+	// 5. Run container (no registry login needed!)
+	if err := s.runContainerOnVM(ctx, vm, imageName, containerName); err != nil {
+		return fmt.Errorf("failed to run container on VM: %w", err)
+	}
+
+	s.logger.Info("container running on VM",
+		"vm_id", uuid.ToString(vm.ID),
+		"container_name", containerName,
+		"port", vm.Port,
+	)
+
+	// 6. Update VM with container name
+	if err := s.db.Queries().UpdateVMContainerName(ctx, &database.UpdateVMContainerNameParams{
+		ID:            vm.ID,
+		ContainerName: pgtype.Text{String: containerName, Valid: true},
+	}); err != nil {
+		return fmt.Errorf("failed to update VM with container name: %w", err)
+	}
+
+	// 7. Mark VM as running
+	if err := s.db.Queries().MarkVMRunning(ctx, vm.ID); err != nil {
+		return fmt.Errorf("failed to mark VM as running: %w", err)
+	}
+
+	s.logger.Info("deployment complete, VM marked as running",
+		"vm_id", uuid.ToString(vm.ID),
+		"container_name", containerName,
+	)
+
+	return nil
+}
+
+// pullImageLocally pulls a Docker image on the reconciler with registry credentials
+func (s *Service) pullImageLocally(ctx context.Context, imageName string) error {
+	if s.dockerClient == nil {
+		return fmt.Errorf("docker client not available")
+	}
+
+	s.logger.Info("pulling image locally", "image", imageName)
+
+	// Authenticate to registry
+	authConfig := registry.AuthConfig{
+		Username: s.cfg.DockerRegistryUsername,
+		Password: s.cfg.DockerRegistryPassword,
+	}
+	encodedAuth, err := json.Marshal(authConfig)
+	if err != nil {
+		return fmt.Errorf("failed to encode auth: %w", err)
+	}
+	authStr := base64.URLEncoding.EncodeToString(encodedAuth)
+
 	// Pull image
-	pullCmd := fmt.Sprintf("docker pull %s", imageName)
-	if err := s.executeSSHCommand(sshClient, pullCmd); err != nil {
+	reader, err := s.dockerClient.ImagePull(ctx, imageName, image.PullOptions{
+		RegistryAuth: authStr,
+	})
+	if err != nil {
 		return fmt.Errorf("failed to pull image: %w", err)
+	}
+	defer reader.Close()
+
+	// Wait for pull to complete (read all output)
+	if _, err := io.Copy(io.Discard, reader); err != nil {
+		return fmt.Errorf("failed to read pull output: %w", err)
 	}
 
 	s.logger.Info("image pulled successfully", "image", imageName)
+	return nil
+}
+
+// saveImageToTar saves a Docker image to a tar file
+func (s *Service) saveImageToTar(ctx context.Context, imageName, tarPath string) error {
+	if s.dockerClient == nil {
+		return fmt.Errorf("docker client not available")
+	}
+
+	s.logger.Debug("saving image to tar", "image", imageName, "tar_path", tarPath)
+
+	reader, err := s.dockerClient.ImageSave(ctx, []string{imageName})
+	if err != nil {
+		return fmt.Errorf("failed to save image: %w", err)
+	}
+	defer reader.Close()
+
+	// Create tar file
+	file, err := os.Create(tarPath)
+	if err != nil {
+		return fmt.Errorf("failed to create tar file: %w", err)
+	}
+	defer file.Close()
+
+	// Copy image data to file
+	written, err := io.Copy(file, reader)
+	if err != nil {
+		return fmt.Errorf("failed to write tar file: %w", err)
+	}
+
+	s.logger.Debug("image saved to tar",
+		"tar_path", tarPath,
+		"size_bytes", written,
+	)
+
+	return nil
+}
+
+// transferFileToVM transfers a file to a VM via SCP over SSH
+func (s *Service) transferFileToVM(ctx context.Context, vm *database.Vm, localPath, remotePath string) error {
+	// Get SSH client
+	sshClient, err := s.getSSHClient(ctx, vm)
+	if err != nil {
+		return fmt.Errorf("failed to get SSH client: %w", err)
+	}
+	defer sshClient.Close()
+
+	// Open local file
+	localFile, err := os.Open(localPath)
+	if err != nil {
+		return fmt.Errorf("failed to open local file: %w", err)
+	}
+	defer localFile.Close()
+
+	// Get file size for logging
+	stat, _ := localFile.Stat()
+	fileSize := stat.Size()
+
+	s.logger.Info("transferring file to VM",
+		"vm_no", vm.No,
+		"local_path", localPath,
+		"remote_path", remotePath,
+		"size_bytes", fileSize,
+	)
+
+	// Create SSH session for transfer
+	session, err := sshClient.NewSession()
+	if err != nil {
+		return fmt.Errorf("failed to create SSH session: %w", err)
+	}
+	defer session.Close()
+
+	// Pipe file content to remote cat command
+	stdin, err := session.StdinPipe()
+	if err != nil {
+		return fmt.Errorf("failed to get stdin pipe: %w", err)
+	}
+
+	// Start remote cat command
+	cmd := fmt.Sprintf("cat > %s", remotePath)
+	if err := session.Start(cmd); err != nil {
+		return fmt.Errorf("failed to start remote command: %w", err)
+	}
+
+	// Copy file to remote
+	if _, err := io.Copy(stdin, localFile); err != nil {
+		return fmt.Errorf("failed to copy file: %w", err)
+	}
+	stdin.Close()
+
+	// Wait for command to finish
+	if err := session.Wait(); err != nil {
+		return fmt.Errorf("failed to complete file transfer: %w", err)
+	}
+
+	s.logger.Info("file transferred successfully",
+		"vm_no", vm.No,
+		"size_bytes", fileSize,
+	)
+
+	return nil
+}
+
+// loadImageOnVM loads a Docker image from tar file on the VM
+func (s *Service) loadImageOnVM(ctx context.Context, vm *database.Vm, remoteTarPath string) error {
+	sshClient, err := s.getSSHClient(ctx, vm)
+	if err != nil {
+		return err
+	}
+	defer sshClient.Close()
+
+	s.logger.Info("loading image on VM", "vm_no", vm.No, "tar_path", remoteTarPath)
+
+	// Load image and remove tar file
+	loadCmd := fmt.Sprintf("docker load -i %s && rm %s", remoteTarPath, remoteTarPath)
+	if err := s.executeSSHCommand(sshClient, loadCmd); err != nil {
+		return err
+	}
+
+	s.logger.Info("image loaded successfully on VM", "vm_no", vm.No)
+	return nil
+}
+
+// runContainerOnVM runs a Docker container on the VM
+func (s *Service) runContainerOnVM(ctx context.Context, vm *database.Vm, imageName, containerName string) error {
+	sshClient, err := s.getSSHClient(ctx, vm)
+	if err != nil {
+		return err
+	}
+	defer sshClient.Close()
+
+	s.logger.Info("running container on VM",
+		"vm_no", vm.No,
+		"image", imageName,
+		"container", containerName,
+		"port", vm.Port,
+	)
 
 	// Run container with port mapping
 	runCmd := fmt.Sprintf("docker run -d -p %d:8080 --name %s --restart unless-stopped %s",
@@ -1061,62 +1460,33 @@ func (s *Service) deployContainerToVM(ctx context.Context, vm *database.Vm, imag
 	)
 
 	if err := s.executeSSHCommand(sshClient, runCmd); err != nil {
-		return fmt.Errorf("failed to run container: %w", err)
+		return err
 	}
 
-	s.logger.Info("container deployed successfully",
-		"vm_id", uuid.ToString(vm.ID),
-		"container_name", containerName,
-		"port", vm.Port,
-	)
-
-	// Update VM with container name
-	if err := s.db.Queries().UpdateVMContainerName(ctx, &database.UpdateVMContainerNameParams{
-		ID:            vm.ID,
-		ContainerName: pgtype.Text{String: containerName, Valid: true},
-	}); err != nil {
-		return fmt.Errorf("failed to update VM with container name: %w", err)
-	}
-
-	// Mark VM as running
-	if err := s.db.Queries().MarkVMRunning(ctx, vm.ID); err != nil {
-		return fmt.Errorf("failed to mark VM as running: %w", err)
-	}
-
-	s.logger.Info("VM marked as running",
-		"vm_id", uuid.ToString(vm.ID),
-		"container_name", containerName,
-	)
-
+	s.logger.Info("container started successfully", "vm_no", vm.No, "container", containerName)
 	return nil
 }
 
-// stopAndRemoveContainer stops and removes a Docker container from a VM
-func (s *Service) stopAndRemoveContainer(ctx context.Context, vm *database.Vm) error {
-	// Get the Hetzner server to get IPv6 address
+// getSSHClient creates an SSH client connection to a VM
+func (s *Service) getSSHClient(ctx context.Context, vm *database.Vm) (*ssh.Client, error) {
+	// Get server for IPv6
 	server, _, err := s.hcloudClient.Server.GetByID(ctx, int64(vm.No))
 	if err != nil {
-		return fmt.Errorf("failed to get Hetzner server: %w", err)
+		return nil, fmt.Errorf("failed to get Hetzner server: %w", err)
 	}
 	if server == nil {
-		return fmt.Errorf("hetzner server not found for vm.no=%d", vm.No)
+		return nil, fmt.Errorf("hetzner server not found for vm.no=%d", vm.No)
+	}
+	if server.PublicNet.IPv6.IP == nil {
+		return nil, fmt.Errorf("server has no IPv6 address")
 	}
 
-	// Get IPv6 address for SSH
-	if server.PublicNet.IPv6.IP == nil {
-		return fmt.Errorf("server has no IPv6 address")
-	}
 	ipv6 := server.PublicNet.IPv6.IP.String()
 
-	s.logger.Info("stopping container on VM",
-		"vm_id", uuid.ToString(vm.ID),
-		"container_name", vm.ContainerName.String,
-	)
-
-	// Parse private key for SSH
+	// Parse SSH key
 	signer, err := ssh.ParsePrivateKey(s.sshPrivateKey)
 	if err != nil {
-		return fmt.Errorf("failed to parse private key: %w", err)
+		return nil, fmt.Errorf("failed to parse private key: %w", err)
 	}
 
 	sshConfig := &ssh.ClientConfig{
@@ -1126,23 +1496,33 @@ func (s *Service) stopAndRemoveContainer(ctx context.Context, vm *database.Vm) e
 		Timeout:         10 * time.Second,
 	}
 
-	// Connect via SSH (IPv6)
+	// Connect via IPv6
 	sshAddr := fmt.Sprintf("[%s]:22", ipv6)
-	sshClient, err := ssh.Dial("tcp", sshAddr, sshConfig)
+	return ssh.Dial("tcp", sshAddr, sshConfig)
+}
+
+// stopAndRemoveContainer stops and removes a Docker container from a VM
+func (s *Service) stopAndRemoveContainer(ctx context.Context, vm *database.Vm) error {
+	sshClient, err := s.getSSHClient(ctx, vm)
 	if err != nil {
-		return fmt.Errorf("failed to SSH to server: %w", err)
+		return fmt.Errorf("failed to get SSH client: %w", err)
 	}
 	defer sshClient.Close()
 
-	// Stop and remove container
 	containerName := vm.ContainerName.String
-	stopCmd := fmt.Sprintf("docker stop %s", containerName)
-	removeCmd := fmt.Sprintf("docker rm %s", containerName)
 
-	// Try to stop (ignore errors if already stopped)
+	s.logger.Info("stopping and removing container",
+		"vm_id", uuid.ToString(vm.ID),
+		"vm_no", vm.No,
+		"container_name", containerName,
+	)
+
+	// Stop container (ignore errors if already stopped)
+	stopCmd := fmt.Sprintf("docker stop %s", containerName)
 	_ = s.executeSSHCommand(sshClient, stopCmd)
 
 	// Remove container
+	removeCmd := fmt.Sprintf("docker rm %s", containerName)
 	if err := s.executeSSHCommand(sshClient, removeCmd); err != nil {
 		// Log but don't fail - container might already be removed
 		s.logger.Warn("failed to remove container (may already be removed)",
@@ -1177,70 +1557,51 @@ func (s *Service) executeSSHCommand(sshClient *ssh.Client, command string) error
 
 // initializeSSHKeys ensures SSH keys are set up in Hetzner
 func (s *Service) initializeSSHKeys(ctx context.Context) error {
-	// Check if SSH key exists in Hetzner
-	sshKey, _, err := s.hcloudClient.SSHKey.GetByName(ctx, s.cfg.HetznerSSHKeyName)
+	// Decode private key from base64
+	privKeyBytes, err := base64.StdEncoding.DecodeString(s.cfg.SSHPrivateKey)
 	if err != nil {
-		return fmt.Errorf("failed to get SSH key: %w", err)
+		return fmt.Errorf("failed to decode private key: %w", err)
+	}
+	s.sshPrivateKey = privKeyBytes
+	s.sshPublicKey = s.cfg.SSHPublicKey
+
+	s.logger.Info("SSH keys loaded from environment variables")
+
+	// Check if key exists in Hetzner by searching for matching public key
+	allKeys, err := s.hcloudClient.SSHKey.All(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to list SSH keys in Hetzner: %w", err)
 	}
 
-	// If key doesn't exist, generate and create it
-	if sshKey == nil {
-		s.logger.Info("SSH key not found in Hetzner, generating new key pair")
+	var existingKey *hcloud.SSHKey
+	for _, key := range allKeys {
+		if key.PublicKey == s.cfg.SSHPublicKey {
+			existingKey = key
+			break
+		}
+	}
 
-		pubKey, privKey, err := generateSSHKeyPair()
-		if err != nil {
-			return fmt.Errorf("failed to generate SSH key pair: %w", err)
+	// If key doesn't exist in Hetzner, create it with provided public key
+	if existingKey == nil {
+		keyName := s.cfg.HetznerSSHKeyName
+		if keyName == "" {
+			keyName = "zeitwork-reconciler-key"
 		}
 
+		s.logger.Info("SSH key not found in Hetzner, uploading", "key_name", keyName)
+
 		_, _, err = s.hcloudClient.SSHKey.Create(ctx, hcloud.SSHKeyCreateOpts{
-			Name:      s.cfg.HetznerSSHKeyName,
-			PublicKey: pubKey,
+			Name:      keyName,
+			PublicKey: s.cfg.SSHPublicKey,
 		})
 		if err != nil {
 			return fmt.Errorf("failed to create SSH key in Hetzner: %w", err)
 		}
 
-		s.sshPublicKey = pubKey
-		s.sshPrivateKey = privKey
-
-		s.logger.Info("SSH key created in Hetzner", "key_name", s.cfg.HetznerSSHKeyName)
+		s.logger.Info("SSH key uploaded to Hetzner successfully", "key_name", keyName)
 	} else {
-		// TODO: Load private key from secure storage
-		// For now, warn that the key exists but we don't have the private key
-		s.logger.Warn("SSH key exists in Hetzner but private key not available - VM operations may fail")
+		s.logger.Info("SSH key already exists in Hetzner", "key_name", existingKey.Name)
 	}
 
 	return nil
-}
-
-// generateSSHKeyPair generates an ED25519 SSH key pair
-func generateSSHKeyPair() (publicKey string, privateKey []byte, err error) {
-	// Generate ED25519 key pair
-	pubKey, privKey, err := ed25519.GenerateKey(rand.Reader)
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to generate key pair: %w", err)
-	}
-
-	// Convert to SSH format
-	sshPublicKey, err := ssh.NewPublicKey(pubKey)
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to create SSH public key: %w", err)
-	}
-
-	// Format public key
-	publicKeyStr := string(ssh.MarshalAuthorizedKey(sshPublicKey))
-
-	// Marshal private key to OpenSSH format
-	privateKeyBlock, err := ssh.MarshalPrivateKey(privKey, "")
-	if err != nil {
-		return "", nil, fmt.Errorf("failed to marshal private key: %w", err)
-	}
-
-	// Note: For production, store private key securely (database with encryption, secrets manager, etc.)
-	// Encode the PEM block to bytes
-	privateKeyPEM := ssh.MarshalAuthorizedKey(sshPublicKey) // Simplified for now
-	// In production: use proper PEM encoding: pem.EncodeToMemory(privateKeyBlock)
-	_ = privateKeyBlock // Avoid unused variable
-
-	return publicKeyStr, privateKeyPEM, nil
 }

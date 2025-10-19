@@ -100,6 +100,63 @@ func (q *Queries) CreateBuild(ctx context.Context, arg *CreateBuildParams) (*Bui
 	return &i, err
 }
 
+const createRegion = `-- name: CreateRegion :one
+INSERT INTO regions (
+    id,
+    no,
+    name,
+    load_balancer_ipv4,
+    load_balancer_ipv6,
+    load_balancer_no,
+    firewall_no,
+    network_no,
+    created_at,
+    updated_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+RETURNING id, no, name, load_balancer_ipv4, load_balancer_ipv6, load_balancer_no, firewall_no, network_no, created_at, updated_at, deleted_at
+`
+
+type CreateRegionParams struct {
+	ID               pgtype.UUID `json:"id"`
+	No               int32       `json:"no"`
+	Name             string      `json:"name"`
+	LoadBalancerIpv4 string      `json:"load_balancer_ipv4"`
+	LoadBalancerIpv6 string      `json:"load_balancer_ipv6"`
+	LoadBalancerNo   pgtype.Int4 `json:"load_balancer_no"`
+	FirewallNo       pgtype.Int4 `json:"firewall_no"`
+	NetworkNo        pgtype.Int4 `json:"network_no"`
+}
+
+// Create a new region
+func (q *Queries) CreateRegion(ctx context.Context, arg *CreateRegionParams) (*Region, error) {
+	row := q.db.QueryRow(ctx, createRegion,
+		arg.ID,
+		arg.No,
+		arg.Name,
+		arg.LoadBalancerIpv4,
+		arg.LoadBalancerIpv6,
+		arg.LoadBalancerNo,
+		arg.FirewallNo,
+		arg.NetworkNo,
+	)
+	var i Region
+	err := row.Scan(
+		&i.ID,
+		&i.No,
+		&i.Name,
+		&i.LoadBalancerIpv4,
+		&i.LoadBalancerIpv6,
+		&i.LoadBalancerNo,
+		&i.FirewallNo,
+		&i.NetworkNo,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return &i, err
+}
+
 const createVM = `-- name: CreateVM :one
 INSERT INTO vms (
     id,
@@ -118,7 +175,7 @@ RETURNING id, no, status, private_ip, region_id, image_id, port, server_name, co
 type CreateVMParams struct {
 	ID        pgtype.UUID `json:"id"`
 	No        int32       `json:"no"`
-	Status    interface{} `json:"status"`
+	Status    VmStatuses  `json:"status"`
 	PrivateIp string      `json:"private_ip"`
 	RegionID  pgtype.UUID `json:"region_id"`
 	Port      int32       `json:"port"`
@@ -303,6 +360,48 @@ func (q *Queries) GetBuildingDeploymentsWithoutVM(ctx context.Context) ([]*Deplo
 	return items, nil
 }
 
+const getDeletingVMs = `-- name: GetDeletingVMs :many
+SELECT id, no, status, private_ip, region_id, image_id, port, server_name, container_name, created_at, updated_at, deleted_at
+FROM vms
+WHERE status = 'deleting'
+  AND deleted_at IS NULL
+ORDER BY updated_at ASC
+`
+
+// Get VMs marked for deletion
+func (q *Queries) GetDeletingVMs(ctx context.Context) ([]*Vm, error) {
+	rows, err := q.db.Query(ctx, getDeletingVMs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*Vm
+	for rows.Next() {
+		var i Vm
+		if err := rows.Scan(
+			&i.ID,
+			&i.No,
+			&i.Status,
+			&i.PrivateIp,
+			&i.RegionID,
+			&i.ImageID,
+			&i.Port,
+			&i.ServerName,
+			&i.ContainerName,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getFailedDeployments = `-- name: GetFailedDeployments :many
 SELECT id, status, deployment_id, github_commit, project_id, environment_id, build_id, image_id, vm_id, organisation_id, created_at, updated_at, deleted_at
 FROM deployments
@@ -411,6 +510,19 @@ func (q *Queries) GetInactiveDeployments(ctx context.Context) ([]*Deployment, er
 		return nil, err
 	}
 	return items, nil
+}
+
+const getNextRegionNumber = `-- name: GetNextRegionNumber :one
+SELECT COALESCE(MAX(no), 0) + 1 as next_no
+FROM regions
+`
+
+// Get the next available region number
+func (q *Queries) GetNextRegionNumber(ctx context.Context) (int32, error) {
+	row := q.db.QueryRow(ctx, getNextRegionNumber)
+	var next_no int32
+	err := row.Scan(&next_no)
+	return next_no, err
 }
 
 const getNextVMNumber = `-- name: GetNextVMNumber :one
@@ -683,7 +795,7 @@ GROUP BY region_id, status
 
 type GetVMsByRegionRow struct {
 	RegionID pgtype.UUID `json:"region_id"`
-	Status   interface{} `json:"status"`
+	Status   VmStatuses  `json:"status"`
 	Count    int64       `json:"count"`
 }
 
@@ -757,6 +869,18 @@ WHERE id = $1
 // Mark a domain as verified
 func (q *Queries) MarkDomainVerified(ctx context.Context, id pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, markDomainVerified, id)
+	return err
+}
+
+const markVMDeleted = `-- name: MarkVMDeleted :exec
+UPDATE vms
+SET deleted_at = NOW()
+WHERE id = $1
+`
+
+// Mark VM as deleted
+func (q *Queries) MarkVMDeleted(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, markVMDeleted, id)
 	return err
 }
 

@@ -26,6 +26,10 @@ coverage.html
 /cmd/load-balancer/load-balancer
 /cmd/node-agent/node-agent
 /cmd/operator/operator
+zeitwork-cli
+reconciler
+builder
+edgeproxy
 
 # Node.js / TypeScript
 node_modules/

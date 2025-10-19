@@ -102,6 +102,56 @@ func (ns NullDeploymentStatuses) Value() (driver.Value, error) {
 	return string(ns.DeploymentStatuses), nil
 }
 
+type VmStatuses string
+
+const (
+	VmStatusesRunning      VmStatuses = "running"
+	VmStatusesPooling      VmStatuses = "pooling"
+	VmStatusesInitializing VmStatuses = "initializing"
+	VmStatusesStarting     VmStatuses = "starting"
+	VmStatusesStopping     VmStatuses = "stopping"
+	VmStatusesOff          VmStatuses = "off"
+	VmStatusesDeleting     VmStatuses = "deleting"
+	VmStatusesMigrating    VmStatuses = "migrating"
+	VmStatusesRebuilding   VmStatuses = "rebuilding"
+	VmStatusesUnknown      VmStatuses = "unknown"
+)
+
+func (e *VmStatuses) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = VmStatuses(s)
+	case string:
+		*e = VmStatuses(s)
+	default:
+		return fmt.Errorf("unsupported scan type for VmStatuses: %T", src)
+	}
+	return nil
+}
+
+type NullVmStatuses struct {
+	VmStatuses VmStatuses `json:"vm_statuses"`
+	Valid      bool       `json:"valid"` // Valid is true if VmStatuses is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullVmStatuses) Scan(value interface{}) error {
+	if value == nil {
+		ns.VmStatuses, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.VmStatuses.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullVmStatuses) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.VmStatuses), nil
+}
+
 type Build struct {
 	ID             pgtype.UUID        `json:"id"`
 	Status         BuildStatuses      `json:"status"`
@@ -298,7 +348,7 @@ type User struct {
 type Vm struct {
 	ID            pgtype.UUID        `json:"id"`
 	No            int32              `json:"no"`
-	Status        interface{}        `json:"status"`
+	Status        VmStatuses         `json:"status"`
 	PrivateIp     string             `json:"private_ip"`
 	RegionID      pgtype.UUID        `json:"region_id"`
 	ImageID       pgtype.UUID        `json:"image_id"`

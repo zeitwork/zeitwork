@@ -23,11 +23,15 @@ type Config struct {
 	// Hetzner configuration
 	HetznerToken           string `env:"RECONCILER_HETZNER_TOKEN"`
 	HetznerSSHKeyName      string `env:"RECONCILER_HETZNER_SSH_KEY_NAME" envDefault:"zeitwork-reconciler-key"`
-	HetznerServerType      string `env:"RECONCILER_HETZNER_SERVER_TYPE" envDefault:"cx22"`
+	HetznerServerType      string `env:"RECONCILER_HETZNER_SERVER_TYPE" envDefault:"cx23"`
 	HetznerImage           string `env:"RECONCILER_HETZNER_IMAGE" envDefault:"ubuntu-24.04"`
 	DockerRegistryURL      string `env:"RECONCILER_DOCKER_REGISTRY_URL"`
 	DockerRegistryUsername string `env:"RECONCILER_DOCKER_REGISTRY_USERNAME"`
 	DockerRegistryPassword string `env:"RECONCILER_DOCKER_REGISTRY_PASSWORD"`
+
+	// SSH configuration
+	SSHPublicKey  string `env:"RECONCILER_SSH_PUBLIC_KEY,required"`
+	SSHPrivateKey string `env:"RECONCILER_SSH_PRIVATE_KEY,required"`
 }
 
 func main() {
@@ -80,6 +84,8 @@ func main() {
 		DockerRegistryURL:      cfg.DockerRegistryURL,
 		DockerRegistryUsername: cfg.DockerRegistryUsername,
 		DockerRegistryPassword: cfg.DockerRegistryPassword,
+		SSHPublicKey:           cfg.SSHPublicKey,
+		SSHPrivateKey:          cfg.SSHPrivateKey,
 	}, logger)
 	if err != nil {
 		logger.Error("failed to create reconciler service", "error", err)

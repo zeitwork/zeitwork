@@ -174,6 +174,28 @@ FROM regions
 WHERE deleted_at IS NULL
 ORDER BY no ASC;
 
+-- name: GetNextRegionNumber :one
+-- Get the next available region number
+SELECT COALESCE(MAX(no), 0) + 1 as next_no
+FROM regions;
+
+-- name: CreateRegion :one
+-- Create a new region
+INSERT INTO regions (
+    id,
+    no,
+    name,
+    load_balancer_ipv4,
+    load_balancer_ipv6,
+    load_balancer_no,
+    firewall_no,
+    network_no,
+    created_at,
+    updated_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+RETURNING *;
+
 -- name: CreateVM :one
 -- Create a new VM
 INSERT INTO vms (
@@ -259,5 +281,19 @@ WHERE id = $1
 UPDATE vms
 SET status = 'running',
     updated_at = NOW()
+WHERE id = $1;
+
+-- name: GetDeletingVMs :many
+-- Get VMs marked for deletion
+SELECT *
+FROM vms
+WHERE status = 'deleting'
+  AND deleted_at IS NULL
+ORDER BY updated_at ASC;
+
+-- name: MarkVMDeleted :exec
+-- Mark VM as deleted
+UPDATE vms
+SET deleted_at = NOW()
 WHERE id = $1;
 

@@ -7,4 +7,4 @@ source .env
 set +a
 
 # Run the Go application
-go run main.go
+go run cmd/reconciler/reconciler.go
