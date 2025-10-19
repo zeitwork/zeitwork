@@ -5,29 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1759399666218,
-      "tag": "0000_groovy_slipstream",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1759426339697,
-      "tag": "0001_worried_leo",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1760294799067,
-      "tag": "0002_cool_slapstick",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1760449544935,
-      "tag": "0003_motionless_shooting_star",
+      "when": 1760868715194,
+      "tag": "0000_aspiring_may_parker",
       "breakpoints": true
     }
   ]

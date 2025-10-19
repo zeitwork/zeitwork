@@ -1,2 +1,0 @@
-ALTER TABLE "image_builds" ADD COLUMN "github_installation_id" uuid;--> statement-breakpoint
-ALTER TABLE "image_builds" ADD CONSTRAINT "image_builds_github_installation_id_github_installations_id_fk" FOREIGN KEY ("github_installation_id") REFERENCES "public"."github_installations"("id") ON DELETE no action ON UPDATE no action;

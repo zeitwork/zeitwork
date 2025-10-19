@@ -1,89 +1,99 @@
-CREATE TYPE "public"."image_build_status" AS ENUM('pending', 'building', 'completed', 'failed');--> statement-breakpoint
-CREATE TYPE "public"."instance_statuses" AS ENUM('pending', 'starting', 'running', 'stopping', 'stopped', 'failed', 'terminated');--> statement-breakpoint
-CREATE TYPE "public"."deployment_statuses" AS ENUM('pending', 'building', 'deploying', 'active', 'inactive', 'failed');--> statement-breakpoint
-CREATE TABLE "image_builds" (
-	"id" uuid PRIMARY KEY NOT NULL,
-	"status" "image_build_status" DEFAULT 'pending' NOT NULL,
-	"github_repository" text NOT NULL,
-	"github_commit" text NOT NULL,
-	"image_id" uuid,
-	"started_at" timestamp with time zone,
-	"completed_at" timestamp with time zone,
-	"failed_at" timestamp with time zone,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"deleted_at" timestamp with time zone
-);
---> statement-breakpoint
+CREATE TYPE "public"."build_statuses" AS ENUM('queued', 'initializing', 'building', 'ready', 'canceled', 'error');--> statement-breakpoint
+CREATE TYPE "public"."deployment_statuses" AS ENUM('queued', 'building', 'ready', 'inactive', 'failed');--> statement-breakpoint
 CREATE TABLE "images" (
 	"id" uuid PRIMARY KEY NOT NULL,
-	"name" text NOT NULL,
-	"size" integer,
-	"hash" text NOT NULL,
+	"registry" text NOT NULL,
+	"repository" text NOT NULL,
+	"tag" text NOT NULL,
+	"digest" text NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"deleted_at" timestamp with time zone
-);
---> statement-breakpoint
-CREATE TABLE "instances" (
-	"id" uuid PRIMARY KEY NOT NULL,
-	"region_id" uuid NOT NULL,
-	"node_id" uuid NOT NULL,
-	"image_id" uuid NOT NULL,
-	"state" "instance_statuses" DEFAULT 'pending' NOT NULL,
-	"vcpus" integer NOT NULL,
-	"memory" integer NOT NULL,
-	"default_port" integer NOT NULL,
-	"ip_address" text NOT NULL,
-	"environment_variables" text NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"deleted_at" timestamp with time zone
-);
---> statement-breakpoint
-CREATE TABLE "nodes" (
-	"id" uuid PRIMARY KEY NOT NULL,
-	"region_id" uuid NOT NULL,
-	"hostname" text NOT NULL,
-	"ip_address" text NOT NULL,
-	"state" text NOT NULL,
-	"resources" jsonb NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"deleted_at" timestamp with time zone,
-	CONSTRAINT "nodes_ipAddress_unique" UNIQUE("ip_address")
 );
 --> statement-breakpoint
 CREATE TABLE "regions" (
 	"id" uuid PRIMARY KEY NOT NULL,
+	"no" serial NOT NULL,
 	"name" text NOT NULL,
-	"code" text NOT NULL,
-	"country" text NOT NULL,
+	"load_balancer_ipv4" text NOT NULL,
+	"load_balancer_ipv6" text NOT NULL,
+	"load_balancer_no" integer,
+	"firewall_no" integer,
+	"network_no" integer,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"deleted_at" timestamp with time zone,
-	CONSTRAINT "regions_code_unique" UNIQUE("code")
+	CONSTRAINT "regions_no_unique" UNIQUE("no"),
+	CONSTRAINT "regions_name_unique" UNIQUE("name")
 );
 --> statement-breakpoint
-CREATE TABLE "deployment_instances" (
+CREATE TABLE "vms" (
 	"id" uuid PRIMARY KEY NOT NULL,
-	"deployment_id" uuid NOT NULL,
-	"instance_id" uuid NOT NULL,
+	"no" integer NOT NULL,
+	"status" "vm_statuses" DEFAULT 'unknown' NOT NULL,
+	"private_ip" text NOT NULL,
+	"region_id" uuid NOT NULL,
+	"image_id" uuid,
+	"port" integer NOT NULL,
+	"server_name" text,
+	"container_name" text,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"deleted_at" timestamp with time zone,
+	CONSTRAINT "vms_no_unique" UNIQUE("no")
+);
+--> statement-breakpoint
+CREATE TABLE "build_logs" (
+	"id" uuid PRIMARY KEY NOT NULL,
+	"build_id" uuid NOT NULL,
+	"message" text NOT NULL,
+	"level" text,
+	"organisation_id" uuid NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "builds" (
+	"id" uuid PRIMARY KEY NOT NULL,
+	"status" "build_statuses" DEFAULT 'queued' NOT NULL,
+	"project_id" uuid NOT NULL,
+	"image_id" uuid,
+	"vm_id" uuid,
 	"organisation_id" uuid NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"deleted_at" timestamp with time zone
 );
 --> statement-breakpoint
+CREATE TABLE "certmagic_data" (
+	"key" text PRIMARY KEY NOT NULL,
+	"value" text NOT NULL,
+	"modified" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "certmagic_locks" (
+	"key" text PRIMARY KEY NOT NULL,
+	"expires" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "deployment_logs" (
+	"id" uuid PRIMARY KEY NOT NULL,
+	"deployment_id" uuid NOT NULL,
+	"message" text NOT NULL,
+	"level" text,
+	"organisation_id" uuid NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
 CREATE TABLE "deployments" (
 	"id" uuid PRIMARY KEY NOT NULL,
+	"status" "deployment_statuses" DEFAULT 'queued' NOT NULL,
 	"deployment_id" text NOT NULL,
-	"status" "deployment_statuses" DEFAULT 'pending' NOT NULL,
 	"github_commit" text NOT NULL,
 	"project_id" uuid NOT NULL,
 	"environment_id" uuid NOT NULL,
+	"build_id" uuid,
 	"image_id" uuid,
-	"image_build_id" uuid,
+	"vm_id" uuid,
 	"organisation_id" uuid NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -94,10 +104,9 @@ CREATE TABLE "deployments" (
 CREATE TABLE "domains" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"name" text NOT NULL,
+	"deployment_id" uuid,
 	"verification_token" text,
 	"verified_at" timestamp with time zone,
-	"deployment_id" uuid,
-	"internal" boolean DEFAULT false NOT NULL,
 	"organisation_id" uuid NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
@@ -153,6 +162,9 @@ CREATE TABLE "organisations" (
 	"id" uuid PRIMARY KEY NOT NULL,
 	"name" text NOT NULL,
 	"slug" text NOT NULL,
+	"stripe_customer_id" text,
+	"stripe_subscription_id" text,
+	"stripe_subscription_status" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	"deleted_at" timestamp with time zone,
@@ -207,27 +219,21 @@ CREATE TABLE "users" (
 	CONSTRAINT "users_email_unique" UNIQUE("email")
 );
 --> statement-breakpoint
-CREATE TABLE "waitlist" (
-	"id" uuid PRIMARY KEY NOT NULL,
-	"email" text NOT NULL,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"deleted_at" timestamp with time zone,
-	CONSTRAINT "waitlist_email_unique" UNIQUE("email")
-);
---> statement-breakpoint
-ALTER TABLE "image_builds" ADD CONSTRAINT "image_builds_image_id_images_id_fk" FOREIGN KEY ("image_id") REFERENCES "public"."images"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "instances" ADD CONSTRAINT "instances_region_id_regions_id_fk" FOREIGN KEY ("region_id") REFERENCES "public"."regions"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "instances" ADD CONSTRAINT "instances_node_id_nodes_id_fk" FOREIGN KEY ("node_id") REFERENCES "public"."nodes"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "instances" ADD CONSTRAINT "instances_image_id_images_id_fk" FOREIGN KEY ("image_id") REFERENCES "public"."images"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "nodes" ADD CONSTRAINT "nodes_region_id_regions_id_fk" FOREIGN KEY ("region_id") REFERENCES "public"."regions"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "deployment_instances" ADD CONSTRAINT "deployment_instances_deployment_id_deployments_id_fk" FOREIGN KEY ("deployment_id") REFERENCES "public"."deployments"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "deployment_instances" ADD CONSTRAINT "deployment_instances_instance_id_instances_id_fk" FOREIGN KEY ("instance_id") REFERENCES "public"."instances"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "deployment_instances" ADD CONSTRAINT "deployment_instances_organisation_id_organisations_id_fk" FOREIGN KEY ("organisation_id") REFERENCES "public"."organisations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "vms" ADD CONSTRAINT "vms_region_id_regions_id_fk" FOREIGN KEY ("region_id") REFERENCES "public"."regions"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "vms" ADD CONSTRAINT "vms_image_id_images_id_fk" FOREIGN KEY ("image_id") REFERENCES "public"."images"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "build_logs" ADD CONSTRAINT "build_logs_build_id_builds_id_fk" FOREIGN KEY ("build_id") REFERENCES "public"."builds"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "build_logs" ADD CONSTRAINT "build_logs_organisation_id_organisations_id_fk" FOREIGN KEY ("organisation_id") REFERENCES "public"."organisations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "builds" ADD CONSTRAINT "builds_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "builds" ADD CONSTRAINT "builds_image_id_images_id_fk" FOREIGN KEY ("image_id") REFERENCES "public"."images"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "builds" ADD CONSTRAINT "builds_vm_id_vms_id_fk" FOREIGN KEY ("vm_id") REFERENCES "public"."vms"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "builds" ADD CONSTRAINT "builds_organisation_id_organisations_id_fk" FOREIGN KEY ("organisation_id") REFERENCES "public"."organisations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "deployment_logs" ADD CONSTRAINT "deployment_logs_deployment_id_deployments_id_fk" FOREIGN KEY ("deployment_id") REFERENCES "public"."deployments"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "deployment_logs" ADD CONSTRAINT "deployment_logs_organisation_id_organisations_id_fk" FOREIGN KEY ("organisation_id") REFERENCES "public"."organisations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "deployments" ADD CONSTRAINT "deployments_project_id_projects_id_fk" FOREIGN KEY ("project_id") REFERENCES "public"."projects"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "deployments" ADD CONSTRAINT "deployments_environment_id_project_environments_id_fk" FOREIGN KEY ("environment_id") REFERENCES "public"."project_environments"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "deployments" ADD CONSTRAINT "deployments_build_id_builds_id_fk" FOREIGN KEY ("build_id") REFERENCES "public"."builds"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "deployments" ADD CONSTRAINT "deployments_image_id_images_id_fk" FOREIGN KEY ("image_id") REFERENCES "public"."images"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "deployments" ADD CONSTRAINT "deployments_image_build_id_image_builds_id_fk" FOREIGN KEY ("image_build_id") REFERENCES "public"."image_builds"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "deployments" ADD CONSTRAINT "deployments_vm_id_vms_id_fk" FOREIGN KEY ("vm_id") REFERENCES "public"."vms"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "deployments" ADD CONSTRAINT "deployments_organisation_id_organisations_id_fk" FOREIGN KEY ("organisation_id") REFERENCES "public"."organisations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "domains" ADD CONSTRAINT "domains_deployment_id_deployments_id_fk" FOREIGN KEY ("deployment_id") REFERENCES "public"."deployments"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "domains" ADD CONSTRAINT "domains_organisation_id_organisations_id_fk" FOREIGN KEY ("organisation_id") REFERENCES "public"."organisations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint

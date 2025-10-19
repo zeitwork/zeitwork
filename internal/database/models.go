@@ -6,21 +6,65 @@ package database
 
 import (
 	"database/sql/driver"
-	"encoding/json"
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type BuildStatuses string
+
+const (
+	BuildStatusesQueued       BuildStatuses = "queued"
+	BuildStatusesInitializing BuildStatuses = "initializing"
+	BuildStatusesBuilding     BuildStatuses = "building"
+	BuildStatusesReady        BuildStatuses = "ready"
+	BuildStatusesCanceled     BuildStatuses = "canceled"
+	BuildStatusesError        BuildStatuses = "error"
+)
+
+func (e *BuildStatuses) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = BuildStatuses(s)
+	case string:
+		*e = BuildStatuses(s)
+	default:
+		return fmt.Errorf("unsupported scan type for BuildStatuses: %T", src)
+	}
+	return nil
+}
+
+type NullBuildStatuses struct {
+	BuildStatuses BuildStatuses `json:"build_statuses"`
+	Valid         bool          `json:"valid"` // Valid is true if BuildStatuses is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullBuildStatuses) Scan(value interface{}) error {
+	if value == nil {
+		ns.BuildStatuses, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.BuildStatuses.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullBuildStatuses) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.BuildStatuses), nil
+}
+
 type DeploymentStatuses string
 
 const (
-	DeploymentStatusesPending   DeploymentStatuses = "pending"
-	DeploymentStatusesBuilding  DeploymentStatuses = "building"
-	DeploymentStatusesDeploying DeploymentStatuses = "deploying"
-	DeploymentStatusesActive    DeploymentStatuses = "active"
-	DeploymentStatusesInactive  DeploymentStatuses = "inactive"
-	DeploymentStatusesFailed    DeploymentStatuses = "failed"
+	DeploymentStatusesQueued   DeploymentStatuses = "queued"
+	DeploymentStatusesBuilding DeploymentStatuses = "building"
+	DeploymentStatusesReady    DeploymentStatuses = "ready"
+	DeploymentStatusesInactive DeploymentStatuses = "inactive"
+	DeploymentStatusesFailed   DeploymentStatuses = "failed"
 )
 
 func (e *DeploymentStatuses) Scan(src interface{}) error {
@@ -58,129 +102,69 @@ func (ns NullDeploymentStatuses) Value() (driver.Value, error) {
 	return string(ns.DeploymentStatuses), nil
 }
 
-type ImageBuildStatus string
-
-const (
-	ImageBuildStatusPending   ImageBuildStatus = "pending"
-	ImageBuildStatusBuilding  ImageBuildStatus = "building"
-	ImageBuildStatusCompleted ImageBuildStatus = "completed"
-	ImageBuildStatusFailed    ImageBuildStatus = "failed"
-)
-
-func (e *ImageBuildStatus) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = ImageBuildStatus(s)
-	case string:
-		*e = ImageBuildStatus(s)
-	default:
-		return fmt.Errorf("unsupported scan type for ImageBuildStatus: %T", src)
-	}
-	return nil
+type Build struct {
+	ID             pgtype.UUID        `json:"id"`
+	Status         BuildStatuses      `json:"status"`
+	ProjectID      pgtype.UUID        `json:"project_id"`
+	ImageID        pgtype.UUID        `json:"image_id"`
+	VmID           pgtype.UUID        `json:"vm_id"`
+	OrganisationID pgtype.UUID        `json:"organisation_id"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
 }
 
-type NullImageBuildStatus struct {
-	ImageBuildStatus ImageBuildStatus `json:"image_build_status"`
-	Valid            bool             `json:"valid"` // Valid is true if ImageBuildStatus is not NULL
+type BuildLog struct {
+	ID             pgtype.UUID        `json:"id"`
+	BuildID        pgtype.UUID        `json:"build_id"`
+	Message        string             `json:"message"`
+	Level          pgtype.Text        `json:"level"`
+	OrganisationID pgtype.UUID        `json:"organisation_id"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
-// Scan implements the Scanner interface.
-func (ns *NullImageBuildStatus) Scan(value interface{}) error {
-	if value == nil {
-		ns.ImageBuildStatus, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.ImageBuildStatus.Scan(value)
+type CertmagicDatum struct {
+	Key      string             `json:"key"`
+	Value    string             `json:"value"`
+	Modified pgtype.Timestamptz `json:"modified"`
 }
 
-// Value implements the driver Valuer interface.
-func (ns NullImageBuildStatus) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.ImageBuildStatus), nil
-}
-
-type InstanceStatuses string
-
-const (
-	InstanceStatusesPending    InstanceStatuses = "pending"
-	InstanceStatusesStarting   InstanceStatuses = "starting"
-	InstanceStatusesRunning    InstanceStatuses = "running"
-	InstanceStatusesStopping   InstanceStatuses = "stopping"
-	InstanceStatusesStopped    InstanceStatuses = "stopped"
-	InstanceStatusesFailed     InstanceStatuses = "failed"
-	InstanceStatusesTerminated InstanceStatuses = "terminated"
-)
-
-func (e *InstanceStatuses) Scan(src interface{}) error {
-	switch s := src.(type) {
-	case []byte:
-		*e = InstanceStatuses(s)
-	case string:
-		*e = InstanceStatuses(s)
-	default:
-		return fmt.Errorf("unsupported scan type for InstanceStatuses: %T", src)
-	}
-	return nil
-}
-
-type NullInstanceStatuses struct {
-	InstanceStatuses InstanceStatuses `json:"instance_statuses"`
-	Valid            bool             `json:"valid"` // Valid is true if InstanceStatuses is not NULL
-}
-
-// Scan implements the Scanner interface.
-func (ns *NullInstanceStatuses) Scan(value interface{}) error {
-	if value == nil {
-		ns.InstanceStatuses, ns.Valid = "", false
-		return nil
-	}
-	ns.Valid = true
-	return ns.InstanceStatuses.Scan(value)
-}
-
-// Value implements the driver Valuer interface.
-func (ns NullInstanceStatuses) Value() (driver.Value, error) {
-	if !ns.Valid {
-		return nil, nil
-	}
-	return string(ns.InstanceStatuses), nil
+type CertmagicLock struct {
+	Key     string             `json:"key"`
+	Expires pgtype.Timestamptz `json:"expires"`
 }
 
 type Deployment struct {
 	ID             pgtype.UUID        `json:"id"`
-	DeploymentID   string             `json:"deployment_id"`
 	Status         DeploymentStatuses `json:"status"`
+	DeploymentID   string             `json:"deployment_id"`
 	GithubCommit   string             `json:"github_commit"`
 	ProjectID      pgtype.UUID        `json:"project_id"`
 	EnvironmentID  pgtype.UUID        `json:"environment_id"`
+	BuildID        pgtype.UUID        `json:"build_id"`
 	ImageID        pgtype.UUID        `json:"image_id"`
-	ImageBuildID   pgtype.UUID        `json:"image_build_id"`
+	VmID           pgtype.UUID        `json:"vm_id"`
 	OrganisationID pgtype.UUID        `json:"organisation_id"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
 }
 
-type DeploymentInstance struct {
+type DeploymentLog struct {
 	ID             pgtype.UUID        `json:"id"`
 	DeploymentID   pgtype.UUID        `json:"deployment_id"`
-	InstanceID     pgtype.UUID        `json:"instance_id"`
+	Message        string             `json:"message"`
+	Level          pgtype.Text        `json:"level"`
 	OrganisationID pgtype.UUID        `json:"organisation_id"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
 }
 
 type Domain struct {
 	ID                pgtype.UUID        `json:"id"`
 	Name              string             `json:"name"`
+	DeploymentID      pgtype.UUID        `json:"deployment_id"`
 	VerificationToken pgtype.Text        `json:"verification_token"`
 	VerifiedAt        pgtype.Timestamptz `json:"verified_at"`
-	DeploymentID      pgtype.UUID        `json:"deployment_id"`
-	Internal          bool               `json:"internal"`
 	OrganisationID    pgtype.UUID        `json:"organisation_id"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
@@ -222,80 +206,26 @@ type GithubInstallation struct {
 }
 
 type Image struct {
-	ID        pgtype.UUID        `json:"id"`
-	Name      string             `json:"name"`
-	Size      pgtype.Int4        `json:"size"`
-	Hash      string             `json:"hash"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
-}
-
-type ImageBuild struct {
-	ID                   pgtype.UUID        `json:"id"`
-	Status               ImageBuildStatus   `json:"status"`
-	GithubRepository     string             `json:"github_repository"`
-	GithubCommit         string             `json:"github_commit"`
-	ImageID              pgtype.UUID        `json:"image_id"`
-	StartedAt            pgtype.Timestamptz `json:"started_at"`
-	CompletedAt          pgtype.Timestamptz `json:"completed_at"`
-	FailedAt             pgtype.Timestamptz `json:"failed_at"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt            pgtype.Timestamptz `json:"deleted_at"`
-	GithubInstallationID pgtype.UUID        `json:"github_installation_id"`
-}
-
-type Instance struct {
-	ID                   pgtype.UUID        `json:"id"`
-	RegionID             pgtype.UUID        `json:"region_id"`
-	NodeID               pgtype.UUID        `json:"node_id"`
-	ImageID              pgtype.UUID        `json:"image_id"`
-	State                InstanceStatuses   `json:"state"`
-	Vcpus                int32              `json:"vcpus"`
-	Memory               int32              `json:"memory"`
-	DefaultPort          int32              `json:"default_port"`
-	IpAddress            string             `json:"ip_address"`
-	EnvironmentVariables string             `json:"environment_variables"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt            pgtype.Timestamptz `json:"deleted_at"`
-}
-
-type Log struct {
-	ID           pgtype.UUID        `json:"id"`
-	ImageBuildID pgtype.UUID        `json:"image_build_id"`
-	InstanceID   pgtype.UUID        `json:"instance_id"`
-	Level        pgtype.Text        `json:"level"`
-	Message      string             `json:"message"`
-	LoggedAt     pgtype.Timestamptz `json:"logged_at"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
-}
-
-type Node struct {
-	ID        pgtype.UUID        `json:"id"`
-	RegionID  pgtype.UUID        `json:"region_id"`
-	Hostname  string             `json:"hostname"`
-	IpAddress string             `json:"ip_address"`
-	State     string             `json:"state"`
-	Resources json.RawMessage    `json:"resources"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
+	ID         pgtype.UUID        `json:"id"`
+	Registry   string             `json:"registry"`
+	Repository string             `json:"repository"`
+	Tag        string             `json:"tag"`
+	Digest     string             `json:"digest"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt  pgtype.Timestamptz `json:"deleted_at"`
 }
 
 type Organisation struct {
 	ID                       pgtype.UUID        `json:"id"`
 	Name                     string             `json:"name"`
 	Slug                     string             `json:"slug"`
-	CreatedAt                pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt                pgtype.Timestamptz `json:"deleted_at"`
 	StripeCustomerID         pgtype.Text        `json:"stripe_customer_id"`
 	StripeSubscriptionID     pgtype.Text        `json:"stripe_subscription_id"`
 	StripeSubscriptionStatus pgtype.Text        `json:"stripe_subscription_status"`
+	CreatedAt                pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt                pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt                pgtype.Timestamptz `json:"deleted_at"`
 }
 
 type OrganisationMember struct {
@@ -331,13 +261,17 @@ type ProjectEnvironment struct {
 }
 
 type Region struct {
-	ID        pgtype.UUID        `json:"id"`
-	Name      string             `json:"name"`
-	Code      string             `json:"code"`
-	Country   string             `json:"country"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
+	ID               pgtype.UUID        `json:"id"`
+	No               int32              `json:"no"`
+	Name             string             `json:"name"`
+	LoadBalancerIpv4 string             `json:"load_balancer_ipv4"`
+	LoadBalancerIpv6 string             `json:"load_balancer_ipv6"`
+	LoadBalancerNo   pgtype.Int4        `json:"load_balancer_no"`
+	FirewallNo       pgtype.Int4        `json:"firewall_no"`
+	NetworkNo        pgtype.Int4        `json:"network_no"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt        pgtype.Timestamptz `json:"deleted_at"`
 }
 
 type Session struct {
@@ -361,10 +295,17 @@ type User struct {
 	DeletedAt       pgtype.Timestamptz `json:"deleted_at"`
 }
 
-type Waitlist struct {
-	ID        pgtype.UUID        `json:"id"`
-	Email     string             `json:"email"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
+type Vm struct {
+	ID            pgtype.UUID        `json:"id"`
+	No            int32              `json:"no"`
+	Status        interface{}        `json:"status"`
+	PrivateIp     string             `json:"private_ip"`
+	RegionID      pgtype.UUID        `json:"region_id"`
+	ImageID       pgtype.UUID        `json:"image_id"`
+	Port          int32              `json:"port"`
+	ServerName    pgtype.Text        `json:"server_name"`
+	ContainerName pgtype.Text        `json:"container_name"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt     pgtype.Timestamptz `json:"deleted_at"`
 }

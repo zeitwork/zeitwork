@@ -11,24 +11,75 @@ import (
 )
 
 type Querier interface {
-	CreateImage(ctx context.Context, arg *CreateImageParams) (*Image, error)
+	// Assign a VM to a deployment and update VM status
+	AssignVMToDeployment(ctx context.Context, arg *AssignVMToDeploymentParams) error
+	// Clear VM assignment from deployment
+	ClearDeploymentVM(ctx context.Context, id pgtype.UUID) error
+	// Clear container and image from VM
+	ClearVMContainer(ctx context.Context, id pgtype.UUID) error
+	// Create a new build for a deployment
+	CreateBuild(ctx context.Context, arg *CreateBuildParams) (*Build, error)
+	// Create a new VM
+	CreateVM(ctx context.Context, arg *CreateVMParams) (*Vm, error)
+	// Returns active routing information for the edgeproxy
+	// Joins domains → deployments → vms → regions
 	GetActiveRoutes(ctx context.Context) ([]*GetActiveRoutesRow, error)
-	GetGithubInstallation(ctx context.Context, id pgtype.UUID) (*GetGithubInstallationRow, error)
-	GetInstanceByID(ctx context.Context, id pgtype.UUID) (*GetInstanceByIDRow, error)
-	GetInstancesByNodeID(ctx context.Context, nodeID pgtype.UUID) ([]*GetInstancesByNodeIDRow, error)
-	GetLogsByDeploymentId(ctx context.Context, id pgtype.UUID) ([]*Log, error)
-	GetLogsByImageBuildId(ctx context.Context, imageBuildID pgtype.UUID) ([]*Log, error)
-	GetLogsByInstanceId(ctx context.Context, instanceID pgtype.UUID) ([]*Log, error)
-	GetNodeByID(ctx context.Context, id pgtype.UUID) (*GetNodeByIDRow, error)
-	GetPendingImageBuild(ctx context.Context) (*GetPendingImageBuildRow, error)
-	InsertLogs(ctx context.Context, arg []*InsertLogsParams) (int64, error)
-	UpdateImageBuildCompleted(ctx context.Context, arg *UpdateImageBuildCompletedParams) error
-	UpdateImageBuildFailed(ctx context.Context, id pgtype.UUID) error
-	UpdateImageBuildStarted(ctx context.Context, id pgtype.UUID) error
-	UpdateInstanceIPAddress(ctx context.Context, arg *UpdateInstanceIPAddressParams) error
-	UpdateInstanceState(ctx context.Context, arg *UpdateInstanceStateParams) error
-	UpdateNodeState(ctx context.Context, arg *UpdateNodeStateParams) error
-	UpsertNode(ctx context.Context, arg *UpsertNodeParams) error
+	// Get all regions
+	GetAllRegions(ctx context.Context) ([]*Region, error)
+	// Get building deployments that have a build but no image yet
+	GetBuildingDeploymentsWithoutImage(ctx context.Context) ([]*GetBuildingDeploymentsWithoutImageRow, error)
+	// Get building deployments that have an image but no VM assigned
+	GetBuildingDeploymentsWithoutVM(ctx context.Context) ([]*Deployment, error)
+	// Get failed deployments that need cleanup
+	GetFailedDeployments(ctx context.Context) ([]*Deployment, error)
+	// Get image details by ID
+	GetImageByID(ctx context.Context, id pgtype.UUID) (*Image, error)
+	// Get inactive deployments that need cleanup
+	GetInactiveDeployments(ctx context.Context) ([]*Deployment, error)
+	// Get the next available VM number
+	GetNextVMNumber(ctx context.Context) (int32, error)
+	// VM QUERIES
+	// Get VMs that are available in the pool
+	GetPoolVMs(ctx context.Context) ([]*Vm, error)
+	// DEPLOYMENT QUERIES
+	// Get deployments in queued state (no build assigned)
+	GetQueuedDeployments(ctx context.Context) ([]*Deployment, error)
+	// Get all ready deployments grouped by project+environment
+	GetReadyDeployments(ctx context.Context) ([]*Deployment, error)
+	// BUILD QUERIES
+	// Get builds that have been in "building" state for too long
+	GetTimedOutBuilds(ctx context.Context) ([]*Build, error)
+	// DOMAIN QUERIES
+	// Get domains that need DNS verification (unverified and recently updated)
+	GetUnverifiedDomains(ctx context.Context) ([]*Domain, error)
+	// Get a VM by ID
+	GetVMByID(ctx context.Context, id pgtype.UUID) (*Vm, error)
+	// Get count of VMs by region and status
+	GetVMsByRegion(ctx context.Context) ([]*GetVMsByRegionRow, error)
+	// Mark a build as error due to timeout
+	MarkBuildTimedOut(ctx context.Context, id pgtype.UUID) error
+	// Mark deployment as failed
+	MarkDeploymentFailed(ctx context.Context, id pgtype.UUID) error
+	// Mark deployment as inactive
+	MarkDeploymentInactive(ctx context.Context, id pgtype.UUID) error
+	// Mark a domain as verified
+	MarkDomainVerified(ctx context.Context, id pgtype.UUID) error
+	// Mark a VM for deletion
+	MarkVMDeleting(ctx context.Context, id pgtype.UUID) error
+	// Mark VM as running after container deployment
+	MarkVMRunning(ctx context.Context, id pgtype.UUID) error
+	// Return a VM to the pool
+	ReturnVMToPool(ctx context.Context, id pgtype.UUID) error
+	// Update deployment with build_id and change status to building
+	UpdateDeploymentWithBuild(ctx context.Context, arg *UpdateDeploymentWithBuildParams) error
+	// Update deployment with image_id
+	UpdateDeploymentWithImage(ctx context.Context, arg *UpdateDeploymentWithImageParams) error
+	// Update deployment with vm_id and change status to ready
+	UpdateDeploymentWithVM(ctx context.Context, arg *UpdateDeploymentWithVMParams) error
+	// Update VM with container name after deployment
+	UpdateVMContainerName(ctx context.Context, arg *UpdateVMContainerNameParams) error
+	// Update VM with server name and private IP after Hetzner server creation
+	UpdateVMServerDetails(ctx context.Context, arg *UpdateVMServerDetailsParams) error
 }
 
 var _ Querier = (*Queries)(nil)
