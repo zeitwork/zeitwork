@@ -61,18 +61,22 @@ INSERT INTO builds (
     id,
     status,
     project_id,
+    github_commit,
+    github_branch,
     organisation_id,
     created_at,
     updated_at
 )
-VALUES ($1, $2, $3, $4, NOW(), NOW())
-RETURNING id, status, project_id, image_id, vm_id, organisation_id, created_at, updated_at, deleted_at
+VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+RETURNING id, status, project_id, image_id, vm_id, organisation_id, created_at, updated_at, deleted_at, github_commit, github_branch
 `
 
 type CreateBuildParams struct {
 	ID             pgtype.UUID   `json:"id"`
 	Status         BuildStatuses `json:"status"`
 	ProjectID      pgtype.UUID   `json:"project_id"`
+	GithubCommit   string        `json:"github_commit"`
+	GithubBranch   string        `json:"github_branch"`
 	OrganisationID pgtype.UUID   `json:"organisation_id"`
 }
 
@@ -82,6 +86,8 @@ func (q *Queries) CreateBuild(ctx context.Context, arg *CreateBuildParams) (*Bui
 		arg.ID,
 		arg.Status,
 		arg.ProjectID,
+		arg.GithubCommit,
+		arg.GithubBranch,
 		arg.OrganisationID,
 	)
 	var i Build
@@ -95,6 +101,8 @@ func (q *Queries) CreateBuild(ctx context.Context, arg *CreateBuildParams) (*Bui
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.GithubCommit,
+		&i.GithubBranch,
 	)
 	return &i, err
 }
@@ -614,6 +622,32 @@ func (q *Queries) GetPoolVMs(ctx context.Context) ([]*Vm, error) {
 	return items, nil
 }
 
+const getProjectEnvironmentByID = `-- name: GetProjectEnvironmentByID :one
+
+SELECT id, name, branch, project_id, organisation_id, created_at, updated_at, deleted_at
+FROM project_environments
+WHERE id = $1
+  AND deleted_at IS NULL
+`
+
+// PROJECT ENVIRONMENT QUERIES
+// Get project environment by ID
+func (q *Queries) GetProjectEnvironmentByID(ctx context.Context, id pgtype.UUID) (*ProjectEnvironment, error) {
+	row := q.db.QueryRow(ctx, getProjectEnvironmentByID, id)
+	var i ProjectEnvironment
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Branch,
+		&i.ProjectID,
+		&i.OrganisationID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return &i, err
+}
+
 const getQueuedDeployments = `-- name: GetQueuedDeployments :many
 
 SELECT id, status, deployment_id, github_commit, project_id, environment_id, build_id, image_id, vm_id, organisation_id, created_at, updated_at, deleted_at
@@ -705,7 +739,7 @@ func (q *Queries) GetReadyDeployments(ctx context.Context) ([]*Deployment, error
 
 const getTimedOutBuilds = `-- name: GetTimedOutBuilds :many
 
-SELECT id, status, project_id, image_id, vm_id, organisation_id, created_at, updated_at, deleted_at
+SELECT id, status, project_id, image_id, vm_id, organisation_id, created_at, updated_at, deleted_at, github_commit, github_branch
 FROM builds
 WHERE status = 'building'
   AND deleted_at IS NULL
@@ -734,6 +768,8 @@ func (q *Queries) GetTimedOutBuilds(ctx context.Context) ([]*Build, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.GithubCommit,
+			&i.GithubBranch,
 		); err != nil {
 			return nil, err
 		}

@@ -269,10 +269,9 @@ func (s *Service) executeBuild(ctx context.Context, build *database.Build) error
 		"vm_no", vm.No,
 	)
 
-	// TODO: Get actual repository and commit from project/deployment
-	// For now, using placeholder
-	repository := "placeholder/repo"
-	commit := "main"
+	// Get repository and commit from build and project
+	repository := project.GithubRepository
+	commit := build.GithubCommit
 
 	// Clone repository on VM
 	repoURL := fmt.Sprintf("https://x-access-token:%s@github.com/%s.git", githubToken, repository)
@@ -284,6 +283,8 @@ func (s *Service) executeBuild(ctx context.Context, build *database.Build) error
 	s.logger.Info("cloning repository on VM",
 		"build_id", buildID,
 		"repository", repository,
+		"commit", commit,
+		"branch", build.GithubBranch,
 	)
 
 	if err := s.executeSSHCommand(sshClient, cloneCmd); err != nil {
@@ -292,10 +293,12 @@ func (s *Service) executeBuild(ctx context.Context, build *database.Build) error
 
 	s.logger.Info("repository cloned successfully", "build_id", buildID)
 
-	// Generate image name
+	// Generate image name from repository (e.g., "dokedu/frontend" -> "zeitwork-build-dokedu-frontend")
+	// Replace slashes and convert to lowercase for valid Docker image name
+	repoName := strings.ToLower(strings.ReplaceAll(repository, "/", "-"))
 	imageName := fmt.Sprintf("%s/zeitwork-build-%s:latest",
 		s.cfg.RegistryURL,
-		buildID[:8],
+		repoName,
 	)
 
 	// Build Docker image on VM

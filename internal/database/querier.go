@@ -56,6 +56,9 @@ type Querier interface {
 	GetPoolVMs(ctx context.Context) ([]*Vm, error)
 	// Get project by ID
 	GetProjectByID(ctx context.Context, id pgtype.UUID) (*Project, error)
+	// PROJECT ENVIRONMENT QUERIES
+	// Get project environment by ID
+	GetProjectEnvironmentByID(ctx context.Context, id pgtype.UUID) (*ProjectEnvironment, error)
 	// DEPLOYMENT QUERIES
 	// Get deployments in queued state (no build assigned)
 	GetQueuedDeployments(ctx context.Context) ([]*Deployment, error)

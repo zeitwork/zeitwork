@@ -456,12 +456,25 @@ func (s *Service) reconcileQueuedDeployments(ctx context.Context) {
 			"project_id", uuid.ToString(deployment.ProjectID),
 		)
 
+		// Get project environment to retrieve branch
+		environment, err := s.db.Queries().GetProjectEnvironmentByID(ctx, deployment.EnvironmentID)
+		if err != nil {
+			s.logger.Error("failed to get project environment",
+				"deployment_id", deploymentID,
+				"environment_id", uuid.ToString(deployment.EnvironmentID),
+				"error", err,
+			)
+			continue
+		}
+
 		// Create a new build
 		buildID := uuid.New()
 		params := &database.CreateBuildParams{
 			ID:             buildID,
 			Status:         database.BuildStatusesQueued,
 			ProjectID:      deployment.ProjectID,
+			GithubCommit:   deployment.GithubCommit,
+			GithubBranch:   environment.Branch,
 			OrganisationID: deployment.OrganisationID,
 		}
 
@@ -1143,10 +1156,17 @@ func (s *Service) createHetznerServer(ctx context.Context, vm *database.Vm, regi
 	s.logger.Info("VM created, waiting for readiness check in background",
 		"vm_id", uuid.ToString(vm.ID),
 		"vm_no", vm.No,
+		"public_ip", publicIP,
 	)
 
-	// Start background readiness check
-	go s.waitForVMReady(context.Background(), vm)
+	// Fetch fresh VM record with updated public_ip for readiness check
+	freshVM, err := s.db.Queries().GetVMByID(ctx, vm.ID)
+	if err != nil {
+		return fmt.Errorf("failed to fetch updated VM: %w", err)
+	}
+
+	// Start background readiness check with fresh VM object
+	go s.waitForVMReady(context.Background(), freshVM)
 
 	return nil
 }
@@ -1419,6 +1439,8 @@ func (s *Service) waitForVMReady(ctx context.Context, vm *database.Vm) {
 	s.logger.Info("starting VM readiness check",
 		"vm_id", vmID,
 		"vm_no", vm.No,
+		"public_ip", vm.PublicIp.String,
+		"has_public_ip", vm.PublicIp.Valid,
 	)
 
 	// Create context with 5 minute timeout
@@ -1429,12 +1451,14 @@ func (s *Service) waitForVMReady(ctx context.Context, vm *database.Vm) {
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
+	checkCount := 0
 	for {
 		select {
 		case <-ctx.Done():
 			s.logger.Error("VM readiness check timed out",
 				"vm_id", vmID,
 				"vm_no", vm.No,
+				"checks_performed", checkCount,
 			)
 			// Mark VM for deletion since it never became ready
 			if err := s.db.Queries().MarkVMDeleting(context.Background(), vm.ID); err != nil {
@@ -1446,6 +1470,7 @@ func (s *Service) waitForVMReady(ctx context.Context, vm *database.Vm) {
 			return
 
 		case <-ticker.C:
+			checkCount++
 			if s.checkVMReady(ctx, vm) {
 				// VM is ready! Mark as pooling
 				if err := s.db.Queries().ReturnVMToPool(context.Background(), vm.ID); err != nil {
@@ -1459,6 +1484,7 @@ func (s *Service) waitForVMReady(ctx context.Context, vm *database.Vm) {
 				s.logger.Info("VM is ready and marked as pooling",
 					"vm_id", vmID,
 					"vm_no", vm.No,
+					"checks_performed", checkCount,
 				)
 				return
 			}
@@ -1513,10 +1539,10 @@ func (s *Service) checkVMReady(ctx context.Context, vm *database.Vm) bool {
 func (s *Service) getSSHClient(ctx context.Context, vm *database.Vm) (*ssh.Client, error) {
 	// Check if VM has public IP set
 	if !vm.PublicIp.Valid || vm.PublicIp.String == "" {
-		return nil, fmt.Errorf("VM has no public IP address set")
+		return nil, fmt.Errorf("VM has no public IP address set (vm_id=%s)", uuid.ToString(vm.ID))
 	}
 
-	ipv6 := vm.PublicIp.String
+	publicIP := vm.PublicIp.String
 
 	// Parse SSH key
 	signer, err := ssh.ParsePrivateKey(s.sshPrivateKey)
@@ -1531,8 +1557,8 @@ func (s *Service) getSSHClient(ctx context.Context, vm *database.Vm) (*ssh.Clien
 		Timeout:         10 * time.Second,
 	}
 
-	// Connect via IP (works for both IPv4 and IPv6)
-	sshAddr := fmt.Sprintf("%s:22", ipv6)
+	// Connect via IP
+	sshAddr := fmt.Sprintf("%s:22", publicIP)
 	return ssh.Dial("tcp", sshAddr, sshConfig)
 }
 

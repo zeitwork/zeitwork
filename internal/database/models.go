@@ -158,6 +158,8 @@ type Build struct {
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
+	GithubCommit   string             `json:"github_commit"`
+	GithubBranch   string             `json:"github_branch"`
 }
 
 type BuildLog struct {

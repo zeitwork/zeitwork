@@ -37,7 +37,7 @@ func (q *Queries) GetGithubInstallationByID(ctx context.Context, id pgtype.UUID)
 
 const getPendingBuild = `-- name: GetPendingBuild :one
 
-SELECT id, status, project_id, image_id, vm_id, organisation_id, created_at, updated_at, deleted_at
+SELECT id, status, project_id, image_id, vm_id, organisation_id, created_at, updated_at, deleted_at, github_commit, github_branch
 FROM builds
 WHERE status = 'queued'
   AND deleted_at IS NULL
@@ -61,6 +61,8 @@ func (q *Queries) GetPendingBuild(ctx context.Context) (*Build, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.GithubCommit,
+		&i.GithubBranch,
 	)
 	return &i, err
 }

@@ -22,6 +22,13 @@
       "when": 1760945147784,
       "tag": "0002_kind_dark_beast",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1760969776618,
+      "tag": "0003_rapid_proteus",
+      "breakpoints": true
     }
   ]
 }

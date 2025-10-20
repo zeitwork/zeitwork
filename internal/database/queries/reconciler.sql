@@ -78,11 +78,13 @@ INSERT INTO builds (
     id,
     status,
     project_id,
+    github_commit,
+    github_branch,
     organisation_id,
     created_at,
     updated_at
 )
-VALUES ($1, $2, $3, $4, NOW(), NOW())
+VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
 RETURNING *;
 
 -- name: UpdateDeploymentWithBuild :exec
@@ -128,6 +130,15 @@ UPDATE deployments
 SET vm_id = NULL,
     updated_at = NOW()
 WHERE id = $1;
+
+-- PROJECT ENVIRONMENT QUERIES
+
+-- name: GetProjectEnvironmentByID :one
+-- Get project environment by ID
+SELECT *
+FROM project_environments
+WHERE id = $1
+  AND deleted_at IS NULL;
 
 -- BUILD QUERIES
 

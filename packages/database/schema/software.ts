@@ -199,6 +199,8 @@ export const builds = pgTable("builds", {
   projectId: uuid()
     .notNull()
     .references(() => projects.id),
+  githubCommit: text().notNull(),
+  githubBranch: text().notNull(),
   imageId: uuid().references(() => images.id),
   vmId: uuid().references(() => vms.id),
   ...organisationId,
