@@ -233,6 +233,13 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	currentRegionIDStr := uuid.ToString(s.regionID)
 	isSameRegion := route.RegionID == currentRegionIDStr
 
+	s.logger.Debug("region comparison",
+		"host", host,
+		"current_region", currentRegionIDStr,
+		"vm_region", route.RegionID,
+		"is_same_region", isSameRegion,
+	)
+
 	var targetURL string
 	if isSameRegion {
 		// Same region: route directly to VM

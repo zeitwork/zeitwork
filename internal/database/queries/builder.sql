@@ -53,3 +53,8 @@ SET vm_id = $2,
     updated_at = NOW()
 WHERE id = $1;
 
+-- name: CreateImage :exec
+-- Create new image record
+INSERT INTO images (id, registry, repository, tag, digest, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, NOW(), NOW());
+

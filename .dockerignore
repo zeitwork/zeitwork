@@ -5,3 +5,4 @@ build
 node_modules
 logs
 .env.*
+privat.key

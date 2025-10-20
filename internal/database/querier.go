@@ -19,6 +19,8 @@ type Querier interface {
 	ClearVMImage(ctx context.Context, id pgtype.UUID) error
 	// Create a new build for a deployment
 	CreateBuild(ctx context.Context, arg *CreateBuildParams) (*Build, error)
+	// Create new image record
+	CreateImage(ctx context.Context, arg *CreateImageParams) error
 	// Create a new region
 	CreateRegion(ctx context.Context, arg *CreateRegionParams) (*Region, error)
 	// Create a new VM

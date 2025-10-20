@@ -123,6 +123,8 @@ ssh -o StrictHostKeyChecking=no root@$MANAGER "docker run -d \
     --name reconciler \
     --restart unless-stopped \
     --env-file /root/reconciler.env \
+    --user root \
+    -v /var/run/docker.sock:/var/run/docker.sock \
     ghcr.io/zeitwork/reconciler:latest"
 
 # Builder

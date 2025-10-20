@@ -11,6 +11,31 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const createImage = `-- name: CreateImage :exec
+INSERT INTO images (id, registry, repository, tag, digest, created_at, updated_at)
+VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+`
+
+type CreateImageParams struct {
+	ID         pgtype.UUID `json:"id"`
+	Registry   string      `json:"registry"`
+	Repository string      `json:"repository"`
+	Tag        string      `json:"tag"`
+	Digest     string      `json:"digest"`
+}
+
+// Create new image record
+func (q *Queries) CreateImage(ctx context.Context, arg *CreateImageParams) error {
+	_, err := q.db.Exec(ctx, createImage,
+		arg.ID,
+		arg.Registry,
+		arg.Repository,
+		arg.Tag,
+		arg.Digest,
+	)
+	return err
+}
+
 const getGithubInstallationByID = `-- name: GetGithubInstallationByID :one
 SELECT id, user_id, github_account_id, github_installation_id, organisation_id, created_at, updated_at, deleted_at
 FROM github_installations

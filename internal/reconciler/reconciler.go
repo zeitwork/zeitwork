@@ -1417,7 +1417,7 @@ func (s *Service) runContainerOnVM(ctx context.Context, vm *database.Vm, imageNa
 	)
 
 	// Run container with port mapping
-	runCmd := fmt.Sprintf("docker run -d -p %d:8080 --name %s --restart unless-stopped %s",
+	runCmd := fmt.Sprintf("docker run -d -p %d:3000 --name %s --restart unless-stopped %s",
 		vm.Port,
 		containerName,
 		imageName,

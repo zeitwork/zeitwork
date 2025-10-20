@@ -347,12 +347,44 @@ func (s *Service) executeBuild(ctx context.Context, build *database.Build) error
 		return fmt.Errorf("failed to get image digest: %w", err)
 	}
 
-	_ = strings.TrimSpace(output) // digest - will be used when we add CreateImage
+	digest := strings.TrimSpace(output)
+
+	// Extract registry, repository, and tag from image name
+	// Format: ghcr.io/zeitwork/build-dokedu-nuxt-demo:latest
+	parts := strings.SplitN(imageName, "/", 2) // Split into registry and rest
+	if len(parts) != 2 {
+		return fmt.Errorf("invalid image name format: %s", imageName)
+	}
+	imageRegistry := parts[0]
+
+	// Split repository and tag
+	repoAndTag := parts[1]
+	tagParts := strings.Split(repoAndTag, ":")
+	if len(tagParts) != 2 {
+		return fmt.Errorf("invalid image name format (no tag): %s", imageName)
+	}
+	imageRepository := tagParts[0]
+	imageTag := tagParts[1]
 
 	// Create image record
 	imageID := uuid.New()
-	// TODO: Add CreateImage query to builder.sql and create image record
-	// For now, just mark build as ready with image ID
+	if err := s.db.Queries().CreateImage(ctx, &database.CreateImageParams{
+		ID:         imageID,
+		Registry:   imageRegistry,
+		Repository: imageRepository,
+		Tag:        imageTag,
+		Digest:     digest,
+	}); err != nil {
+		return fmt.Errorf("failed to create image record: %w", err)
+	}
+
+	s.logger.Info("image record created",
+		"build_id", buildID,
+		"image_id", uuid.ToString(imageID),
+		"registry", imageRegistry,
+		"repository", imageRepository,
+		"tag", imageTag,
+	)
 
 	s.logger.Info("build completed, marking as ready",
 		"build_id", buildID,
