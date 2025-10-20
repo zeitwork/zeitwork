@@ -65,6 +65,31 @@ func (q *Queries) GetPendingBuild(ctx context.Context) (*Build, error) {
 	return &i, err
 }
 
+const getProjectByID = `-- name: GetProjectByID :one
+SELECT id, name, slug, github_repository, github_installation_id, organisation_id, created_at, updated_at, deleted_at
+FROM projects
+WHERE id = $1
+  AND deleted_at IS NULL
+`
+
+// Get project by ID
+func (q *Queries) GetProjectByID(ctx context.Context, id pgtype.UUID) (*Project, error) {
+	row := q.db.QueryRow(ctx, getProjectByID, id)
+	var i Project
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.GithubRepository,
+		&i.GithubInstallationID,
+		&i.OrganisationID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return &i, err
+}
+
 const markBuildBuilding = `-- name: MarkBuildBuilding :exec
 UPDATE builds
 SET status = 'building',

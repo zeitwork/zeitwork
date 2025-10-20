@@ -16,36 +16,31 @@ export const regions = pgTable("regions", {
   loadBalancerIpv4: text().notNull(),
   loadBalancerIpv6: text().notNull(),
   loadBalancerNo: integer(),
-  firewallNo: integer(),
-  networkNo: integer(),
   ...timestamps,
 });
 
 export const vmStatuses = pgEnum("vm_statuses", [
-  "running",
-  "pooling", // the vm is in the pool and waiting to be used
   "initializing",
   "starting",
-  "stopping",
-  "off",
+  "pooling", // the vm is in the pool and waiting to be used
+  "running",
   "deleting",
-  "migrating",
-  "rebuilding",
   "unknown",
 ]);
 
 export const vms = pgTable("vms", {
   id: uuid().primaryKey().$defaultFn(uuidv7),
-  no: integer().notNull().unique(), // Also serves as Hetzner server ID
-  status: vmStatuses().notNull().default("unknown"),
-  privateIp: text().notNull(), // Private IP within Hetzner network (no public IPv4 to reduce costs)
+  no: serial().notNull().unique(),
+  serverNo: integer().unique(), // nullable until Hetzner server is created
+  serverName: text(), // nullable until Hetzner server is created
+  serverType: text(), // nullable until Hetzner server is created
+  status: vmStatuses().notNull().default("initializing"),
+  publicIp: text(), // nullable until Hetzner server is created (ipv6 address)
   regionId: uuid()
     .notNull()
     .references(() => regions.id),
   imageId: uuid().references(() => images.id),
   port: integer().notNull(),
-  serverName: text(),
-  containerName: text(),
   ...timestamps,
 });
 

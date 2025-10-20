@@ -191,19 +191,55 @@ func (s *Service) executeBuild(ctx context.Context, build *database.Build) error
 		"vm_no", vm.No,
 	)
 
-	// Mark for deletion after build (defer)
+	// Delete VM and Hetzner server after build (defer)
 	defer func() {
-		s.logger.Info("marking VM for deletion", "vm_id", uuid.ToString(vm.ID))
-		if err := s.db.Queries().MarkVMDeleting(buildCtx, vm.ID); err != nil {
-			s.logger.Error("failed to mark VM for deletion",
+		s.logger.Info("cleaning up build VM", "vm_id", uuid.ToString(vm.ID), "vm_no", vm.No)
+
+		// Delete Hetzner server if client is available and server_no is set
+		if s.hcloudClient != nil && vm.ServerNo.Valid {
+			server, _, err := s.hcloudClient.Server.GetByID(buildCtx, int64(vm.ServerNo.Int32))
+			if err != nil {
+				s.logger.Error("failed to get Hetzner server for deletion",
+					"vm_id", uuid.ToString(vm.ID),
+					"server_no", vm.ServerNo.Int32,
+					"error", err,
+				)
+			} else if server != nil {
+				_, _, err := s.hcloudClient.Server.DeleteWithResult(buildCtx, server)
+				if err != nil {
+					s.logger.Error("failed to delete Hetzner server",
+						"vm_id", uuid.ToString(vm.ID),
+						"server_no", vm.ServerNo.Int32,
+						"error", err,
+					)
+				} else {
+					s.logger.Info("Hetzner server deleted",
+						"vm_id", uuid.ToString(vm.ID),
+						"server_no", vm.ServerNo.Int32,
+					)
+				}
+			}
+		}
+
+		// Mark VM as deleted in database
+		if err := s.db.Queries().MarkVMDeleted(buildCtx, vm.ID); err != nil {
+			s.logger.Error("failed to mark VM as deleted",
 				"vm_id", uuid.ToString(vm.ID),
 				"error", err,
 			)
+		} else {
+			s.logger.Info("VM marked as deleted", "vm_id", uuid.ToString(vm.ID))
 		}
 	}()
 
+	// Get project to retrieve GitHub installation ID
+	project, err := s.db.Queries().GetProjectByID(buildCtx, build.ProjectID)
+	if err != nil {
+		return fmt.Errorf("failed to get project: %w", err)
+	}
+
 	// Get GitHub installation for auth
-	installation, err := s.db.Queries().GetGithubInstallationByID(buildCtx, build.ProjectID)
+	installation, err := s.db.Queries().GetGithubInstallationByID(buildCtx, project.GithubInstallationID)
 	if err != nil {
 		return fmt.Errorf("failed to get GitHub installation: %w", err)
 	}
@@ -371,19 +407,12 @@ func (s *Service) assignBuildVM(ctx context.Context, build *database.Build) (*da
 
 // getSSHClient creates an SSH client connection to a VM
 func (s *Service) getSSHClient(ctx context.Context, vm *database.Vm) (*ssh.Client, error) {
-	// Get server for IPv6
-	server, _, err := s.hcloudClient.Server.GetByID(ctx, int64(vm.No))
-	if err != nil {
-		return nil, fmt.Errorf("failed to get Hetzner server: %w", err)
-	}
-	if server == nil {
-		return nil, fmt.Errorf("hetzner server not found for vm.no=%d", vm.No)
-	}
-	if server.PublicNet.IPv6.IP == nil {
-		return nil, fmt.Errorf("server has no IPv6 address")
+	// Check if VM has public IP set
+	if !vm.PublicIp.Valid || vm.PublicIp.String == "" {
+		return nil, fmt.Errorf("VM has no public IP address set")
 	}
 
-	ipv6 := server.PublicNet.IPv6.IP.String()
+	ipv6 := vm.PublicIp.String
 
 	// Parse SSH key
 	signer, err := ssh.ParsePrivateKey(s.sshPrivateKey)

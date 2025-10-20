@@ -32,6 +32,13 @@ SET status = 'error',
     updated_at = NOW()
 WHERE id = $1;
 
+-- name: GetProjectByID :one
+-- Get project by ID
+SELECT *
+FROM projects
+WHERE id = $1
+  AND deleted_at IS NULL;
+
 -- name: GetGithubInstallationByID :one
 -- Get GitHub installation details
 SELECT *

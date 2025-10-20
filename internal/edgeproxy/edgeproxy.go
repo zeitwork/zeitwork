@@ -26,10 +26,10 @@ type Config struct {
 
 // Route represents routing information for a domain
 type Route struct {
-	PrivateIP string // VM's private IP address
-	Port      int32  // VM's port
-	RegionID  string // VM's region UUID
-	RegionIP  string // Region's public IP (load balancer) for cross-region routing
+	PublicIP string // VM's public IPv6 address
+	Port     int32  // VM's port
+	RegionID string // VM's region UUID
+	RegionIP string // Region's public IP (load balancer) for cross-region routing
 }
 
 // Service is the edgeproxy service
@@ -140,11 +140,19 @@ func (s *Service) loadRoutes(ctx context.Context) error {
 
 	newRoutes := make(map[string]Route)
 	for _, row := range rows {
+		// Skip routes where VM doesn't have a public IP yet
+		if !row.VmPublicIp.Valid || row.VmPublicIp.String == "" {
+			s.logger.Warn("skipping route with invalid public IP",
+				"domain", row.DomainName,
+			)
+			continue
+		}
+
 		newRoutes[row.DomainName] = Route{
-			PrivateIP: row.VmPrivateIp,
-			Port:      row.VmPort,
-			RegionID:  uuid.ToString(row.VmRegionID),
-			RegionIP:  row.RegionLoadBalancerIp,
+			PublicIP: row.VmPublicIp.String,
+			Port:     row.VmPort,
+			RegionID: uuid.ToString(row.VmRegionID),
+			RegionIP: row.RegionLoadBalancerIp,
 		}
 	}
 
@@ -156,7 +164,7 @@ func (s *Service) loadRoutes(ctx context.Context) error {
 	for domain, route := range newRoutes {
 		s.logger.Debug("route",
 			"domain", domain,
-			"vm", fmt.Sprintf("%s:%d", route.PrivateIP, route.Port),
+			"vm", fmt.Sprintf("%s:%d", route.PublicIP, route.Port),
 			"region", route.RegionID,
 		)
 	}
@@ -229,16 +237,16 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if isSameRegion {
 		// Same region: route directly to VM
 		// First, health check the VM
-		if !s.checkVMHealth(route.PrivateIP, route.Port) {
+		if !s.checkVMHealth(route.PublicIP, route.Port) {
 			s.logger.Warn("VM health check failed",
 				"host", host,
-				"vm", fmt.Sprintf("%s:%d", route.PrivateIP, route.Port),
+				"vm", fmt.Sprintf("%s:%d", route.PublicIP, route.Port),
 			)
 			http.Error(w, "Service Unavailable - VM not responding", http.StatusServiceUnavailable)
 			return
 		}
 
-		targetURL = fmt.Sprintf("http://%s:%d", route.PrivateIP, route.Port)
+		targetURL = fmt.Sprintf("http://[%s]:%d", route.PublicIP, route.Port)
 	} else {
 		// Cross-region: route to other region's load balancer
 		targetURL = fmt.Sprintf("http://%s:80", route.RegionIP)

@@ -105,15 +105,11 @@ func (ns NullDeploymentStatuses) Value() (driver.Value, error) {
 type VmStatuses string
 
 const (
-	VmStatusesRunning      VmStatuses = "running"
-	VmStatusesPooling      VmStatuses = "pooling"
 	VmStatusesInitializing VmStatuses = "initializing"
 	VmStatusesStarting     VmStatuses = "starting"
-	VmStatusesStopping     VmStatuses = "stopping"
-	VmStatusesOff          VmStatuses = "off"
+	VmStatusesPooling      VmStatuses = "pooling"
+	VmStatusesRunning      VmStatuses = "running"
 	VmStatusesDeleting     VmStatuses = "deleting"
-	VmStatusesMigrating    VmStatuses = "migrating"
-	VmStatusesRebuilding   VmStatuses = "rebuilding"
 	VmStatusesUnknown      VmStatuses = "unknown"
 )
 
@@ -317,8 +313,6 @@ type Region struct {
 	LoadBalancerIpv4 string             `json:"load_balancer_ipv4"`
 	LoadBalancerIpv6 string             `json:"load_balancer_ipv6"`
 	LoadBalancerNo   pgtype.Int4        `json:"load_balancer_no"`
-	FirewallNo       pgtype.Int4        `json:"firewall_no"`
-	NetworkNo        pgtype.Int4        `json:"network_no"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt        pgtype.Timestamptz `json:"deleted_at"`
@@ -346,16 +340,17 @@ type User struct {
 }
 
 type Vm struct {
-	ID            pgtype.UUID        `json:"id"`
-	No            int32              `json:"no"`
-	Status        VmStatuses         `json:"status"`
-	PrivateIp     string             `json:"private_ip"`
-	RegionID      pgtype.UUID        `json:"region_id"`
-	ImageID       pgtype.UUID        `json:"image_id"`
-	Port          int32              `json:"port"`
-	ServerName    pgtype.Text        `json:"server_name"`
-	ContainerName pgtype.Text        `json:"container_name"`
-	CreatedAt     pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt     pgtype.Timestamptz `json:"deleted_at"`
+	ID         pgtype.UUID        `json:"id"`
+	Status     VmStatuses         `json:"status"`
+	RegionID   pgtype.UUID        `json:"region_id"`
+	ImageID    pgtype.UUID        `json:"image_id"`
+	Port       int32              `json:"port"`
+	ServerName pgtype.Text        `json:"server_name"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt  pgtype.Timestamptz `json:"deleted_at"`
+	No         int32              `json:"no"`
+	ServerNo   pgtype.Int4        `json:"server_no"`
+	ServerType pgtype.Text        `json:"server_type"`
+	PublicIp   pgtype.Text        `json:"public_ip"`
 }

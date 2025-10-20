@@ -3,7 +3,7 @@
 -- Joins domains → deployments → vms → regions
 SELECT 
     d.name as domain_name,
-    v.private_ip as vm_private_ip,
+    v.public_ip as vm_public_ip,
     v.port as vm_port,
     v.region_id as vm_region_id,
     r.load_balancer_ipv4 as region_load_balancer_ip

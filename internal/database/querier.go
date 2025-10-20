@@ -15,8 +15,8 @@ type Querier interface {
 	AssignVMToDeployment(ctx context.Context, arg *AssignVMToDeploymentParams) error
 	// Clear VM assignment from deployment
 	ClearDeploymentVM(ctx context.Context, id pgtype.UUID) error
-	// Clear container and image from VM
-	ClearVMContainer(ctx context.Context, id pgtype.UUID) error
+	// Clear image from VM
+	ClearVMImage(ctx context.Context, id pgtype.UUID) error
 	// Create a new build for a deployment
 	CreateBuild(ctx context.Context, arg *CreateBuildParams) (*Build, error)
 	// Create a new region
@@ -52,6 +52,8 @@ type Querier interface {
 	// VM QUERIES
 	// Get VMs that are available in the pool
 	GetPoolVMs(ctx context.Context) ([]*Vm, error)
+	// Get project by ID
+	GetProjectByID(ctx context.Context, id pgtype.UUID) (*Project, error)
 	// DEPLOYMENT QUERIES
 	// Get deployments in queued state (no build assigned)
 	GetQueuedDeployments(ctx context.Context) ([]*Deployment, error)
@@ -97,9 +99,9 @@ type Querier interface {
 	UpdateDeploymentWithImage(ctx context.Context, arg *UpdateDeploymentWithImageParams) error
 	// Update deployment with vm_id and change status to ready
 	UpdateDeploymentWithVM(ctx context.Context, arg *UpdateDeploymentWithVMParams) error
-	// Update VM with container name after deployment
-	UpdateVMContainerName(ctx context.Context, arg *UpdateVMContainerNameParams) error
-	// Update VM with server name and private IP after Hetzner server creation
+	// Update VM with Hetzner server ID after server creation
+	UpdateVMHetznerID(ctx context.Context, arg *UpdateVMHetznerIDParams) error
+	// Update VM with server details after Hetzner server creation
 	UpdateVMServerDetails(ctx context.Context, arg *UpdateVMServerDetailsParams) error
 }
 

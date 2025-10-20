@@ -43,17 +43,16 @@ func (q *Queries) ClearDeploymentVM(ctx context.Context, id pgtype.UUID) error {
 	return err
 }
 
-const clearVMContainer = `-- name: ClearVMContainer :exec
+const clearVMImage = `-- name: ClearVMImage :exec
 UPDATE vms
-SET container_name = NULL,
-    image_id = NULL,
+SET image_id = NULL,
     updated_at = NOW()
 WHERE id = $1
 `
 
-// Clear container and image from VM
-func (q *Queries) ClearVMContainer(ctx context.Context, id pgtype.UUID) error {
-	_, err := q.db.Exec(ctx, clearVMContainer, id)
+// Clear image from VM
+func (q *Queries) ClearVMImage(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, clearVMImage, id)
 	return err
 }
 
@@ -108,13 +107,11 @@ INSERT INTO regions (
     load_balancer_ipv4,
     load_balancer_ipv6,
     load_balancer_no,
-    firewall_no,
-    network_no,
     created_at,
     updated_at
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
-RETURNING id, no, name, load_balancer_ipv4, load_balancer_ipv6, load_balancer_no, firewall_no, network_no, created_at, updated_at, deleted_at
+VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+RETURNING id, no, name, load_balancer_ipv4, load_balancer_ipv6, load_balancer_no, created_at, updated_at, deleted_at
 `
 
 type CreateRegionParams struct {
@@ -124,8 +121,6 @@ type CreateRegionParams struct {
 	LoadBalancerIpv4 string      `json:"load_balancer_ipv4"`
 	LoadBalancerIpv6 string      `json:"load_balancer_ipv6"`
 	LoadBalancerNo   pgtype.Int4 `json:"load_balancer_no"`
-	FirewallNo       pgtype.Int4 `json:"firewall_no"`
-	NetworkNo        pgtype.Int4 `json:"network_no"`
 }
 
 // Create a new region
@@ -137,8 +132,6 @@ func (q *Queries) CreateRegion(ctx context.Context, arg *CreateRegionParams) (*R
 		arg.LoadBalancerIpv4,
 		arg.LoadBalancerIpv6,
 		arg.LoadBalancerNo,
-		arg.FirewallNo,
-		arg.NetworkNo,
 	)
 	var i Region
 	err := row.Scan(
@@ -148,8 +141,6 @@ func (q *Queries) CreateRegion(ctx context.Context, arg *CreateRegionParams) (*R
 		&i.LoadBalancerIpv4,
 		&i.LoadBalancerIpv6,
 		&i.LoadBalancerNo,
-		&i.FirewallNo,
-		&i.NetworkNo,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -162,23 +153,21 @@ INSERT INTO vms (
     id,
     no,
     status,
-    private_ip,
     region_id,
     port,
     created_at,
     updated_at
 )
-VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
-RETURNING id, no, status, private_ip, region_id, image_id, port, server_name, container_name, created_at, updated_at, deleted_at
+VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+RETURNING id, status, region_id, image_id, port, server_name, created_at, updated_at, deleted_at, no, server_no, server_type, public_ip
 `
 
 type CreateVMParams struct {
-	ID        pgtype.UUID `json:"id"`
-	No        int32       `json:"no"`
-	Status    VmStatuses  `json:"status"`
-	PrivateIp string      `json:"private_ip"`
-	RegionID  pgtype.UUID `json:"region_id"`
-	Port      int32       `json:"port"`
+	ID       pgtype.UUID `json:"id"`
+	No       int32       `json:"no"`
+	Status   VmStatuses  `json:"status"`
+	RegionID pgtype.UUID `json:"region_id"`
+	Port     int32       `json:"port"`
 }
 
 // Create a new VM
@@ -187,30 +176,30 @@ func (q *Queries) CreateVM(ctx context.Context, arg *CreateVMParams) (*Vm, error
 		arg.ID,
 		arg.No,
 		arg.Status,
-		arg.PrivateIp,
 		arg.RegionID,
 		arg.Port,
 	)
 	var i Vm
 	err := row.Scan(
 		&i.ID,
-		&i.No,
 		&i.Status,
-		&i.PrivateIp,
 		&i.RegionID,
 		&i.ImageID,
 		&i.Port,
 		&i.ServerName,
-		&i.ContainerName,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.No,
+		&i.ServerNo,
+		&i.ServerType,
+		&i.PublicIp,
 	)
 	return &i, err
 }
 
 const getAllRegions = `-- name: GetAllRegions :many
-SELECT id, no, name, load_balancer_ipv4, load_balancer_ipv6, load_balancer_no, firewall_no, network_no, created_at, updated_at, deleted_at
+SELECT id, no, name, load_balancer_ipv4, load_balancer_ipv6, load_balancer_no, created_at, updated_at, deleted_at
 FROM regions
 WHERE deleted_at IS NULL
 ORDER BY no ASC
@@ -233,8 +222,6 @@ func (q *Queries) GetAllRegions(ctx context.Context) ([]*Region, error) {
 			&i.LoadBalancerIpv4,
 			&i.LoadBalancerIpv6,
 			&i.LoadBalancerNo,
-			&i.FirewallNo,
-			&i.NetworkNo,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -361,7 +348,7 @@ func (q *Queries) GetBuildingDeploymentsWithoutVM(ctx context.Context) ([]*Deplo
 }
 
 const getDeletingVMs = `-- name: GetDeletingVMs :many
-SELECT id, no, status, private_ip, region_id, image_id, port, server_name, container_name, created_at, updated_at, deleted_at
+SELECT id, status, region_id, image_id, port, server_name, created_at, updated_at, deleted_at, no, server_no, server_type, public_ip
 FROM vms
 WHERE status = 'deleting'
   AND deleted_at IS NULL
@@ -380,17 +367,18 @@ func (q *Queries) GetDeletingVMs(ctx context.Context) ([]*Vm, error) {
 		var i Vm
 		if err := rows.Scan(
 			&i.ID,
-			&i.No,
 			&i.Status,
-			&i.PrivateIp,
 			&i.RegionID,
 			&i.ImageID,
 			&i.Port,
 			&i.ServerName,
-			&i.ContainerName,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.No,
+			&i.ServerNo,
+			&i.ServerType,
+			&i.PublicIp,
 		); err != nil {
 			return nil, err
 		}
@@ -540,7 +528,7 @@ func (q *Queries) GetNextVMNumber(ctx context.Context) (int32, error) {
 
 const getPoolVMs = `-- name: GetPoolVMs :many
 
-SELECT id, no, status, private_ip, region_id, image_id, port, server_name, container_name, created_at, updated_at, deleted_at
+SELECT id, status, region_id, image_id, port, server_name, created_at, updated_at, deleted_at, no, server_no, server_type, public_ip
 FROM vms
 WHERE status = 'pooling'
   AND deleted_at IS NULL
@@ -560,17 +548,18 @@ func (q *Queries) GetPoolVMs(ctx context.Context) ([]*Vm, error) {
 		var i Vm
 		if err := rows.Scan(
 			&i.ID,
-			&i.No,
 			&i.Status,
-			&i.PrivateIp,
 			&i.RegionID,
 			&i.ImageID,
 			&i.Port,
 			&i.ServerName,
-			&i.ContainerName,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.No,
+			&i.ServerNo,
+			&i.ServerType,
+			&i.PublicIp,
 		); err != nil {
 			return nil, err
 		}
@@ -756,7 +745,7 @@ func (q *Queries) GetUnverifiedDomains(ctx context.Context) ([]*Domain, error) {
 }
 
 const getVMByID = `-- name: GetVMByID :one
-SELECT id, no, status, private_ip, region_id, image_id, port, server_name, container_name, created_at, updated_at, deleted_at
+SELECT id, status, region_id, image_id, port, server_name, created_at, updated_at, deleted_at, no, server_no, server_type, public_ip
 FROM vms
 WHERE id = $1
   AND deleted_at IS NULL
@@ -768,17 +757,18 @@ func (q *Queries) GetVMByID(ctx context.Context, id pgtype.UUID) (*Vm, error) {
 	var i Vm
 	err := row.Scan(
 		&i.ID,
-		&i.No,
 		&i.Status,
-		&i.PrivateIp,
 		&i.RegionID,
 		&i.ImageID,
 		&i.Port,
 		&i.ServerName,
-		&i.ContainerName,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.No,
+		&i.ServerNo,
+		&i.ServerType,
+		&i.PublicIp,
 	)
 	return &i, err
 }
@@ -980,28 +970,29 @@ func (q *Queries) UpdateDeploymentWithVM(ctx context.Context, arg *UpdateDeploym
 	return err
 }
 
-const updateVMContainerName = `-- name: UpdateVMContainerName :exec
+const updateVMHetznerID = `-- name: UpdateVMHetznerID :exec
 UPDATE vms
-SET container_name = $2,
+SET server_no = $2,
     updated_at = NOW()
 WHERE id = $1
 `
 
-type UpdateVMContainerNameParams struct {
-	ID            pgtype.UUID `json:"id"`
-	ContainerName pgtype.Text `json:"container_name"`
+type UpdateVMHetznerIDParams struct {
+	ID       pgtype.UUID `json:"id"`
+	ServerNo pgtype.Int4 `json:"server_no"`
 }
 
-// Update VM with container name after deployment
-func (q *Queries) UpdateVMContainerName(ctx context.Context, arg *UpdateVMContainerNameParams) error {
-	_, err := q.db.Exec(ctx, updateVMContainerName, arg.ID, arg.ContainerName)
+// Update VM with Hetzner server ID after server creation
+func (q *Queries) UpdateVMHetznerID(ctx context.Context, arg *UpdateVMHetznerIDParams) error {
+	_, err := q.db.Exec(ctx, updateVMHetznerID, arg.ID, arg.ServerNo)
 	return err
 }
 
 const updateVMServerDetails = `-- name: UpdateVMServerDetails :exec
 UPDATE vms
 SET server_name = $2,
-    private_ip = $3,
+    server_type = $3,
+    public_ip = $4,
     updated_at = NOW()
 WHERE id = $1
 `
@@ -1009,11 +1000,17 @@ WHERE id = $1
 type UpdateVMServerDetailsParams struct {
 	ID         pgtype.UUID `json:"id"`
 	ServerName pgtype.Text `json:"server_name"`
-	PrivateIp  string      `json:"private_ip"`
+	ServerType pgtype.Text `json:"server_type"`
+	PublicIp   pgtype.Text `json:"public_ip"`
 }
 
-// Update VM with server name and private IP after Hetzner server creation
+// Update VM with server details after Hetzner server creation
 func (q *Queries) UpdateVMServerDetails(ctx context.Context, arg *UpdateVMServerDetailsParams) error {
-	_, err := q.db.Exec(ctx, updateVMServerDetails, arg.ID, arg.ServerName, arg.PrivateIp)
+	_, err := q.db.Exec(ctx, updateVMServerDetails,
+		arg.ID,
+		arg.ServerName,
+		arg.ServerType,
+		arg.PublicIp,
+	)
 	return err
 }

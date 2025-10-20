@@ -188,12 +188,10 @@ INSERT INTO regions (
     load_balancer_ipv4,
     load_balancer_ipv6,
     load_balancer_no,
-    firewall_no,
-    network_no,
     created_at,
     updated_at
 )
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, NOW(), NOW())
+VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
 RETURNING *;
 
 -- name: CreateVM :one
@@ -202,13 +200,12 @@ INSERT INTO vms (
     id,
     no,
     status,
-    private_ip,
     region_id,
     port,
     created_at,
     updated_at
 )
-VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
 RETURNING *;
 
 -- name: GetNextVMNumber :one
@@ -247,25 +244,25 @@ WHERE id = $1
   AND deleted_at IS NULL;
 
 -- name: UpdateVMServerDetails :exec
--- Update VM with server name and private IP after Hetzner server creation
+-- Update VM with server details after Hetzner server creation
 UPDATE vms
 SET server_name = $2,
-    private_ip = $3,
+    server_type = $3,
+    public_ip = $4,
     updated_at = NOW()
 WHERE id = $1;
 
--- name: UpdateVMContainerName :exec
--- Update VM with container name after deployment
+-- name: UpdateVMHetznerID :exec
+-- Update VM with Hetzner server ID after server creation
 UPDATE vms
-SET container_name = $2,
+SET server_no = $2,
     updated_at = NOW()
 WHERE id = $1;
 
--- name: ClearVMContainer :exec
--- Clear container and image from VM
+-- name: ClearVMImage :exec
+-- Clear image from VM
 UPDATE vms
-SET container_name = NULL,
-    image_id = NULL,
+SET image_id = NULL,
     updated_at = NOW()
 WHERE id = $1;
 

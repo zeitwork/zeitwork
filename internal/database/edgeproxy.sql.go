@@ -14,7 +14,7 @@ import (
 const getActiveRoutes = `-- name: GetActiveRoutes :many
 SELECT 
     d.name as domain_name,
-    v.private_ip as vm_private_ip,
+    v.public_ip as vm_public_ip,
     v.port as vm_port,
     v.region_id as vm_region_id,
     r.load_balancer_ipv4 as region_load_balancer_ip
@@ -30,7 +30,7 @@ ORDER BY d.name
 
 type GetActiveRoutesRow struct {
 	DomainName           string      `json:"domain_name"`
-	VmPrivateIp          string      `json:"vm_private_ip"`
+	VmPublicIp           pgtype.Text `json:"vm_public_ip"`
 	VmPort               int32       `json:"vm_port"`
 	VmRegionID           pgtype.UUID `json:"vm_region_id"`
 	RegionLoadBalancerIp string      `json:"region_load_balancer_ip"`
@@ -49,7 +49,7 @@ func (q *Queries) GetActiveRoutes(ctx context.Context) ([]*GetActiveRoutesRow, e
 		var i GetActiveRoutesRow
 		if err := rows.Scan(
 			&i.DomainName,
-			&i.VmPrivateIp,
+			&i.VmPublicIp,
 			&i.VmPort,
 			&i.VmRegionID,
 			&i.RegionLoadBalancerIp,

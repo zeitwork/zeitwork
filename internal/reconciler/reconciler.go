@@ -291,8 +291,6 @@ func (s *Service) createRegionWithLoadBalancer(ctx context.Context, locationName
 		LoadBalancerIpv4: ipv4,
 		LoadBalancerIpv6: ipv6,
 		LoadBalancerNo:   pgtype.Int4{Int32: int32(lb.ID), Valid: true},
-		FirewallNo:       pgtype.Int4{Valid: false}, // Will be created later if needed
-		NetworkNo:        pgtype.Int4{Valid: false}, // Will be created later if needed
 	})
 	if err != nil {
 		return fmt.Errorf("failed to create region in database: %w", err)
@@ -753,31 +751,9 @@ func (s *Service) reconcileInactiveDeployments(ctx context.Context) {
 			"vm_id", vmID,
 		)
 
-		// Get VM details
-		vm, err := s.db.Queries().GetVMByID(ctx, deployment.VmID)
-		if err != nil {
-			s.logger.Error("failed to get VM details",
-				"vm_id", vmID,
-				"error", err,
-			)
-			continue
-		}
-
-		// Stop and remove container if it exists and Hetzner is configured
-		if s.hcloudClient != nil && vm.ContainerName.Valid && vm.ContainerName.String != "" {
-			if err := s.stopAndRemoveContainer(ctx, vm); err != nil {
-				s.logger.Error("failed to stop and remove container",
-					"deployment_id", deploymentID,
-					"vm_id", vmID,
-					"error", err,
-				)
-				// Continue anyway to clean up database state
-			}
-		}
-
-		// Clear container and image from VM
-		if err := s.db.Queries().ClearVMContainer(ctx, deployment.VmID); err != nil {
-			s.logger.Error("failed to clear VM container",
+		// Clear image from VM
+		if err := s.db.Queries().ClearVMImage(ctx, deployment.VmID); err != nil {
+			s.logger.Error("failed to clear VM image",
 				"vm_id", vmID,
 				"error", err,
 			)
@@ -832,31 +808,9 @@ func (s *Service) reconcileFailedDeployments(ctx context.Context) {
 			"vm_id", vmID,
 		)
 
-		// Get VM details
-		vm, err := s.db.Queries().GetVMByID(ctx, deployment.VmID)
-		if err != nil {
-			s.logger.Error("failed to get VM details",
-				"vm_id", vmID,
-				"error", err,
-			)
-			continue
-		}
-
-		// Stop and remove container if it exists and Hetzner is configured
-		if s.hcloudClient != nil && vm.ContainerName.Valid && vm.ContainerName.String != "" {
-			if err := s.stopAndRemoveContainer(ctx, vm); err != nil {
-				s.logger.Error("failed to stop and remove container",
-					"deployment_id", deploymentID,
-					"vm_id", vmID,
-					"error", err,
-				)
-				// Continue anyway to clean up database state
-			}
-		}
-
-		// Clear container and image from VM
-		if err := s.db.Queries().ClearVMContainer(ctx, deployment.VmID); err != nil {
-			s.logger.Error("failed to clear VM container",
+		// Clear image from VM
+		if err := s.db.Queries().ClearVMImage(ctx, deployment.VmID); err != nil {
+			s.logger.Error("failed to clear VM image",
 				"vm_id", vmID,
 				"error", err,
 			)
@@ -908,15 +862,16 @@ func (s *Service) reconcileDeletingVMs(ctx context.Context) {
 		s.logger.Info("deleting Hetzner server",
 			"vm_id", vmID,
 			"vm_no", vm.No,
+			"server_no", vm.ServerNo,
 		)
 
-		// Delete Hetzner server if client is available
-		if s.hcloudClient != nil {
-			server, _, err := s.hcloudClient.Server.GetByID(ctx, int64(vm.No))
+		// Delete Hetzner server if client is available and server_no is set
+		if s.hcloudClient != nil && vm.ServerNo.Valid {
+			server, _, err := s.hcloudClient.Server.GetByID(ctx, int64(vm.ServerNo.Int32))
 			if err != nil {
 				s.logger.Error("failed to get Hetzner server for deletion",
 					"vm_id", vmID,
-					"vm_no", vm.No,
+					"server_no", vm.ServerNo.Int32,
 					"error", err,
 				)
 				continue
@@ -927,7 +882,7 @@ func (s *Service) reconcileDeletingVMs(ctx context.Context) {
 				if err != nil {
 					s.logger.Error("failed to delete Hetzner server",
 						"vm_id", vmID,
-						"vm_no", vm.No,
+						"server_no", vm.ServerNo.Int32,
 						"server_id", server.ID,
 						"error", err,
 					)
@@ -936,15 +891,19 @@ func (s *Service) reconcileDeletingVMs(ctx context.Context) {
 
 				s.logger.Info("Hetzner server deleted",
 					"vm_id", vmID,
-					"vm_no", vm.No,
+					"server_no", vm.ServerNo.Int32,
 					"server_id", server.ID,
 				)
 			} else {
 				s.logger.Warn("Hetzner server not found, marking VM as deleted anyway",
 					"vm_id", vmID,
-					"vm_no", vm.No,
+					"server_no", vm.ServerNo.Int32,
 				)
 			}
+		} else if !vm.ServerNo.Valid {
+			s.logger.Info("VM has no Hetzner server (server_no not set), marking as deleted",
+				"vm_id", vmID,
+			)
 		}
 
 		// Mark VM as deleted in database
@@ -1013,23 +972,20 @@ func (s *Service) reconcileVMs(ctx context.Context) {
 
 		// Generate VM details
 		vmID := uuid.New()
-		privateIP := fmt.Sprintf("10.77.%d.%d", (nextNo*8)/256, ((nextNo*8)%256)+2)
 		port := int32(3000)
 
 		s.logger.Info("creating pool VM",
 			"vm_no", nextNo,
 			"region_id", uuid.ToString(region.ID),
-			"private_ip", privateIP,
 		)
 
 		// Create VM in database with "initializing" status
 		params := &database.CreateVMParams{
-			ID:        vmID,
-			No:        nextNo,
-			Status:    "initializing",
-			PrivateIp: privateIP,
-			RegionID:  region.ID,
-			Port:      port,
+			ID:       vmID,
+			No:       nextNo,
+			Status:   "initializing",
+			RegionID: region.ID,
+			Port:     port,
 		}
 
 		vm, err := s.db.Queries().CreateVM(ctx, params)
@@ -1150,49 +1106,53 @@ func (s *Service) createHetznerServer(ctx context.Context, vm *database.Vm, regi
 		return fmt.Errorf("failed to wait for server creation: %w", err)
 	}
 
-	// Get the server's private IP (from network interface)
-	var actualPrivateIP string
-	if len(result.Server.PrivateNet) > 0 {
-		actualPrivateIP = result.Server.PrivateNet[0].IP.String()
+	// Get public IPv6 address
+	var publicIP string
+	if result.Server.PublicNet.IPv6.IP != nil {
+		// Hetzner returns the network prefix (e.g., "2a01:4f8:1c1a:9ebe::")
+		// but we need the actual host address (e.g., "2a01:4f8:1c1a:9ebe::1")
+		// Copy the IP and set the last byte to 1
+		ip := make(net.IP, len(result.Server.PublicNet.IPv6.IP))
+		copy(ip, result.Server.PublicNet.IPv6.IP)
+		ip[len(ip)-1] = 1 // Set last byte to 1 for ::1
+		publicIP = ip.String()
 	} else {
-		// If no private network yet, use the placeholder IP we generated
-		actualPrivateIP = vm.PrivateIp
-		s.logger.Warn("server has no private network IP yet, using placeholder",
-			"server_id", result.Server.ID,
-			"placeholder_ip", actualPrivateIP,
-		)
+		return fmt.Errorf("server created without IPv6 address")
 	}
 
 	s.logger.Info("Hetzner server created successfully",
 		"server_id", result.Server.ID,
 		"server_name", serverName,
-		"private_ip", actualPrivateIP,
+		"public_ip", publicIP,
 	)
+
+	// Update VM with Hetzner server ID (server_no)
+	if err := s.db.Queries().UpdateVMHetznerID(ctx, &database.UpdateVMHetznerIDParams{
+		ID:       vm.ID,
+		ServerNo: pgtype.Int4{Int32: int32(result.Server.ID), Valid: true},
+	}); err != nil {
+		return fmt.Errorf("failed to update VM with Hetzner server ID: %w", err)
+	}
 
 	// Update VM with server details
 	if err := s.db.Queries().UpdateVMServerDetails(ctx, &database.UpdateVMServerDetailsParams{
 		ID:         vm.ID,
 		ServerName: pgtype.Text{String: serverName, Valid: true},
-		PrivateIp:  actualPrivateIP,
+		ServerType: pgtype.Text{String: serverType.Name, Valid: true},
+		PublicIp:   pgtype.Text{String: publicIP, Valid: true},
 	}); err != nil {
 		return fmt.Errorf("failed to update VM with server details: %w", err)
 	}
 
 	// Docker is installed via cloud-init during server creation (see UserData in create call)
-	// Verify Docker is installed by checking server is ready
-	s.logger.Info("Docker installed via cloud-init",
-		"server_id", result.Server.ID,
-	)
-
-	// Mark VM as pooling (ready for use)
-	if err := s.db.Queries().ReturnVMToPool(ctx, vm.ID); err != nil {
-		return fmt.Errorf("failed to mark VM as pooling: %w", err)
-	}
-
-	s.logger.Info("VM marked as pooling and ready for assignment",
+	// Wait for VM to be ready in the background (SSH accessible + Docker installed)
+	s.logger.Info("VM created, waiting for readiness check in background",
 		"vm_id", uuid.ToString(vm.ID),
 		"vm_no", vm.No,
 	)
+
+	// Start background readiness check
+	go s.waitForVMReady(context.Background(), vm)
 
 	return nil
 }
@@ -1255,26 +1215,16 @@ func (s *Service) deployContainerToVM(ctx context.Context, vm *database.Vm, imag
 
 	s.logger.Info("container running on VM",
 		"vm_id", uuid.ToString(vm.ID),
-		"container_name", containerName,
 		"port", vm.Port,
 	)
 
-	// 6. Update VM with container name
-	if err := s.db.Queries().UpdateVMContainerName(ctx, &database.UpdateVMContainerNameParams{
-		ID:            vm.ID,
-		ContainerName: pgtype.Text{String: containerName, Valid: true},
-	}); err != nil {
-		return fmt.Errorf("failed to update VM with container name: %w", err)
-	}
-
-	// 7. Mark VM as running
+	// 6. Mark VM as running
 	if err := s.db.Queries().MarkVMRunning(ctx, vm.ID); err != nil {
 		return fmt.Errorf("failed to mark VM as running: %w", err)
 	}
 
 	s.logger.Info("deployment complete, VM marked as running",
 		"vm_id", uuid.ToString(vm.ID),
-		"container_name", containerName,
 	)
 
 	return nil
@@ -1467,21 +1417,112 @@ func (s *Service) runContainerOnVM(ctx context.Context, vm *database.Vm, imageNa
 	return nil
 }
 
-// getSSHClient creates an SSH client connection to a VM
-func (s *Service) getSSHClient(ctx context.Context, vm *database.Vm) (*ssh.Client, error) {
-	// Get server for IPv6
-	server, _, err := s.hcloudClient.Server.GetByID(ctx, int64(vm.No))
+// waitForVMReady waits for a VM to be SSH-accessible and have Docker installed
+// This runs in a background goroutine and marks the VM as pooling when ready
+func (s *Service) waitForVMReady(ctx context.Context, vm *database.Vm) {
+	vmID := uuid.ToString(vm.ID)
+
+	s.logger.Info("starting VM readiness check",
+		"vm_id", vmID,
+		"vm_no", vm.No,
+	)
+
+	// Create context with 5 minute timeout
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+
+	// Poll every 10 seconds
+	ticker := time.NewTicker(10 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			s.logger.Error("VM readiness check timed out",
+				"vm_id", vmID,
+				"vm_no", vm.No,
+			)
+			// Mark VM for deletion since it never became ready
+			if err := s.db.Queries().MarkVMDeleting(context.Background(), vm.ID); err != nil {
+				s.logger.Error("failed to mark unready VM for deletion",
+					"vm_id", vmID,
+					"error", err,
+				)
+			}
+			return
+
+		case <-ticker.C:
+			if s.checkVMReady(ctx, vm) {
+				// VM is ready! Mark as pooling
+				if err := s.db.Queries().ReturnVMToPool(context.Background(), vm.ID); err != nil {
+					s.logger.Error("failed to mark VM as pooling",
+						"vm_id", vmID,
+						"error", err,
+					)
+					return
+				}
+
+				s.logger.Info("VM is ready and marked as pooling",
+					"vm_id", vmID,
+					"vm_no", vm.No,
+				)
+				return
+			}
+			// Not ready yet, will try again on next tick
+		}
+	}
+}
+
+// checkVMReady checks if VM is SSH-accessible and has Docker installed
+func (s *Service) checkVMReady(ctx context.Context, vm *database.Vm) bool {
+	// Try to establish SSH connection
+	sshClient, err := s.getSSHClient(ctx, vm)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get Hetzner server: %w", err)
+		s.logger.Debug("VM not yet SSH accessible",
+			"vm_id", uuid.ToString(vm.ID),
+			"vm_no", vm.No,
+			"error", err,
+		)
+		return false
 	}
-	if server == nil {
-		return nil, fmt.Errorf("hetzner server not found for vm.no=%d", vm.No)
+	defer sshClient.Close()
+
+	// Check if Docker is installed and running
+	session, err := sshClient.NewSession()
+	if err != nil {
+		s.logger.Debug("failed to create SSH session",
+			"vm_id", uuid.ToString(vm.ID),
+			"error", err,
+		)
+		return false
 	}
-	if server.PublicNet.IPv6.IP == nil {
-		return nil, fmt.Errorf("server has no IPv6 address")
+	defer session.Close()
+
+	// Run simple docker command to verify it's working
+	if err := session.Run("docker info > /dev/null 2>&1"); err != nil {
+		s.logger.Debug("Docker not yet ready on VM",
+			"vm_id", uuid.ToString(vm.ID),
+			"vm_no", vm.No,
+			"error", err,
+		)
+		return false
 	}
 
-	ipv6 := server.PublicNet.IPv6.IP.String()
+	s.logger.Info("VM readiness check passed",
+		"vm_id", uuid.ToString(vm.ID),
+		"vm_no", vm.No,
+	)
+	return true
+}
+
+// getSSHClient creates an SSH client connection to a VM
+func (s *Service) getSSHClient(ctx context.Context, vm *database.Vm) (*ssh.Client, error) {
+	// Check if VM has public IP set
+	if !vm.PublicIp.Valid || vm.PublicIp.String == "" {
+		return nil, fmt.Errorf("VM has no public IP address set")
+	}
+
+	ipv6 := vm.PublicIp.String
 
 	// Parse SSH key
 	signer, err := ssh.ParsePrivateKey(s.sshPrivateKey)
@@ -1499,44 +1540,6 @@ func (s *Service) getSSHClient(ctx context.Context, vm *database.Vm) (*ssh.Clien
 	// Connect via IPv6
 	sshAddr := fmt.Sprintf("[%s]:22", ipv6)
 	return ssh.Dial("tcp", sshAddr, sshConfig)
-}
-
-// stopAndRemoveContainer stops and removes a Docker container from a VM
-func (s *Service) stopAndRemoveContainer(ctx context.Context, vm *database.Vm) error {
-	sshClient, err := s.getSSHClient(ctx, vm)
-	if err != nil {
-		return fmt.Errorf("failed to get SSH client: %w", err)
-	}
-	defer sshClient.Close()
-
-	containerName := vm.ContainerName.String
-
-	s.logger.Info("stopping and removing container",
-		"vm_id", uuid.ToString(vm.ID),
-		"vm_no", vm.No,
-		"container_name", containerName,
-	)
-
-	// Stop container (ignore errors if already stopped)
-	stopCmd := fmt.Sprintf("docker stop %s", containerName)
-	_ = s.executeSSHCommand(sshClient, stopCmd)
-
-	// Remove container
-	removeCmd := fmt.Sprintf("docker rm %s", containerName)
-	if err := s.executeSSHCommand(sshClient, removeCmd); err != nil {
-		// Log but don't fail - container might already be removed
-		s.logger.Warn("failed to remove container (may already be removed)",
-			"container_name", containerName,
-			"error", err,
-		)
-	}
-
-	s.logger.Info("container stopped and removed",
-		"vm_id", uuid.ToString(vm.ID),
-		"container_name", containerName,
-	)
-
-	return nil
 }
 
 // executeSSHCommand executes a single command via SSH

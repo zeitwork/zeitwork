@@ -8,6 +8,20 @@
       "when": 1760877950069,
       "tag": "0000_foamy_ikaris",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1760890616619,
+      "tag": "0001_bumpy_nomad",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1760945147784,
+      "tag": "0002_kind_dark_beast",
+      "breakpoints": true
     }
   ]
 }
