@@ -7,7 +7,7 @@ image: zeitwork/web
 # Deploy to these servers.
 servers:
   web:
-    - 159.69.6.214
+    - 46.224.26.112
   # job:
   #   hosts:
   #     - 192.168.0.1

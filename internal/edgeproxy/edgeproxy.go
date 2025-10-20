@@ -26,7 +26,7 @@ type Config struct {
 
 // Route represents routing information for a domain
 type Route struct {
-	PublicIP string // VM's public IPv6 address
+	PublicIP string // VM's public IP address
 	Port     int32  // VM's port
 	RegionID string // VM's region UUID
 	RegionIP string // Region's public IP (load balancer) for cross-region routing
@@ -246,7 +246,7 @@ func (s *Service) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		targetURL = fmt.Sprintf("http://[%s]:%d", route.PublicIP, route.Port)
+		targetURL = fmt.Sprintf("http://%s:%d", route.PublicIP, route.Port)
 	} else {
 		// Cross-region: route to other region's load balancer
 		targetURL = fmt.Sprintf("http://%s:80", route.RegionIP)

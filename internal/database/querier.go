@@ -49,6 +49,8 @@ type Querier interface {
 	// BUILDER QUERIES
 	// Get next pending build with row-level locking
 	GetPendingBuild(ctx context.Context) (*Build, error)
+	// Get VMs that are in pool or being initialized (for pool size calculation)
+	GetPoolAndInitializingVMs(ctx context.Context) ([]*Vm, error)
 	// VM QUERIES
 	// Get VMs that are available in the pool
 	GetPoolVMs(ctx context.Context) ([]*Vm, error)

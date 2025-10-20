@@ -157,6 +157,14 @@ WHERE status = 'pooling'
   AND deleted_at IS NULL
 ORDER BY created_at ASC;
 
+-- name: GetPoolAndInitializingVMs :many
+-- Get VMs that are in pool or being initialized (for pool size calculation)
+SELECT *
+FROM vms
+WHERE status IN ('pooling', 'initializing')
+  AND deleted_at IS NULL
+ORDER BY created_at ASC;
+
 -- name: GetVMsByRegion :many
 -- Get count of VMs by region and status
 SELECT 

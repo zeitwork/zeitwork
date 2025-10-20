@@ -927,8 +927,8 @@ func (s *Service) reconcileVMs(ctx context.Context) {
 	// First, delete VMs marked for deletion
 	s.reconcileDeletingVMs(ctx)
 
-	// Get current pool VMs
-	poolVMs, err := s.db.Queries().GetPoolVMs(ctx)
+	// Get current pool VMs (including initializing ones to avoid creating duplicates)
+	poolVMs, err := s.db.Queries().GetPoolAndInitializingVMs(ctx)
 	if err != nil {
 		s.logger.Error("failed to get pool VMs", "error", err)
 		return
@@ -1079,7 +1079,7 @@ func (s *Service) createHetznerServer(ctx context.Context, vm *database.Vm, regi
 		"server_type", s.cfg.HetznerServerType,
 	)
 
-	// Create server WITHOUT public IPv4 (to reduce costs)
+	// Create server with public IPv4 for better compatibility
 	result, _, err := s.hcloudClient.Server.Create(ctx, hcloud.ServerCreateOpts{
 		Name:       serverName,
 		ServerType: serverType,
@@ -1088,8 +1088,8 @@ func (s *Service) createHetznerServer(ctx context.Context, vm *database.Vm, regi
 		SSHKeys:    []*hcloud.SSHKey{sshKey},
 		UserData:   cloudInitTemplate,
 		PublicNet: &hcloud.ServerCreatePublicNet{
-			EnableIPv4: false, // No public IPv4 to save costs
-			EnableIPv6: true,  // Keep IPv6 for SSH access
+			EnableIPv4: true, // Enable IPv4 for compatibility
+			EnableIPv6: true, // Keep IPv6 as well
 		},
 	})
 	if err != nil {
@@ -1106,18 +1106,12 @@ func (s *Service) createHetznerServer(ctx context.Context, vm *database.Vm, regi
 		return fmt.Errorf("failed to wait for server creation: %w", err)
 	}
 
-	// Get public IPv6 address
+	// Get public IPv4 address
 	var publicIP string
-	if result.Server.PublicNet.IPv6.IP != nil {
-		// Hetzner returns the network prefix (e.g., "2a01:4f8:1c1a:9ebe::")
-		// but we need the actual host address (e.g., "2a01:4f8:1c1a:9ebe::1")
-		// Copy the IP and set the last byte to 1
-		ip := make(net.IP, len(result.Server.PublicNet.IPv6.IP))
-		copy(ip, result.Server.PublicNet.IPv6.IP)
-		ip[len(ip)-1] = 1 // Set last byte to 1 for ::1
-		publicIP = ip.String()
+	if result.Server.PublicNet.IPv4.IP != nil {
+		publicIP = result.Server.PublicNet.IPv4.IP.String()
 	} else {
-		return fmt.Errorf("server created without IPv6 address")
+		return fmt.Errorf("server created without IPv4 address")
 	}
 
 	s.logger.Info("Hetzner server created successfully",
@@ -1537,8 +1531,8 @@ func (s *Service) getSSHClient(ctx context.Context, vm *database.Vm) (*ssh.Clien
 		Timeout:         10 * time.Second,
 	}
 
-	// Connect via IPv6
-	sshAddr := fmt.Sprintf("[%s]:22", ipv6)
+	// Connect via IP (works for both IPv4 and IPv6)
+	sshAddr := fmt.Sprintf("%s:22", ipv6)
 	return ssh.Dial("tcp", sshAddr, sshConfig)
 }
 

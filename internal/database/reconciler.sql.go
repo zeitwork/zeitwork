@@ -526,6 +526,49 @@ func (q *Queries) GetNextVMNumber(ctx context.Context) (int32, error) {
 	return next_no, err
 }
 
+const getPoolAndInitializingVMs = `-- name: GetPoolAndInitializingVMs :many
+SELECT id, status, region_id, image_id, port, server_name, created_at, updated_at, deleted_at, no, server_no, server_type, public_ip
+FROM vms
+WHERE status IN ('pooling', 'initializing')
+  AND deleted_at IS NULL
+ORDER BY created_at ASC
+`
+
+// Get VMs that are in pool or being initialized (for pool size calculation)
+func (q *Queries) GetPoolAndInitializingVMs(ctx context.Context) ([]*Vm, error) {
+	rows, err := q.db.Query(ctx, getPoolAndInitializingVMs)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []*Vm
+	for rows.Next() {
+		var i Vm
+		if err := rows.Scan(
+			&i.ID,
+			&i.Status,
+			&i.RegionID,
+			&i.ImageID,
+			&i.Port,
+			&i.ServerName,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.No,
+			&i.ServerNo,
+			&i.ServerType,
+			&i.PublicIp,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, &i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getPoolVMs = `-- name: GetPoolVMs :many
 
 SELECT id, status, region_id, image_id, port, server_name, created_at, updated_at, deleted_at, no, server_no, server_type, public_ip
