@@ -293,10 +293,10 @@ func (s *Service) executeBuild(ctx context.Context, build *database.Build) error
 
 	s.logger.Info("repository cloned successfully", "build_id", buildID)
 
-	// Generate image name from repository (e.g., "dokedu/frontend" -> "zeitwork-build-dokedu-frontend")
+	// Generate image name from repository (e.g., "dokedu/frontend" -> "ghcr.io/zeitwork/build-dokedu-frontend")
 	// Replace slashes and convert to lowercase for valid Docker image name
 	repoName := strings.ToLower(strings.ReplaceAll(repository, "/", "-"))
-	imageName := fmt.Sprintf("%s/zeitwork-build-%s:latest",
+	imageName := fmt.Sprintf("%s/zeitwork/build-%s:latest",
 		s.cfg.RegistryURL,
 		repoName,
 	)
