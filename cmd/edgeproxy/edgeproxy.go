@@ -13,11 +13,15 @@ import (
 )
 
 type Config struct {
-	HTTPAddr       string        `env:"EDGEPROXY_HTTP_ADDR" envDefault:":8080"`
-	DatabaseURL    string        `env:"EDGEPROXY_DATABASE_URL,required"`
-	RegionID       string        `env:"EDGEPROXY_REGION_ID,required"`
-	UpdateInterval time.Duration `env:"EDGEPROXY_UPDATE_INTERVAL" envDefault:"10s"`
-	LogLevel       string        `env:"EDGEPROXY_LOG_LEVEL" envDefault:"info"`
+	HTTPAddr              string        `env:"EDGEPROXY_HTTP_ADDR" envDefault:":8080"`
+	HTTPSAddr             string        `env:"EDGEPROXY_HTTPS_ADDR" envDefault:":8443"`
+	DatabaseURL           string        `env:"EDGEPROXY_DATABASE_URL,required"`
+	RegionID              string        `env:"EDGEPROXY_REGION_ID,required"`
+	UpdateInterval        time.Duration `env:"EDGEPROXY_UPDATE_INTERVAL" envDefault:"10s"`
+	ACMEEmail             string        `env:"EDGEPROXY_ACME_EMAIL,required"`
+	ACMEStaging           bool          `env:"EDGEPROXY_ACME_STAGING" envDefault:"false"`
+	ACMECertCheckInterval time.Duration `env:"EDGEPROXY_ACME_CERT_CHECK_INTERVAL" envDefault:"1h"`
+	LogLevel              string        `env:"EDGEPROXY_LOG_LEVEL" envDefault:"info"`
 }
 
 func main() {
@@ -50,17 +54,25 @@ func main() {
 
 	logger.Info("starting edgeproxy",
 		"http_addr", cfg.HTTPAddr,
+		"https_addr", cfg.HTTPSAddr,
 		"region_id", cfg.RegionID,
 		"update_interval", cfg.UpdateInterval,
+		"acme_email", cfg.ACMEEmail,
+		"acme_staging", cfg.ACMEStaging,
+		"acme_cert_check_interval", cfg.ACMECertCheckInterval,
 		"log_level", cfg.LogLevel,
 	)
 
 	// Create edgeproxy service
 	svc, err := edgeproxy.NewService(edgeproxy.Config{
-		HTTPAddr:       cfg.HTTPAddr,
-		DatabaseURL:    cfg.DatabaseURL,
-		RegionID:       cfg.RegionID,
-		UpdateInterval: cfg.UpdateInterval,
+		HTTPAddr:              cfg.HTTPAddr,
+		HTTPSAddr:             cfg.HTTPSAddr,
+		DatabaseURL:           cfg.DatabaseURL,
+		RegionID:              cfg.RegionID,
+		UpdateInterval:        cfg.UpdateInterval,
+		ACMEEmail:             cfg.ACMEEmail,
+		ACMEStaging:           cfg.ACMEStaging,
+		ACMECertCheckInterval: cfg.ACMECertCheckInterval,
 	}, logger)
 	if err != nil {
 		logger.Error("failed to create edgeproxy service", "error", err)

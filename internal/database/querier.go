@@ -11,8 +11,12 @@ import (
 )
 
 type Querier interface {
+	// Attempts to acquire a lock for a key
+	AcquireCertmagicLock(ctx context.Context, arg *AcquireCertmagicLockParams) (int64, error)
 	// Assign a VM to a deployment and update VM status
 	AssignVMToDeployment(ctx context.Context, arg *AssignVMToDeploymentParams) error
+	// Removes expired locks
+	CleanupExpiredCertmagicLocks(ctx context.Context) error
 	// Clear VM assignment from deployment
 	ClearDeploymentVM(ctx context.Context, id pgtype.UUID) error
 	// Clear image from VM
@@ -25,6 +29,10 @@ type Querier interface {
 	CreateRegion(ctx context.Context, arg *CreateRegionParams) (*Region, error)
 	// Create a new VM
 	CreateVM(ctx context.Context, arg *CreateVMParams) (*Vm, error)
+	// Deletes a certmagic data entry by key
+	DeleteCertmagicData(ctx context.Context, key string) (int64, error)
+	// Checks if a certmagic data entry exists
+	ExistsCertmagicData(ctx context.Context, key string) (bool, error)
 	// Returns active routing information for the edgeproxy
 	// Joins domains → deployments → vms → regions
 	GetActiveRoutes(ctx context.Context) ([]*GetActiveRoutesRow, error)
@@ -36,6 +44,8 @@ type Querier interface {
 	GetBuildingDeploymentsWithoutVM(ctx context.Context) ([]*Deployment, error)
 	// Get VMs marked for deletion
 	GetDeletingVMs(ctx context.Context) ([]*Vm, error)
+	// Returns domains that need SSL certificates (verified but not yet active)
+	GetDomainsNeedingCertificates(ctx context.Context) ([]*GetDomainsNeedingCertificatesRow, error)
 	// Get failed deployments that need cleanup
 	GetFailedDeployments(ctx context.Context) ([]*Deployment, error)
 	// Get GitHub installation details
@@ -76,6 +86,12 @@ type Querier interface {
 	GetVMByID(ctx context.Context, id pgtype.UUID) (*Vm, error)
 	// Get count of VMs by region and status
 	GetVMsByRegion(ctx context.Context) ([]*GetVMsByRegionRow, error)
+	// Lists certmagic data keys with a given prefix (non-recursive - no additional slashes)
+	ListCertmagicDataNonRecursive(ctx context.Context, dollar_1 pgtype.Text) ([]string, error)
+	// Lists all certmagic data keys with a given prefix (recursive)
+	ListCertmagicDataRecursive(ctx context.Context, dollar_1 pgtype.Text) ([]string, error)
+	// Loads a certmagic data entry by key
+	LoadCertmagicData(ctx context.Context, key string) (*CertmagicDatum, error)
 	// Mark build as building
 	MarkBuildBuilding(ctx context.Context, id pgtype.UUID) error
 	// Mark build as error
@@ -96,8 +112,15 @@ type Querier interface {
 	MarkVMDeleting(ctx context.Context, id pgtype.UUID) error
 	// Mark VM as running after container deployment
 	MarkVMRunning(ctx context.Context, id pgtype.UUID) error
+	// Releases a lock for a key
+	ReleaseCertmagicLock(ctx context.Context, key string) (int64, error)
 	// Return a VM to the pool
 	ReturnVMToPool(ctx context.Context, id pgtype.UUID) error
+	// Returns metadata about a certmagic data entry
+	StatCertmagicData(ctx context.Context, key string) (*CertmagicDatum, error)
+	// Certmagic Storage Queries
+	// Stores or updates a certmagic data entry
+	StoreCertmagicData(ctx context.Context, arg *StoreCertmagicDataParams) error
 	// Assign VM to build
 	UpdateBuildVM(ctx context.Context, arg *UpdateBuildVMParams) error
 	// Update deployment with build_id and change status to building
@@ -106,6 +129,8 @@ type Querier interface {
 	UpdateDeploymentWithImage(ctx context.Context, arg *UpdateDeploymentWithImageParams) error
 	// Update deployment with vm_id and change status to ready
 	UpdateDeploymentWithVM(ctx context.Context, arg *UpdateDeploymentWithVMParams) error
+	// Updates the SSL certificate status for a domain
+	UpdateDomainCertificateStatus(ctx context.Context, arg *UpdateDomainCertificateStatusParams) error
 	// Update VM with Hetzner server ID after server creation
 	UpdateVMHetznerID(ctx context.Context, arg *UpdateVMHetznerIDParams) error
 	// Update VM with server details after Hetzner server creation

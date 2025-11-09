@@ -783,7 +783,7 @@ func (q *Queries) GetTimedOutBuilds(ctx context.Context) ([]*Build, error) {
 
 const getUnverifiedDomains = `-- name: GetUnverifiedDomains :many
 
-SELECT id, name, deployment_id, verification_token, verified_at, organisation_id, created_at, updated_at, deleted_at
+SELECT id, name, deployment_id, verification_token, verified_at, organisation_id, created_at, updated_at, deleted_at, ssl_certificate_status, ssl_certificate_issued_at, ssl_certificate_expires_at, ssl_certificate_error
 FROM domains
 WHERE verified_at IS NULL
   AND deleted_at IS NULL
@@ -812,6 +812,10 @@ func (q *Queries) GetUnverifiedDomains(ctx context.Context) ([]*Domain, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.SslCertificateStatus,
+			&i.SslCertificateIssuedAt,
+			&i.SslCertificateExpiresAt,
+			&i.SslCertificateError,
 		); err != nil {
 			return nil, err
 		}

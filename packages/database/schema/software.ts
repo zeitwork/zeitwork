@@ -65,12 +65,23 @@ export const sessions = pgTable("sessions", {
   ...timestamps,
 });
 
+export const sslCertificateStatusesEnum = pgEnum("ssl_certificate_statuses", [
+  "pending",
+  "active",
+  "failed",
+  "renewing",
+]);
+
 export const domains = pgTable("domains", {
   id: uuid().primaryKey().$defaultFn(uuidv7),
   name: text().notNull(), // e.g. app.example.com
   deploymentId: uuid().references(() => deployments.id),
   verificationToken: text(),
   verifiedAt: timestamp({ withTimezone: true }),
+  sslCertificateStatus: sslCertificateStatusesEnum().default("pending"),
+  sslCertificateIssuedAt: timestamp({ withTimezone: true }),
+  sslCertificateExpiresAt: timestamp({ withTimezone: true }),
+  sslCertificateError: text(),
   ...organisationId,
   ...timestamps,
 });

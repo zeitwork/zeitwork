@@ -40,7 +40,7 @@ COPY --from=builder /app/edgeproxy .
 USER zeitwork
 
 # Expose ports for HTTP and HTTPS
-EXPOSE 8080 8443
+EXPOSE 80 443
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \

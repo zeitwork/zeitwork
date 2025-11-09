@@ -102,6 +102,50 @@ func (ns NullDeploymentStatuses) Value() (driver.Value, error) {
 	return string(ns.DeploymentStatuses), nil
 }
 
+type SslCertificateStatuses string
+
+const (
+	SslCertificateStatusesPending  SslCertificateStatuses = "pending"
+	SslCertificateStatusesActive   SslCertificateStatuses = "active"
+	SslCertificateStatusesFailed   SslCertificateStatuses = "failed"
+	SslCertificateStatusesRenewing SslCertificateStatuses = "renewing"
+)
+
+func (e *SslCertificateStatuses) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = SslCertificateStatuses(s)
+	case string:
+		*e = SslCertificateStatuses(s)
+	default:
+		return fmt.Errorf("unsupported scan type for SslCertificateStatuses: %T", src)
+	}
+	return nil
+}
+
+type NullSslCertificateStatuses struct {
+	SslCertificateStatuses SslCertificateStatuses `json:"ssl_certificate_statuses"`
+	Valid                  bool                   `json:"valid"` // Valid is true if SslCertificateStatuses is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullSslCertificateStatuses) Scan(value interface{}) error {
+	if value == nil {
+		ns.SslCertificateStatuses, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.SslCertificateStatuses.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullSslCertificateStatuses) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.SslCertificateStatuses), nil
+}
+
 type VmStatuses string
 
 const (
@@ -208,15 +252,19 @@ type DeploymentLog struct {
 }
 
 type Domain struct {
-	ID                pgtype.UUID        `json:"id"`
-	Name              string             `json:"name"`
-	DeploymentID      pgtype.UUID        `json:"deployment_id"`
-	VerificationToken pgtype.Text        `json:"verification_token"`
-	VerifiedAt        pgtype.Timestamptz `json:"verified_at"`
-	OrganisationID    pgtype.UUID        `json:"organisation_id"`
-	CreatedAt         pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt         pgtype.Timestamptz `json:"deleted_at"`
+	ID                      pgtype.UUID                `json:"id"`
+	Name                    string                     `json:"name"`
+	DeploymentID            pgtype.UUID                `json:"deployment_id"`
+	VerificationToken       pgtype.Text                `json:"verification_token"`
+	VerifiedAt              pgtype.Timestamptz         `json:"verified_at"`
+	OrganisationID          pgtype.UUID                `json:"organisation_id"`
+	CreatedAt               pgtype.Timestamptz         `json:"created_at"`
+	UpdatedAt               pgtype.Timestamptz         `json:"updated_at"`
+	DeletedAt               pgtype.Timestamptz         `json:"deleted_at"`
+	SslCertificateStatus    NullSslCertificateStatuses `json:"ssl_certificate_status"`
+	SslCertificateIssuedAt  pgtype.Timestamptz         `json:"ssl_certificate_issued_at"`
+	SslCertificateExpiresAt pgtype.Timestamptz         `json:"ssl_certificate_expires_at"`
+	SslCertificateError     pgtype.Text                `json:"ssl_certificate_error"`
 }
 
 type EnvironmentDomain struct {
