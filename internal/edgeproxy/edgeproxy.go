@@ -27,6 +27,7 @@ type Config struct {
 	ACMEEmail             string        // Email for Let's Encrypt account
 	ACMEStaging           bool          // Use Let's Encrypt staging environment
 	ACMECertCheckInterval time.Duration // How often to check for certificates needing renewal
+	ACMERateLimitDelay    time.Duration // Delay between certificate requests to respect rate limits
 }
 
 // Route represents routing information for a domain
@@ -71,6 +72,9 @@ func NewService(cfg Config, logger *slog.Logger) (*Service, error) {
 	}
 	if cfg.ACMECertCheckInterval == 0 {
 		cfg.ACMECertCheckInterval = 1 * time.Hour
+	}
+	if cfg.ACMERateLimitDelay == 0 {
+		cfg.ACMERateLimitDelay = 3 * time.Second
 	}
 	if cfg.ACMEEmail == "" {
 		return nil, fmt.Errorf("ACME email is required")
@@ -145,21 +149,14 @@ func (s *Service) Start(ctx context.Context) error {
 	// Start certificate acquisition loop
 	go s.certificateAcquisitionLoop(ctx)
 
-	// Get all verified domains for initial certificate management
-	domains, err := s.getVerifiedDomains(ctx)
-	if err != nil {
-		s.logger.Warn("failed to get verified domains", "error", err)
-	} else if len(domains) > 0 {
-		s.logger.Info("managing certificates for domains", "count", len(domains))
-		// Start async certificate acquisition for all domains
-		go func() {
-			for _, domain := range domains {
-				if err := s.certmagic.ManageAsync(context.Background(), []string{domain}); err != nil {
-					s.logger.Error("failed to manage certificate", "domain", domain, "error", err)
-				}
-			}
-		}()
-	}
+	// Immediately acquire certificates for verified domains (proactive)
+	// This runs with rate limiting to respect Let's Encrypt limits
+	go func() {
+		s.logger.Info("starting initial certificate acquisition")
+		if err := s.acquireCertificatesForDomains(context.Background()); err != nil {
+			s.logger.Error("failed initial certificate acquisition", "error", err)
+		}
+	}()
 
 	// Configure HTTPS server with certmagic
 	s.httpsServer = &http.Server{
@@ -338,9 +335,17 @@ func (s *Service) acquireCertificatesForDomains(ctx context.Context) error {
 		return nil
 	}
 
-	s.logger.Info("acquiring certificates for domains", "count", len(domains))
+	s.logger.Info("acquiring certificates for domains", "count", len(domains), "rate_limit_delay", s.cfg.ACMERateLimitDelay)
 
-	for _, domain := range domains {
+	for i, domain := range domains {
+		// Rate limiting: add delay between requests to respect Let's Encrypt limits
+		// Let's Encrypt allows 300 new orders per account per 3 hours
+		// With default 3s delay, 19 domains = ~60 seconds total
+		if i > 0 {
+			s.logger.Debug("rate limit delay", "domain", domain.Name, "delay", s.cfg.ACMERateLimitDelay)
+			time.Sleep(s.cfg.ACMERateLimitDelay)
+		}
+
 		// Update status to pending
 		err := s.db.Queries().UpdateDomainCertificateStatus(ctx, &database.UpdateDomainCertificateStatusParams{
 			ID: domain.ID,

@@ -21,6 +21,7 @@ type Config struct {
 	ACMEEmail             string        `env:"EDGEPROXY_ACME_EMAIL,required"`
 	ACMEStaging           bool          `env:"EDGEPROXY_ACME_STAGING" envDefault:"false"`
 	ACMECertCheckInterval time.Duration `env:"EDGEPROXY_ACME_CERT_CHECK_INTERVAL" envDefault:"1h"`
+	ACMERateLimitDelay    time.Duration `env:"EDGEPROXY_ACME_RATE_LIMIT_DELAY" envDefault:"3s"`
 	LogLevel              string        `env:"EDGEPROXY_LOG_LEVEL" envDefault:"info"`
 }
 
@@ -60,6 +61,7 @@ func main() {
 		"acme_email", cfg.ACMEEmail,
 		"acme_staging", cfg.ACMEStaging,
 		"acme_cert_check_interval", cfg.ACMECertCheckInterval,
+		"acme_rate_limit_delay", cfg.ACMERateLimitDelay,
 		"log_level", cfg.LogLevel,
 	)
 
@@ -73,6 +75,7 @@ func main() {
 		ACMEEmail:             cfg.ACMEEmail,
 		ACMEStaging:           cfg.ACMEStaging,
 		ACMECertCheckInterval: cfg.ACMECertCheckInterval,
+		ACMERateLimitDelay:    cfg.ACMERateLimitDelay,
 	}, logger)
 	if err != nil {
 		logger.Error("failed to create edgeproxy service", "error", err)

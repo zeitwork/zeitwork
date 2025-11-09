@@ -36,14 +36,16 @@ A production-grade HTTPS reverse proxy that routes domain traffic to VMs based o
 
 1. **On Startup**:
    - Load all verified domains from database
-   - Start async certificate acquisition for domains needing certificates
+   - **Immediately** start certificate acquisition for all domains needing certificates
    - Start background loop to check for new domains every hour
 
-2. **Certificate Acquisition**:
+2. **Certificate Acquisition** (with Rate Limiting):
    - Query database for domains where `verified_at IS NOT NULL` and certificate is missing/expiring
+   - Process domains sequentially with configurable delay between each (default 3s)
+   - Rate limiting prevents hitting Let's Encrypt's 300 orders per 3 hours limit
    - For each domain:
      - Update status to "pending"
-     - Use certmagic to obtain certificate via HTTP-01 challenge
+     - Use certmagic to obtain certificate via TLS-ALPN-01 challenge
      - Update status to "active" on success or "failed" on error
      - Store certificate in PostgreSQL
 
@@ -98,17 +100,18 @@ ORDER BY name
 
 Environment variables:
 
-| Variable                             | Required | Default | Description                                  |
-| ------------------------------------ | -------- | ------- | -------------------------------------------- |
-| `EDGEPROXY_HTTP_ADDR`                | No       | `:80`   | HTTP listen address                          |
-| `EDGEPROXY_HTTPS_ADDR`               | No       | `:443`  | HTTPS listen address                         |
-| `EDGEPROXY_DATABASE_URL`             | Yes      | -       | PostgreSQL connection string                 |
-| `EDGEPROXY_REGION_ID`                | Yes      | -       | UUID of the region this proxy runs in        |
-| `EDGEPROXY_ACME_EMAIL`               | Yes      | -       | Email for Let's Encrypt account              |
-| `EDGEPROXY_ACME_STAGING`             | No       | `false` | Use Let's Encrypt staging (for testing)      |
-| `EDGEPROXY_ACME_CERT_CHECK_INTERVAL` | No       | `1h`    | How often to check for certificates to renew |
-| `EDGEPROXY_UPDATE_INTERVAL`          | No       | `10s`   | How often to refresh routes                  |
-| `EDGEPROXY_LOG_LEVEL`                | No       | `info`  | Log level: debug, info, warn, error          |
+| Variable                             | Required | Default | Description                                        |
+| ------------------------------------ | -------- | ------- | -------------------------------------------------- |
+| `EDGEPROXY_HTTP_ADDR`                | No       | `:8080` | HTTP listen address                                |
+| `EDGEPROXY_HTTPS_ADDR`               | No       | `:8443` | HTTPS listen address                               |
+| `EDGEPROXY_DATABASE_URL`             | Yes      | -       | PostgreSQL connection string                       |
+| `EDGEPROXY_REGION_ID`                | Yes      | -       | UUID of the region this proxy runs in              |
+| `EDGEPROXY_ACME_EMAIL`               | Yes      | -       | Email for Let's Encrypt account                    |
+| `EDGEPROXY_ACME_STAGING`             | No       | `false` | Use Let's Encrypt staging (for testing)            |
+| `EDGEPROXY_ACME_CERT_CHECK_INTERVAL` | No       | `1h`    | How often to check for certificates to renew       |
+| `EDGEPROXY_ACME_RATE_LIMIT_DELAY`    | No       | `3s`    | Delay between cert requests (respects rate limits) |
+| `EDGEPROXY_UPDATE_INTERVAL`          | No       | `10s`   | How often to refresh routes                        |
+| `EDGEPROXY_LOG_LEVEL`                | No       | `info`  | Log level: debug, info, warn, error                |
 
 ## Building
 
@@ -156,7 +159,7 @@ docker-compose up edgeproxy
 
 ### Rate Limits
 
-Let's Encrypt has rate limits to prevent abuse:
+Let's Encrypt has rate limits to prevent abuse. The edgeproxy includes built-in rate limiting to respect these limits:
 
 - **Staging environment** (recommended for testing):
   - No rate limits
@@ -166,7 +169,15 @@ Let's Encrypt has rate limits to prevent abuse:
 - **Production environment**:
   - 50 certificates per registered domain per week
   - 5 duplicate certificates per week
+  - **300 new orders per account per 3 hours** (most restrictive)
   - Set `EDGEPROXY_ACME_STAGING=false`
+
+**Built-in Rate Limiting**:
+
+- Edgeproxy adds a configurable delay between certificate requests (default: 3 seconds)
+- For 19 domains with 3s delay = ~60 seconds total startup time
+- This prevents hitting the 300 orders/3 hours limit
+- Adjust with `EDGEPROXY_ACME_RATE_LIMIT_DELAY` if you have many domains
 
 ### Certificate Lifecycle
 
