@@ -51,8 +51,8 @@ ssh -o StrictHostKeyChecking=no root@$EDGE_PROXY_1 "cat > /root/edgeproxy.env <<
 EDGEPROXY_DATABASE_URL=${EDGEPROXY_DATABASE_URL}
 EDGEPROXY_REGION_ID=${EDGEPROXY_REGION_ID}
 EDGEPROXY_ACME_EMAIL=admin@zeitwork.com
-EDGEPROXY_ACME_STAGING=true
-EDGEPROXY_LOG_LEVEL=debug
+EDGEPROXY_ACME_STAGING=false
+EDGEPROXY_LOG_LEVEL=info
 EOF
 chmod 600 /root/edgeproxy.env"
 
@@ -61,8 +61,8 @@ ssh -o StrictHostKeyChecking=no root@$EDGE_PROXY_2 "cat > /root/edgeproxy.env <<
 EDGEPROXY_DATABASE_URL=${EDGEPROXY_DATABASE_URL}
 EDGEPROXY_REGION_ID=${EDGEPROXY_REGION_ID}
 EDGEPROXY_ACME_EMAIL=admin@zeitwork.com
-EDGEPROXY_ACME_STAGING=true
-EDGEPROXY_LOG_LEVEL=debug
+EDGEPROXY_ACME_STAGING=false
+EDGEPROXY_LOG_LEVEL=info
 EOF
 chmod 600 /root/edgeproxy.env"
 
