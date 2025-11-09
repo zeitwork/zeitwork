@@ -6,7 +6,7 @@ A production-grade HTTPS reverse proxy that routes domain traffic to VMs based o
 
 - **Automatic HTTPS with Let's Encrypt**: Automatically obtains and renews SSL certificates using ACME TLS-ALPN-01 challenge
 - **Database-driven routing**: Loads routing configuration from PostgreSQL (domains → deployments → VMs)
-- **Proactive certificate acquisition**: Acquires certificates for verified domains before first request
+- **On-demand certificate acquisition**: Acquires certificates automatically during first HTTPS request
 - **HTTP to HTTPS redirect**: Automatically redirects all HTTP traffic to HTTPS
 - **PostgreSQL certificate storage**: Stores certificates in database for multi-instance deployment
 - **Automatic refresh**: Refreshes routing state every 10 seconds
@@ -35,19 +35,17 @@ A production-grade HTTPS reverse proxy that routes domain traffic to VMs based o
 ### Certificate Management
 
 1. **On Startup**:
-   - Load all verified domains from database
-   - **Immediately** start certificate acquisition for all domains needing certificates
-   - Start background loop to check for new domains every hour
+   - Configure on-demand TLS with verification check
+   - Only verified domains (`verified_at IS NOT NULL`) can obtain certificates
 
-2. **Certificate Acquisition** (with Rate Limiting):
-   - Query database for domains where `verified_at IS NOT NULL` and certificate is missing/expiring
-   - Process domains sequentially with configurable delay between each (default 3s)
-   - Rate limiting prevents hitting Let's Encrypt's 300 orders per 3 hours limit
-   - For each domain:
-     - Update status to "pending"
-     - Use certmagic to obtain certificate via TLS-ALPN-01 challenge
-     - Update status to "active" on success or "failed" on error
-     - Store certificate in PostgreSQL
+2. **Certificate Acquisition** (On-Demand via TLS-ALPN-01):
+   - When first HTTPS request arrives for a domain:
+     1. DecisionFunc checks if domain is verified in database
+     2. If verified, certmagic obtains certificate via TLS-ALPN-01 during TLS handshake
+     3. Certificate cached in memory and stored in PostgreSQL
+     4. Subsequent requests use cached certificate (instant)
+   - No proactive acquisition needed - certificates obtained as needed
+   - No rate limiting concerns - only obtains when requested
 
 3. **Certificate Storage**:
    - Certificates stored in `certmagic_data` table (base64 encoded)
@@ -100,18 +98,16 @@ ORDER BY name
 
 Environment variables:
 
-| Variable                             | Required | Default | Description                                        |
-| ------------------------------------ | -------- | ------- | -------------------------------------------------- |
-| `EDGEPROXY_HTTP_ADDR`                | No       | `:8080` | HTTP listen address                                |
-| `EDGEPROXY_HTTPS_ADDR`               | No       | `:8443` | HTTPS listen address                               |
-| `EDGEPROXY_DATABASE_URL`             | Yes      | -       | PostgreSQL connection string                       |
-| `EDGEPROXY_REGION_ID`                | Yes      | -       | UUID of the region this proxy runs in              |
-| `EDGEPROXY_ACME_EMAIL`               | Yes      | -       | Email for Let's Encrypt account                    |
-| `EDGEPROXY_ACME_STAGING`             | No       | `false` | Use Let's Encrypt staging (for testing)            |
-| `EDGEPROXY_ACME_CERT_CHECK_INTERVAL` | No       | `1h`    | How often to check for certificates to renew       |
-| `EDGEPROXY_ACME_RATE_LIMIT_DELAY`    | No       | `3s`    | Delay between cert requests (respects rate limits) |
-| `EDGEPROXY_UPDATE_INTERVAL`          | No       | `10s`   | How often to refresh routes                        |
-| `EDGEPROXY_LOG_LEVEL`                | No       | `info`  | Log level: debug, info, warn, error                |
+| Variable                    | Required | Default | Description                             |
+| --------------------------- | -------- | ------- | --------------------------------------- |
+| `EDGEPROXY_HTTP_ADDR`       | No       | `:8080` | HTTP listen address                     |
+| `EDGEPROXY_HTTPS_ADDR`      | No       | `:8443` | HTTPS listen address                    |
+| `EDGEPROXY_DATABASE_URL`    | Yes      | -       | PostgreSQL connection string            |
+| `EDGEPROXY_REGION_ID`       | Yes      | -       | UUID of the region this proxy runs in   |
+| `EDGEPROXY_ACME_EMAIL`      | Yes      | -       | Email for Let's Encrypt account         |
+| `EDGEPROXY_ACME_STAGING`    | No       | `false` | Use Let's Encrypt staging (for testing) |
+| `EDGEPROXY_UPDATE_INTERVAL` | No       | `10s`   | How often to refresh routes             |
+| `EDGEPROXY_LOG_LEVEL`       | No       | `info`  | Log level: debug, info, warn, error     |
 
 ## Building
 
@@ -172,16 +168,16 @@ Let's Encrypt has rate limits to prevent abuse. The edgeproxy includes built-in 
   - **300 new orders per account per 3 hours** (most restrictive)
   - Set `EDGEPROXY_ACME_STAGING=false`
 
-**Built-in Rate Limiting**:
+**On-Demand Approach**:
 
-- Edgeproxy adds a configurable delay between certificate requests (default: 3 seconds)
-- For 19 domains with 3s delay = ~60 seconds total startup time
-- This prevents hitting the 300 orders/3 hours limit
-- Adjust with `EDGEPROXY_ACME_RATE_LIMIT_DELAY` if you have many domains
+- Certificates obtained only when first HTTPS request arrives
+- No startup delay - service ready immediately
+- No risk of hitting rate limits during startup
+- Each domain gets certificate independently when needed
 
 ### Certificate Lifecycle
 
-1. **Initial Acquisition**: When a domain is verified, certificate is requested proactively
+1. **Initial Acquisition**: When first HTTPS request arrives for a verified domain
 2. **Renewal**: Certificates are automatically renewed when they expire in < 30 days
 3. **Storage**: Certificates stored in PostgreSQL for persistence across restarts
 4. **Validity**: Let's Encrypt certificates are valid for 90 days

@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
+	"io/fs"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -28,6 +30,11 @@ func (s *PostgreSQLStorage) Store(ctx context.Context, key string, value []byte)
 	// Encode binary data as base64 for storage in text field
 	encodedValue := base64.StdEncoding.EncodeToString(value)
 
+	// Log ACME account files for debugging
+	if strings.HasSuffix(key, ".json") && len(value) > 0 {
+		slog.Info("storing certmagic JSON", "key", key, "size", len(value), "content", string(value))
+	}
+
 	err := s.db.Queries().StoreCertmagicData(ctx, &database.StoreCertmagicDataParams{
 		Key:   key,
 		Value: encodedValue,
@@ -48,9 +55,16 @@ func (s *PostgreSQLStorage) Load(ctx context.Context, key string) ([]byte, error
 	data, err := s.db.Queries().LoadCertmagicData(ctx, key)
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			return nil, fmt.Errorf("key not found: %s", key)
+			// Return fs.ErrNotExist - the standard Go error for "not found"
+			// This tells certmagic the key doesn't exist and it should create new
+			return nil, fs.ErrNotExist
 		}
-		return nil, fmt.Errorf("failed to load key %s: %w", key, err)
+		return nil, err
+	}
+
+	// Handle empty value as not found
+	if data.Value == "" {
+		return nil, fs.ErrNotExist
 	}
 
 	// Decode base64 to get original binary data
@@ -59,20 +73,21 @@ func (s *PostgreSQLStorage) Load(ctx context.Context, key string) ([]byte, error
 		return nil, fmt.Errorf("failed to decode value for key %s: %w", key, err)
 	}
 
+	// Log ACME account files for debugging
+	if strings.HasSuffix(key, ".json") && len(value) > 0 {
+		slog.Info("loaded certmagic JSON", "key", key, "size", len(value), "content", string(value))
+	}
+
 	return value, nil
 }
 
 // Delete removes the value at the given key
+// Like os.RemoveAll, returns nil even if key doesn't exist
 func (s *PostgreSQLStorage) Delete(ctx context.Context, key string) error {
-	rowsAffected, err := s.db.Queries().DeleteCertmagicData(ctx, key)
+	_, err := s.db.Queries().DeleteCertmagicData(ctx, key)
 	if err != nil {
-		return fmt.Errorf("failed to delete key %s: %w", key, err)
+		return err
 	}
-
-	if rowsAffected == 0 {
-		return fmt.Errorf("key not found: %s", key)
-	}
-
 	return nil
 }
 
@@ -88,25 +103,15 @@ func (s *PostgreSQLStorage) Exists(ctx context.Context, key string) bool {
 
 // List returns all keys that match the prefix
 func (s *PostgreSQLStorage) List(ctx context.Context, prefix string, recursive bool) ([]string, error) {
-	var keys []string
-	var err error
-
 	prefixParam := pgtype.Text{
 		String: prefix,
 		Valid:  true,
 	}
 
 	if recursive {
-		keys, err = s.db.Queries().ListCertmagicDataRecursive(ctx, prefixParam)
-	} else {
-		keys, err = s.db.Queries().ListCertmagicDataNonRecursive(ctx, prefixParam)
+		return s.db.Queries().ListCertmagicDataRecursive(ctx, prefixParam)
 	}
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to list keys with prefix %s: %w", prefix, err)
-	}
-
-	return keys, nil
+	return s.db.Queries().ListCertmagicDataNonRecursive(ctx, prefixParam)
 }
 
 // Stat returns information about the key
@@ -114,15 +119,15 @@ func (s *PostgreSQLStorage) Stat(ctx context.Context, key string) (certmagic.Key
 	data, err := s.db.Queries().StatCertmagicData(ctx, key)
 	if err != nil {
 		if err == pgx.ErrNoRows {
-			return certmagic.KeyInfo{}, fmt.Errorf("key not found: %s", key)
+			return certmagic.KeyInfo{}, fs.ErrNotExist
 		}
-		return certmagic.KeyInfo{}, fmt.Errorf("failed to stat key %s: %w", key, err)
+		return certmagic.KeyInfo{}, err
 	}
 
 	// Decode to get size
 	value, err := base64.StdEncoding.DecodeString(data.Value)
 	if err != nil {
-		return certmagic.KeyInfo{}, fmt.Errorf("failed to decode value for key %s: %w", key, err)
+		return certmagic.KeyInfo{}, err
 	}
 
 	return certmagic.KeyInfo{
@@ -146,7 +151,7 @@ func (s *PostgreSQLStorage) Lock(ctx context.Context, key string) error {
 		Expires: lockExpiration,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to acquire lock for key %s: %w", key, err)
+		return err
 	}
 
 	if rowsAffected == 0 {
@@ -157,16 +162,12 @@ func (s *PostgreSQLStorage) Lock(ctx context.Context, key string) error {
 }
 
 // Unlock releases a lock for the given key
+// Like os.Remove, returns nil even if lock doesn't exist
 func (s *PostgreSQLStorage) Unlock(ctx context.Context, key string) error {
-	rowsAffected, err := s.db.Queries().ReleaseCertmagicLock(ctx, key)
+	_, err := s.db.Queries().ReleaseCertmagicLock(ctx, key)
 	if err != nil {
-		return fmt.Errorf("failed to release lock for key %s: %w", key, err)
+		return err
 	}
-
-	if rowsAffected == 0 {
-		return fmt.Errorf("no lock found for key: %s", key)
-	}
-
 	return nil
 }
 

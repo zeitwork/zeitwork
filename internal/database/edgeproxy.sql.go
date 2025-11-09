@@ -173,6 +173,20 @@ func (q *Queries) GetDomainsNeedingCertificates(ctx context.Context) ([]*GetDoma
 	return items, nil
 }
 
+const isDomainVerified = `-- name: IsDomainVerified :one
+SELECT verified_at
+FROM domains
+WHERE name = $1
+`
+
+// Checks if a domain exists and is verified (for on-demand certificate issuance)
+func (q *Queries) IsDomainVerified(ctx context.Context, name string) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, isDomainVerified, name)
+	var verified_at pgtype.Timestamptz
+	err := row.Scan(&verified_at)
+	return verified_at, err
+}
+
 const listCertmagicDataNonRecursive = `-- name: ListCertmagicDataNonRecursive :many
 SELECT key
 FROM certmagic_data

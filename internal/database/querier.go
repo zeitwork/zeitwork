@@ -86,6 +86,8 @@ type Querier interface {
 	GetVMByID(ctx context.Context, id pgtype.UUID) (*Vm, error)
 	// Get count of VMs by region and status
 	GetVMsByRegion(ctx context.Context) ([]*GetVMsByRegionRow, error)
+	// Checks if a domain exists and is verified (for on-demand certificate issuance)
+	IsDomainVerified(ctx context.Context, name string) (pgtype.Timestamptz, error)
 	// Lists certmagic data keys with a given prefix (non-recursive - no additional slashes)
 	ListCertmagicDataNonRecursive(ctx context.Context, dollar_1 pgtype.Text) ([]string, error)
 	// Lists all certmagic data keys with a given prefix (recursive)

@@ -19,15 +19,13 @@ import (
 
 // Config holds the edgeproxy configuration
 type Config struct {
-	HTTPAddr              string        // HTTP listen address (e.g., ":80")
-	HTTPSAddr             string        // HTTPS listen address (e.g., ":443")
-	DatabaseURL           string        // Database connection string
-	RegionID              string        // UUID of the region this edgeproxy is running in
-	UpdateInterval        time.Duration // How often to refresh routes from database
-	ACMEEmail             string        // Email for Let's Encrypt account
-	ACMEStaging           bool          // Use Let's Encrypt staging environment
-	ACMECertCheckInterval time.Duration // How often to check for certificates needing renewal
-	ACMERateLimitDelay    time.Duration // Delay between certificate requests to respect rate limits
+	HTTPAddr       string        // HTTP listen address (e.g., ":80")
+	HTTPSAddr      string        // HTTPS listen address (e.g., ":443")
+	DatabaseURL    string        // Database connection string
+	RegionID       string        // UUID of the region this edgeproxy is running in
+	UpdateInterval time.Duration // How often to refresh routes from database
+	ACMEEmail      string        // Email for Let's Encrypt account
+	ACMEStaging    bool          // Use Let's Encrypt staging environment
 }
 
 // Route represents routing information for a domain
@@ -70,12 +68,6 @@ func NewService(cfg Config, logger *slog.Logger) (*Service, error) {
 	if cfg.UpdateInterval == 0 {
 		cfg.UpdateInterval = 10 * time.Second
 	}
-	if cfg.ACMECertCheckInterval == 0 {
-		cfg.ACMECertCheckInterval = 1 * time.Hour
-	}
-	if cfg.ACMERateLimitDelay == 0 {
-		cfg.ACMERateLimitDelay = 3 * time.Second
-	}
 	if cfg.ACMEEmail == "" {
 		return nil, fmt.Errorf("ACME email is required")
 	}
@@ -109,6 +101,31 @@ func NewService(cfg Config, logger *slog.Logger) (*Service, error) {
 	}
 
 	certmagicConfig.Issuers = []certmagic.Issuer{issuer}
+
+	// Enable on-demand TLS for automatic certificate acquisition
+	// This is the correct approach for TLS-ALPN-01 challenges
+	certmagicConfig.OnDemand = &certmagic.OnDemandConfig{
+		// DecisionFunc checks if we should obtain a certificate for this domain
+		DecisionFunc: func(ctx context.Context, name string) error {
+			// Query database to check if domain is verified
+			logger := slog.With("domain", name)
+
+			// Check if domain exists and is verified using sqlc
+			verifiedAt, err := db.Queries().IsDomainVerified(ctx, name)
+			if err != nil {
+				logger.Warn("domain not found or not verified", "error", err)
+				return fmt.Errorf("domain not authorized: %s", name)
+			}
+
+			if !verifiedAt.Valid {
+				logger.Warn("domain not verified")
+				return fmt.Errorf("domain not verified: %s", name)
+			}
+
+			logger.Info("domain authorized for certificate issuance")
+			return nil
+		},
+	}
 
 	s := &Service{
 		cfg:       cfg,
@@ -146,17 +163,10 @@ func (s *Service) Start(ctx context.Context) error {
 	// Start route refresh background goroutine
 	go s.refreshRoutesLoop(ctx)
 
-	// Start certificate acquisition loop
-	go s.certificateAcquisitionLoop(ctx)
-
-	// Immediately acquire certificates for verified domains (proactive)
-	// This runs with rate limiting to respect Let's Encrypt limits
-	go func() {
-		s.logger.Info("starting initial certificate acquisition")
-		if err := s.acquireCertificatesForDomains(context.Background()); err != nil {
-			s.logger.Error("failed initial certificate acquisition", "error", err)
-		}
-	}()
+	// Note: Certificate acquisition is now on-demand via TLS-ALPN-01
+	// Certificates are obtained automatically during the first HTTPS request
+	// This is the correct approach for TLS-ALPN-01 challenges
+	s.logger.Info("certificate acquisition configured for on-demand issuance via TLS-ALPN-01")
 
 	// Configure HTTPS server with certmagic
 	s.httpsServer = &http.Server{
@@ -307,114 +317,9 @@ func (s *Service) getVerifiedDomains(ctx context.Context) ([]string, error) {
 	return domainNames, nil
 }
 
-// certificateAcquisitionLoop periodically checks for domains needing certificates
-func (s *Service) certificateAcquisitionLoop(ctx context.Context) {
-	ticker := time.NewTicker(s.cfg.ACMECertCheckInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			if err := s.acquireCertificatesForDomains(ctx); err != nil {
-				s.logger.Error("failed to acquire certificates", "error", err)
-			}
-		}
-	}
-}
-
-// acquireCertificatesForDomains proactively acquires certificates for verified domains
-func (s *Service) acquireCertificatesForDomains(ctx context.Context) error {
-	domains, err := s.db.Queries().GetDomainsNeedingCertificates(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get domains needing certificates: %w", err)
-	}
-
-	if len(domains) == 0 {
-		return nil
-	}
-
-	s.logger.Info("acquiring certificates for domains", "count", len(domains), "rate_limit_delay", s.cfg.ACMERateLimitDelay)
-
-	for i, domain := range domains {
-		// Rate limiting: add delay between requests to respect Let's Encrypt limits
-		// Let's Encrypt allows 300 new orders per account per 3 hours
-		// With default 3s delay, 19 domains = ~60 seconds total
-		if i > 0 {
-			s.logger.Debug("rate limit delay", "domain", domain.Name, "delay", s.cfg.ACMERateLimitDelay)
-			time.Sleep(s.cfg.ACMERateLimitDelay)
-		}
-
-		// Update status to pending
-		err := s.db.Queries().UpdateDomainCertificateStatus(ctx, &database.UpdateDomainCertificateStatusParams{
-			ID: domain.ID,
-			SslCertificateStatus: database.NullSslCertificateStatuses{
-				SslCertificateStatuses: database.SslCertificateStatusesPending,
-				Valid:                  true,
-			},
-			SslCertificateIssuedAt:  pgtype.Timestamptz{Valid: false},
-			SslCertificateExpiresAt: pgtype.Timestamptz{Valid: false},
-			SslCertificateError:     pgtype.Text{Valid: false},
-		})
-		if err != nil {
-			s.logger.Error("failed to update certificate status", "domain", domain.Name, "error", err)
-			continue
-		}
-
-		// Acquire certificate asynchronously
-		go func(domainName string, domainID pgtype.UUID) {
-			s.logger.Info("acquiring certificate", "domain", domainName)
-
-			err := s.certmagic.ManageSync(context.Background(), []string{domainName})
-			if err != nil {
-				s.logger.Error("failed to obtain certificate", "domain", domainName, "error", err)
-
-				// Update with error status
-				_ = s.db.Queries().UpdateDomainCertificateStatus(context.Background(), &database.UpdateDomainCertificateStatusParams{
-					ID: domainID,
-					SslCertificateStatus: database.NullSslCertificateStatuses{
-						SslCertificateStatuses: database.SslCertificateStatusesFailed,
-						Valid:                  true,
-					},
-					SslCertificateIssuedAt:  pgtype.Timestamptz{Valid: false},
-					SslCertificateExpiresAt: pgtype.Timestamptz{Valid: false},
-					SslCertificateError: pgtype.Text{
-						String: err.Error(),
-						Valid:  true,
-					},
-				})
-				return
-			}
-
-			s.logger.Info("certificate obtained successfully", "domain", domainName)
-
-			// Update with success status
-			// Certificate typically valid for 90 days
-			issuedAt := time.Now()
-			expiresAt := issuedAt.Add(90 * 24 * time.Hour)
-
-			_ = s.db.Queries().UpdateDomainCertificateStatus(context.Background(), &database.UpdateDomainCertificateStatusParams{
-				ID: domainID,
-				SslCertificateStatus: database.NullSslCertificateStatuses{
-					SslCertificateStatuses: database.SslCertificateStatusesActive,
-					Valid:                  true,
-				},
-				SslCertificateIssuedAt: pgtype.Timestamptz{
-					Time:  issuedAt,
-					Valid: true,
-				},
-				SslCertificateExpiresAt: pgtype.Timestamptz{
-					Time:  expiresAt,
-					Valid: true,
-				},
-				SslCertificateError: pgtype.Text{Valid: false},
-			})
-		}(domain.Name, domain.ID)
-	}
-
-	return nil
-}
+// Note: With on-demand TLS via TLS-ALPN-01, certificates are obtained automatically
+// during the first HTTPS request. We don't need proactive acquisition loops.
+// Certmagic handles certificate renewal automatically via its maintenance routine.
 
 // serveHTTP handles HTTP requests (redirects to HTTPS)
 func (s *Service) serveHTTP(w http.ResponseWriter, r *http.Request) {

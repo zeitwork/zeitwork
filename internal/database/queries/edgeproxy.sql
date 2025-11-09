@@ -16,6 +16,12 @@ WHERE d.verified_at IS NOT NULL
   AND v.status = 'running'
 ORDER BY d.name;
 
+-- name: IsDomainVerified :one
+-- Checks if a domain exists and is verified (for on-demand certificate issuance)
+SELECT verified_at
+FROM domains
+WHERE name = $1;
+
 -- name: GetDomainsNeedingCertificates :many
 -- Returns domains that need SSL certificates (verified but not yet active)
 SELECT 
