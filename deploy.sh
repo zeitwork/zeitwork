@@ -50,6 +50,8 @@ echo "Creating environment files on remote servers..."
 ssh -o StrictHostKeyChecking=no root@$EDGE_PROXY_1 "cat > /root/edgeproxy.env << 'EOF'
 EDGEPROXY_DATABASE_URL=${EDGEPROXY_DATABASE_URL}
 EDGEPROXY_REGION_ID=${EDGEPROXY_REGION_ID}
+EDGEPROXY_ACME_EMAIL=admin@zeitwork.com
+EDGEPROXY_ACME_STAGING=false
 EOF
 chmod 600 /root/edgeproxy.env"
 
@@ -57,6 +59,8 @@ chmod 600 /root/edgeproxy.env"
 ssh -o StrictHostKeyChecking=no root@$EDGE_PROXY_2 "cat > /root/edgeproxy.env << 'EOF'
 EDGEPROXY_DATABASE_URL=${EDGEPROXY_DATABASE_URL}
 EDGEPROXY_REGION_ID=${EDGEPROXY_REGION_ID}
+EDGEPROXY_ACME_EMAIL=admin@zeitwork.com
+EDGEPROXY_ACME_STAGING=false
 EOF
 chmod 600 /root/edgeproxy.env"
 

@@ -4,7 +4,7 @@ A production-grade HTTPS reverse proxy that routes domain traffic to VMs based o
 
 ## Features
 
-- **Automatic HTTPS with Let's Encrypt**: Automatically obtains and renews SSL certificates using ACME HTTP-01 challenge
+- **Automatic HTTPS with Let's Encrypt**: Automatically obtains and renews SSL certificates using ACME TLS-ALPN-01 challenge
 - **Database-driven routing**: Loads routing configuration from PostgreSQL (domains → deployments → VMs)
 - **Proactive certificate acquisition**: Acquires certificates for verified domains before first request
 - **HTTP to HTTPS redirect**: Automatically redirects all HTTP traffic to HTTPS
@@ -57,8 +57,9 @@ A production-grade HTTPS reverse proxy that routes domain traffic to VMs based o
 The proxy uses several SQL queries:
 
 **Active Routes:**
+
 ```sql
-SELECT 
+SELECT
     d.name as domain_name,
     v.public_ip as vm_public_ip,
     v.port as vm_port,
@@ -75,8 +76,9 @@ ORDER BY d.name
 ```
 
 **Domains Needing Certificates:**
+
 ```sql
-SELECT 
+SELECT
     id,
     name,
     ssl_certificate_status,
@@ -84,7 +86,7 @@ SELECT
 FROM domains
 WHERE verified_at IS NOT NULL
   AND (
-    ssl_certificate_status IS NULL 
+    ssl_certificate_status IS NULL
     OR ssl_certificate_status != 'active'
     OR ssl_certificate_expires_at IS NULL
     OR ssl_certificate_expires_at < NOW() + INTERVAL '30 days'
@@ -96,17 +98,17 @@ ORDER BY name
 
 Environment variables:
 
-| Variable                              | Required | Default | Description                                  |
-| ------------------------------------- | -------- | ------- | -------------------------------------------- |
-| `EDGEPROXY_HTTP_ADDR`                 | No       | `:80`   | HTTP listen address                          |
-| `EDGEPROXY_HTTPS_ADDR`                | No       | `:443`  | HTTPS listen address                         |
-| `EDGEPROXY_DATABASE_URL`              | Yes      | -       | PostgreSQL connection string                 |
-| `EDGEPROXY_REGION_ID`                 | Yes      | -       | UUID of the region this proxy runs in        |
-| `EDGEPROXY_ACME_EMAIL`                | Yes      | -       | Email for Let's Encrypt account              |
-| `EDGEPROXY_ACME_STAGING`              | No       | `false` | Use Let's Encrypt staging (for testing)      |
-| `EDGEPROXY_ACME_CERT_CHECK_INTERVAL`  | No       | `1h`    | How often to check for certificates to renew |
-| `EDGEPROXY_UPDATE_INTERVAL`           | No       | `10s`   | How often to refresh routes                  |
-| `EDGEPROXY_LOG_LEVEL`                 | No       | `info`  | Log level: debug, info, warn, error          |
+| Variable                             | Required | Default | Description                                  |
+| ------------------------------------ | -------- | ------- | -------------------------------------------- |
+| `EDGEPROXY_HTTP_ADDR`                | No       | `:80`   | HTTP listen address                          |
+| `EDGEPROXY_HTTPS_ADDR`               | No       | `:443`  | HTTPS listen address                         |
+| `EDGEPROXY_DATABASE_URL`             | Yes      | -       | PostgreSQL connection string                 |
+| `EDGEPROXY_REGION_ID`                | Yes      | -       | UUID of the region this proxy runs in        |
+| `EDGEPROXY_ACME_EMAIL`               | Yes      | -       | Email for Let's Encrypt account              |
+| `EDGEPROXY_ACME_STAGING`             | No       | `false` | Use Let's Encrypt staging (for testing)      |
+| `EDGEPROXY_ACME_CERT_CHECK_INTERVAL` | No       | `1h`    | How often to check for certificates to renew |
+| `EDGEPROXY_UPDATE_INTERVAL`          | No       | `10s`   | How often to refresh routes                  |
+| `EDGEPROXY_LOG_LEVEL`                | No       | `info`  | Log level: debug, info, warn, error          |
 
 ## Building
 
@@ -145,6 +147,7 @@ docker-compose up edgeproxy
 ```
 
 **Note**: When running in Docker as a non-root user, binding to ports < 1024 requires special configuration. Either:
+
 - Use port mapping: `-p 80:8080 -p 443:8443` and set `EDGEPROXY_HTTP_ADDR=:8080` and `EDGEPROXY_HTTPS_ADDR=:8443`
 - Run container with `--cap-add=NET_BIND_SERVICE`
 - Run behind a load balancer that handles privileged ports
@@ -172,19 +175,28 @@ Let's Encrypt has rate limits to prevent abuse:
 3. **Storage**: Certificates stored in PostgreSQL for persistence across restarts
 4. **Validity**: Let's Encrypt certificates are valid for 90 days
 
-### ACME HTTP-01 Challenge
+### ACME TLS-ALPN-01 Challenge
 
-The proxy uses HTTP-01 challenge, which requires:
-- Port 80 accessible from the internet
+The proxy uses TLS-ALPN-01 challenge, which requires:
+
+- Port 443 accessible from the internet
 - DNS records pointing to the proxy
 - Domain must be verified in the database (`verified_at IS NOT NULL`)
 
 Challenge flow:
+
 1. Certmagic requests certificate from Let's Encrypt
-2. Let's Encrypt responds with a challenge token
-3. Let's Encrypt makes HTTP request to `http://domain/.well-known/acme-challenge/{token}`
-4. EdgeProxy serves the challenge response
+2. Let's Encrypt responds with a challenge
+3. Let's Encrypt makes TLS connection to `https://domain:443` with ALPN protocol "acme-tls/1"
+4. Certmagic responds with the challenge certificate via TLS handshake
 5. Let's Encrypt validates and issues certificate
+
+**Advantages of TLS-ALPN-01**:
+
+- Works through port 443 (HTTPS) which we already handle
+- No need for port 80 to be accessible
+- Challenge handled automatically in the TLS handshake
+- Works seamlessly with TCP load balancers forwarding 443→8443
 
 ## Health Checking
 
@@ -254,8 +266,8 @@ Example log entries:
 
 ```bash
 # Check domain verification
-SELECT name, verified_at, ssl_certificate_status, ssl_certificate_error 
-FROM domains 
+SELECT name, verified_at, ssl_certificate_status, ssl_certificate_error
+FROM domains
 WHERE name = 'example.com';
 ```
 

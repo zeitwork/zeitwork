@@ -87,13 +87,12 @@ func NewService(cfg Config, logger *slog.Logger) (*Service, error) {
 	certmagicConfig := certmagic.NewDefault()
 	certmagicConfig.Storage = storage
 
-	// Configure ACME issuer with HTTP-01 challenge
+	// Configure ACME issuer with TLS-ALPN-01 challenge
 	issuer := certmagic.NewACMEIssuer(certmagicConfig, certmagic.ACMEIssuer{
 		Email:                   cfg.ACMEEmail,
 		Agreed:                  true,
-		DisableHTTPChallenge:    false,     // Enable HTTP-01 challenge
-		DisableTLSALPNChallenge: true,      // Disable TLS-ALPN-01, use HTTP-01 only
-		ListenHost:              "0.0.0.0", // Listen on all interfaces for HTTP-01
+		DisableHTTPChallenge:    true,  // Disable HTTP-01
+		DisableTLSALPNChallenge: false, // Enable TLS-ALPN-01 (works on port 443)
 	})
 
 	// Use staging environment if configured
@@ -412,13 +411,11 @@ func (s *Service) acquireCertificatesForDomains(ctx context.Context) error {
 	return nil
 }
 
-// serveHTTP handles HTTP requests (ACME challenges and redirects to HTTPS)
+// serveHTTP handles HTTP requests (redirects to HTTPS)
 func (s *Service) serveHTTP(w http.ResponseWriter, r *http.Request) {
-	// ACME HTTP-01 challenges are handled automatically by certmagic
-	// when DisableHTTPChallenge is false. Certmagic spins up a temporary
-	// HTTP server to handle challenges. Our HTTP server on port 8080 is only
-	// for redirecting regular traffic to HTTPS.
-	// The challenges are served by certmagic on port 80 directly via its internal solver.
+	// ACME TLS-ALPN-01 challenges are handled automatically by certmagic
+	// on the HTTPS port (8443) via special TLS handshake, so HTTP port
+	// is only used for redirecting regular traffic to HTTPS.
 
 	// Redirect all HTTP traffic to HTTPS
 	target := "https://" + r.Host + r.URL.RequestURI()
