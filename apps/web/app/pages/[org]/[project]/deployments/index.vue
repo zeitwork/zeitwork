@@ -65,16 +65,14 @@ function formatDeploymentUrl(deployment: any) {
 
 function deploymentStatusColor(status: string) {
   switch (status) {
-    case "pending":
+    case "queued":
       return "text-yellow-500"
     case "building":
       return "text-blue-500"
-    case "deploying":
-      return "text-orange-500"
+    case "ready":
+      return "text-green-500"
     case "failed":
       return "text-red-500"
-    case "active":
-      return "text-green-500"
     case "inactive":
       return "text-neutral-subtle"
     default:
@@ -84,16 +82,14 @@ function deploymentStatusColor(status: string) {
 
 function deploymentStatusBgColor(status: string) {
   switch (status) {
-    case "pending":
+    case "queued":
       return "bg-yellow-100"
     case "building":
       return "bg-blue-100"
-    case "deploying":
-      return "bg-orange-100"
+    case "ready":
+      return "bg-green-100"
     case "failed":
       return "bg-red-100"
-    case "active":
-      return "bg-green-100"
     case "inactive":
       return "bg-neutral-subtle"
     default:
@@ -113,7 +109,7 @@ function deploymentStatusBgColor(status: string) {
         v-for="deployment in deployments"
         :key="deployment.id"
         :to="`/${orgId}/${projectSlug}/deployments/${deployment.id}`"
-        class="hover:bg-surface-subtle border-neutral-subtle text-neutral grid grid-cols-[100px_100px_100px_3fr_1fr] items-center gap-2 border-b p-4 text-sm cursor-pointer"
+        class="hover:bg-surface-subtle border-neutral-subtle text-neutral grid cursor-pointer grid-cols-[100px_100px_100px_3fr_1fr] items-center gap-2 border-b p-4 text-sm"
       >
         <div class="font-mono">{{ deployment.deploymentId }}</div>
         <div>

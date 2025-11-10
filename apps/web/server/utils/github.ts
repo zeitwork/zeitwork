@@ -4,10 +4,13 @@ import { App, Octokit, RequestError } from "octokit"
 export function useGitHub() {
   const config = useRuntimeConfig()
 
+  // Decode base64-encoded private key
+  const privateKey = Buffer.from(config.githubAppPrivateKey, "base64").toString("utf-8")
+
   // GitHub App instance
   const app = new App({
     appId: config.githubAppId,
-    privateKey: config.githubAppPrivateKey,
+    privateKey: privateKey,
   })
 
   // Get an Octokit instance for a specific installation

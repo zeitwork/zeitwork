@@ -28,6 +28,8 @@ export default defineNuxtConfig({
       graphEndpoint: process.env.NUXT_PUBLIC_GRAPH_ENDPOINT,
       githubClientId: process.env.NUXT_PUBLIC_GITHUB_CLIENT_ID || "",
 
+      stripeEnabled: process.env.NUXT_STRIPE_ENABLED !== "false",
+
       stripe: {
         planEarlyAccessId: process.env.NUXT_PUBLIC_STRIPE_PLAN_EARLY_ACCESS_ID || "",
         planHobbyId: process.env.NUXT_PUBLIC_STRIPE_PLAN_HOBBY_ID || "",

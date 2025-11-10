@@ -12,13 +12,8 @@ const deploymentId = route.params.id as string
 // Fetch deployment details
 const { data: deployment } = await useFetch(`/api/deployments/${deploymentId}`)
 
-// Fetch logs with context filter
-const logContext = ref<"all" | "build" | "runtime">("all")
-const { data: logs, refresh: refreshLogs } = await useFetch(`/api/deployments/${deploymentId}/logs`, {
-  query: {
-    context: logContext,
-  },
-})
+// Fetch logs
+const { data: logs, refresh: refreshLogs } = await useFetch(`/api/deployments/${deploymentId}/logs`)
 
 // Auto-scroll setup
 const logContainer = ref<HTMLElement>()
@@ -34,11 +29,14 @@ watch(logs, async () => {
 })
 
 // Disable auto-scroll if user scrolls up
-watch(() => arrivedState.bottom, (isAtBottom) => {
-  if (!isAtBottom) {
-    autoScroll.value = false
-  }
-})
+watch(
+  () => arrivedState.bottom,
+  (isAtBottom) => {
+    if (!isAtBottom) {
+      autoScroll.value = false
+    }
+  },
+)
 
 // Re-enable auto-scroll when user scrolls to bottom
 const scrollToBottom = () => {
@@ -76,16 +74,14 @@ function renderDate(date: string) {
 
 function deploymentStatusColor(status: string) {
   switch (status) {
-    case "pending":
+    case "queued":
       return "text-yellow-600"
     case "building":
       return "text-blue-600"
-    case "deploying":
-      return "text-orange-600"
+    case "ready":
+      return "text-green-600"
     case "failed":
       return "text-red-600"
-    case "active":
-      return "text-green-600"
     case "inactive":
       return "text-neutral-500"
     default:
@@ -95,16 +91,14 @@ function deploymentStatusColor(status: string) {
 
 function deploymentStatusBgColor(status: string) {
   switch (status) {
-    case "pending":
+    case "queued":
       return "bg-yellow-100"
     case "building":
       return "bg-blue-100"
-    case "deploying":
-      return "bg-orange-100"
+    case "ready":
+      return "bg-green-100"
     case "failed":
       return "bg-red-100"
-    case "active":
-      return "bg-green-100"
     case "inactive":
       return "bg-neutral-100"
     default:
@@ -116,7 +110,7 @@ const formattedLogs = computed(() => {
   if (!logs.value) return []
   return logs.value.map((log: any) => ({
     ...log,
-    timestamp: new Date(log.loggedAt).toLocaleTimeString("en-DE", {
+    timestamp: new Date(log.createdAt).toLocaleTimeString("en-DE", {
       hour: "2-digit",
       minute: "2-digit",
       second: "2-digit",
@@ -153,49 +147,22 @@ const formattedLogs = computed(() => {
         >
           {{ deployment.status }}
         </div>
-        <div class="text-neutral text-sm">Commit: <span class="font-mono">{{ deployment.githubCommit.slice(0, 7) }}</span></div>
+        <div class="text-neutral text-sm">
+          Commit: <span class="font-mono">{{ deployment.githubCommit.slice(0, 7) }}</span>
+        </div>
         <div class="text-neutral text-sm">Created: {{ renderDate(deployment.createdAt) }}</div>
         <div v-if="deployment.domains?.[0]" class="text-neutral text-sm">
-          Domain: <a :href="`http://${deployment.domains[0].name}`" target="_blank" class="text-blue-600 hover:underline">{{ deployment.domains[0].name }}</a>
+          Domain:
+          <a :href="`http://${deployment.domains[0].name}`" target="_blank" class="text-blue-600 hover:underline">{{
+            deployment.domains[0].name
+          }}</a>
         </div>
       </div>
     </div>
 
-    <!-- Log Context Filter -->
-    <div class="border-neutral-subtle flex items-center gap-2 border-b bg-white p-2">
-      <button
-        @click="logContext = 'all'"
-        :class="[
-          'rounded px-3 py-1 text-sm',
-          logContext === 'all'
-            ? 'bg-blue-600 text-white'
-            : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200',
-        ]"
-      >
-        All Logs
-      </button>
-      <button
-        @click="logContext = 'build'"
-        :class="[
-          'rounded px-3 py-1 text-sm',
-          logContext === 'build'
-            ? 'bg-blue-600 text-white'
-            : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200',
-        ]"
-      >
-        Build Logs
-      </button>
-      <button
-        @click="logContext = 'runtime'"
-        :class="[
-          'rounded px-3 py-1 text-sm',
-          logContext === 'runtime'
-            ? 'bg-blue-600 text-white'
-            : 'bg-neutral-100 text-neutral-700 hover:bg-neutral-200',
-        ]"
-      >
-        Runtime Logs
-      </button>
+    <!-- Log Controls -->
+    <div class="border-neutral-subtle flex items-center justify-between gap-2 border-b bg-white p-2">
+      <div class="text-neutral text-sm">Deployment Logs</div>
       <div class="ml-auto flex items-center gap-2">
         <button
           v-if="!autoScroll"
@@ -204,24 +171,20 @@ const formattedLogs = computed(() => {
         >
           ↓ Scroll to Bottom
         </button>
-        <span class="text-neutral text-xs">Auto-refresh: {{ isPending ? 'active' : 'paused' }}</span>
+        <span class="text-neutral text-xs">Auto-refresh: {{ isPending ? "active" : "paused" }}</span>
       </div>
     </div>
 
     <!-- Logs Terminal -->
-    <div
-      ref="logContainer"
-      class="flex-1 overflow-auto bg-black p-4 font-mono text-sm text-green-400"
-    >
-      <div v-if="!formattedLogs || formattedLogs.length === 0" class="text-neutral-500">
-        No logs available yet...
-      </div>
+    <div ref="logContainer" class="flex-1 overflow-auto bg-black p-4 font-mono text-sm text-green-400">
+      <div v-if="!formattedLogs || formattedLogs.length === 0" class="text-neutral-500">No logs available yet...</div>
       <div v-for="log in formattedLogs" :key="log.id" class="whitespace-pre-wrap">
         <span class="text-neutral-500">[{{ log.timestamp }}]</span>
-        <span v-if="log.level" :class="log.level === 'error' ? 'text-red-400' : 'text-blue-400'" class="ml-2">[{{ log.level }}]</span>
+        <span v-if="log.level" :class="log.level === 'error' ? 'text-red-400' : 'text-blue-400'" class="ml-2"
+          >[{{ log.level }}]</span
+        >
         <span class="ml-2">{{ log.message }}</span>
       </div>
     </div>
   </div>
 </template>
-

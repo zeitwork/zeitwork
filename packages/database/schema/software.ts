@@ -9,7 +9,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 import { timestamps } from "../utils/timestamps";
-import { imageBuilds, images, instances } from "./platform";
+import { images, vms } from "./platform";
 import { uuidv7 } from "uuidv7";
 
 const organisationId = {
@@ -17,12 +17,6 @@ const organisationId = {
     .notNull()
     .references(() => organisations.id),
 };
-
-export const waitlist = pgTable("waitlist", {
-  id: uuid().primaryKey().$defaultFn(uuidv7),
-  email: text().notNull().unique(),
-  ...timestamps,
-});
 
 export const users = pgTable("users", {
   id: uuid().primaryKey().$defaultFn(uuidv7),
@@ -71,13 +65,23 @@ export const sessions = pgTable("sessions", {
   ...timestamps,
 });
 
+export const sslCertificateStatusesEnum = pgEnum("ssl_certificate_statuses", [
+  "pending",
+  "active",
+  "failed",
+  "renewing",
+]);
+
 export const domains = pgTable("domains", {
   id: uuid().primaryKey().$defaultFn(uuidv7),
   name: text().notNull(), // e.g. app.example.com
+  deploymentId: uuid().references(() => deployments.id),
   verificationToken: text(),
   verifiedAt: timestamp({ withTimezone: true }),
-  deploymentId: uuid().references(() => deployments.id),
-  internal: boolean().notNull().default(false),
+  sslCertificateStatus: sslCertificateStatusesEnum().default("pending"),
+  sslCertificateIssuedAt: timestamp({ withTimezone: true }),
+  sslCertificateExpiresAt: timestamp({ withTimezone: true }),
+  sslCertificateError: text(),
   ...organisationId,
   ...timestamps,
 });
@@ -107,7 +111,6 @@ export const projectEnvironments = pgTable(
     projectId: uuid()
       .notNull()
       .references(() => projects.id),
-    // latestDeploymentId: uuid().references((): AnyPgColumn => deployments.id),
     ...organisationId,
     ...timestamps,
   },
@@ -154,19 +157,18 @@ export const environmentVariables = pgTable(
   ]
 );
 
-export const deploymentStatuses = pgEnum("deployment_statuses", [
-  "pending",
+export const deploymentStatusesEnum = pgEnum("deployment_statuses", [
+  "queued",
   "building",
-  "deploying",
-  "active",
+  "ready",
   "inactive",
   "failed",
 ]);
 
 export const deployments = pgTable("deployments", {
   id: uuid().primaryKey().$defaultFn(uuidv7),
+  status: deploymentStatusesEnum().notNull().default("queued"),
   deploymentId: text().unique().notNull(),
-  status: deploymentStatuses().notNull().default("pending"),
   githubCommit: text().notNull(),
   projectId: uuid()
     .notNull()
@@ -174,20 +176,67 @@ export const deployments = pgTable("deployments", {
   environmentId: uuid()
     .notNull()
     .references(() => projectEnvironments.id),
+  buildId: uuid().references(() => builds.id),
   imageId: uuid().references(() => images.id),
-  imageBuildId: uuid().references(() => imageBuilds.id),
+  vmId: uuid().references(() => vms.id),
   ...organisationId,
   ...timestamps,
 });
 
-export const deploymentInstances = pgTable("deployment_instances", {
+export const deploymentLogs = pgTable("deployment_logs", {
   id: uuid().primaryKey().$defaultFn(uuidv7),
   deploymentId: uuid()
     .notNull()
     .references(() => deployments.id),
-  instanceId: uuid()
+  message: text().notNull(),
+  level: text(),
+  ...organisationId,
+  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+});
+
+export const buildStatusesEnum = pgEnum("build_statuses", [
+  "queued",
+  "initializing",
+  "building",
+  "ready",
+  "canceled",
+  "error",
+]);
+
+// status is computed based on other fields
+export const builds = pgTable("builds", {
+  id: uuid().primaryKey().$defaultFn(uuidv7),
+  status: buildStatusesEnum().notNull().default("queued"),
+  projectId: uuid()
     .notNull()
-    .references(() => instances.id),
+    .references(() => projects.id),
+  githubCommit: text().notNull(),
+  githubBranch: text().notNull(),
+  imageId: uuid().references(() => images.id),
+  vmId: uuid().references(() => vms.id),
   ...organisationId,
   ...timestamps,
+});
+
+export const buildLogs = pgTable("build_logs", {
+  id: uuid().primaryKey().$defaultFn(uuidv7),
+  buildId: uuid()
+    .notNull()
+    .references(() => builds.id),
+  message: text().notNull(),
+  level: text(),
+  ...organisationId,
+  createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+});
+
+// Certificate storage for certmagic (compatible with certmagic-sql library)
+export const certmagicData = pgTable("certmagic_data", {
+  key: text().primaryKey(), // e.g., "acme/example.com/sites/example.com/example.com.crt"
+  value: text().notNull(), // bytea in Postgres, stores certificates/keys as binary
+  modified: timestamp({ withTimezone: true }).notNull().defaultNow(),
+});
+
+export const certmagicLocks = pgTable("certmagic_locks", {
+  key: text().primaryKey(), // lock name
+  expires: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });

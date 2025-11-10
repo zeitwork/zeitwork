@@ -1,6 +1,6 @@
 {
-  "id": "2a613fca-7717-4d40-b40b-d9daf4cc058d",
-  "prevId": "f8292d26-775c-4ea0-9a5f-3ea222c4709f",
+  "id": "054cf2ff-96f8-4d95-84d5-723179baa926",
+  "prevId": "2a613fca-7717-4d40-b40b-d9daf4cc058d",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -849,6 +849,32 @@
         "verified_at": {
           "name": "verified_at",
           "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ssl_certificate_status": {
+          "name": "ssl_certificate_status",
+          "type": "ssl_certificate_statuses",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'pending'"
+        },
+        "ssl_certificate_issued_at": {
+          "name": "ssl_certificate_issued_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ssl_certificate_expires_at": {
+          "name": "ssl_certificate_expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ssl_certificate_error": {
+          "name": "ssl_certificate_error",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
@@ -1793,6 +1819,16 @@
         "ready",
         "inactive",
         "failed"
+      ]
+    },
+    "public.ssl_certificate_statuses": {
+      "name": "ssl_certificate_statuses",
+      "schema": "public",
+      "values": [
+        "pending",
+        "active",
+        "failed",
+        "renewing"
       ]
     }
   },

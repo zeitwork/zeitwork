@@ -219,32 +219,17 @@ export default defineEventHandler(async (event) => {
             console.error(`[GitHub Webhook - push] Failed to fetch commit info (delivery: ${deliveryId}):`, commitError)
           }
 
-          // Fetch the project
+          // Fetch the project using githubRepository field
+          const githubRepository = `${githubOwner}/${githubRepo}`
           const [project] = await db
             .select()
             .from(schema.projects)
-            .where(
-              and(
-                eq(schema.projects.githubRepositoryOwner, githubOwner),
-                eq(schema.projects.githubRepositoryName, githubRepo),
-              ),
-            )
+            .where(eq(schema.projects.githubRepository, githubRepository))
             .limit(1)
 
           if (!project) {
-            console.warn(
-              `[GitHub Webhook - push] Project not found for ${githubOwner}/${githubRepo} (delivery: ${deliveryId})`,
-            )
+            console.warn(`[GitHub Webhook - push] Project not found for ${githubRepository} (delivery: ${deliveryId})`)
             return { received: true, message: "Project not found" }
-          }
-
-          // Check if this is the default branch
-          const branchName = ref?.replace("refs/heads/", "")
-          if (branchName !== project.githubDefaultBranch) {
-            console.log(
-              `[GitHub Webhook - push] Ignoring push to non-default branch ${branchName} (delivery: ${deliveryId})`,
-            )
-            return { received: true, message: "Non-default branch" }
           }
 
           // Find production environment
@@ -264,6 +249,15 @@ export default defineEventHandler(async (event) => {
               `[GitHub Webhook - push] Production environment not found for project ${project.id} (delivery: ${deliveryId})`,
             )
             return { received: true, error: "Production environment not found" }
+          }
+
+          // Check if push is to the production branch
+          const branchName = ref?.replace("refs/heads/", "")
+          if (branchName !== productionEnvironment.branch) {
+            console.log(
+              `[GitHub Webhook - push] Ignoring push to non-production branch ${branchName}, expected ${productionEnvironment.branch} (delivery: ${deliveryId})`,
+            )
+            return { received: true, message: "Non-production branch" }
           }
 
           // Create deployment

@@ -85,7 +85,7 @@ export function useDeploymentModel() {
         .insert(deployments)
         .values({
           deploymentId: deploymentId,
-          status: "pending",
+          status: "queued",
           projectId: project.id,
           githubCommit: latestCommitHash,
           environmentId: params.environmentId,
@@ -104,7 +104,6 @@ export function useDeploymentModel() {
         await useDrizzle().insert(domains).values({
           name: internalDomainName,
           deploymentId: deployment.id,
-          internal: true,
           verifiedAt: new Date(), // Internal domains are always verified
           organisationId: params.organisationId,
         })

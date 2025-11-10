@@ -8,11 +8,11 @@ services:
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=postgres
-  s3:
-    image: minio/minio:latest
-    ports:
-      - "9000:9000"
-    environment:
-      - MINIO_ACCESS_KEY=minioadmin
-      - MINIO_SECRET_KEY=minioadmin
-    command: server /data
+  # s3:
+  #   image: minio/minio:latest
+  #   ports:
+  #     - "9000:9000"
+  #   environment:
+  #     - MINIO_ACCESS_KEY=minioadmin
+  #     - MINIO_SECRET_KEY=minioadmin
+  #   command: server /data

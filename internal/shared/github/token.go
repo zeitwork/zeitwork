@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/pem"
 	"fmt"
 	"net/http"
@@ -23,14 +24,21 @@ type TokenService struct {
 }
 
 // NewTokenService creates a new GitHub token service
-func NewTokenService(appID string, privateKeyPEM string) (*TokenService, error) {
+// privateKeyBase64 should be a base64-encoded PEM private key
+func NewTokenService(appID string, privateKeyBase64 string) (*TokenService, error) {
 	id, err := strconv.ParseInt(appID, 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf("invalid GitHub App ID: %w", err)
 	}
 
+	// Decode base64 to get PEM
+	privateKeyPEM, err := base64.StdEncoding.DecodeString(privateKeyBase64)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode base64 private key: %w", err)
+	}
+
 	// Parse the PEM-encoded private key
-	block, _ := pem.Decode([]byte(privateKeyPEM))
+	block, _ := pem.Decode(privateKeyPEM)
 	if block == nil {
 		return nil, fmt.Errorf("failed to parse PEM block containing the private key")
 	}
@@ -78,7 +86,7 @@ func (s *TokenService) GetInstallationToken(ctx context.Context, db *database.DB
 	}
 
 	// Look up the GitHub installation ID from our database
-	installation, err := db.Queries().GetGithubInstallation(ctx, installationID)
+	installation, err := db.Queries().GetGithubInstallationByID(ctx, installationID)
 	if err != nil {
 		return "", fmt.Errorf("failed to get GitHub installation: %w", err)
 	}
