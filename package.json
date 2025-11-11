@@ -1,8 +1,5 @@
 {
   "name": "zeitwork",
-  "module": "index.ts",
-  "type": "module",
-  "private": true,
   "scripts": {
     "db:generate": "bun --cwd ./packages/database drizzle-kit generate",
     "db:migrate": "bun --cwd ./packages/database drizzle-kit migrate",
@@ -10,18 +7,11 @@
     "db:studio": "bun --cwd ./packages/database drizzle-kit studio",
     "db:check": "bun --cwd ./packages/database drizzle-kit check",
     "web:dev": "bun --cwd ./apps/web dev",
+    "web:build": "bun --cwd ./apps/web build",
     "api:start": "bun --cwd ./apps/api start"
-  },
-  "devDependencies": {
-    "@types/bun": "1.3.0"
   },
   "workspaces": [
     "apps/*",
     "packages/*"
-  ],
-  "dependencies": {
-    "drizzle-kit": "^0.31.5",
-    "nanoid": "^5.1.6",
-    "prettier": "^3.6.2"
-  }
+  ]
 }

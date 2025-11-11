@@ -1,34 +1,49 @@
-# Dependencies stage - use Bun for workspace installation
-FROM oven/bun:1.3-alpine AS deps
-
+# use the official Bun image
+# see all versions at https://hub.docker.com/r/oven/bun/tags
+FROM node:24 AS base
 WORKDIR /usr/src/app
 
-# Copy all files (node_modules excluded by .dockerignore)
-COPY . .
+RUN npm install -g bun
 
-# Install all workspace dependencies with Bun
-RUN bun install
+# install dependencies into temp directory
+# this will cache them and speed up future builds
+FROM base AS install
+RUN mkdir -p /temp/dev
+RUN mkdir -p /temp/dev/apps/web
+RUN mkdir -p /temp/dev/packages/database
+COPY apps/web/package.json /temp/dev/apps/web/package.json
+COPY packages/database/package.json /temp/dev/packages/database/package.json
+COPY package.json /temp/dev/package.json
+# COPY bun.lock /temp/dev/bun.lock
+RUN cd /temp/dev && bun install 
 
-# Build stage - use Node.js for building
-FROM node:alpine AS build
+# copy node_modules from temp directory
+# then copy all (non-ignored) project files into the image
+FROM base AS prerelease
+# Copy source files first
+COPY ./apps/web ./apps/web
+COPY ./packages/database ./packages/database
+COPY ./package.json ./package.json
+# Remove any node_modules that may have been copied (despite .dockerignore)
+RUN rm -rf node_modules apps/web/node_modules packages/database/node_modules
+# Then copy node_modules from install stage
+COPY --from=install /temp/dev/node_modules node_modules
+COPY --from=install /temp/dev/apps/web/node_modules apps/web/node_modules
+# COPY --from=install /temp/dev/packages/database/node_modules packages/database/node_modules
 
-WORKDIR /usr/src/app
+# [optional] tests & build
+# ENV NODE_ENV=production
+# RUN bun test
+RUN bun run web:build
 
-# Copy source and installed dependencies
-COPY --from=deps /usr/src/app .
+# copy production dependencies and source code into final image
+FROM base AS release
+COPY --from=install /temp/dev/node_modules node_modules
+COPY --from=install /temp/dev/apps/web/node_modules apps/web/node_modules
+# COPY --from=install /temp/dev/packages/database/node_modules packages/database/node_modules
+COPY --from=prerelease /usr/src/app/apps/web/.output .output
 
-# Run postinstall and build with Node
-RUN cd apps/web && npm run postinstall
-RUN cd apps/web && npm run build
-
-# Production stage - use Node.js for runtime
-FROM node:alpine AS release
-
-WORKDIR /usr/src/app
-
-# Copy built application
-COPY --from=build /usr/src/app/apps/web/.output ./.output
-
-# Run the app
-EXPOSE 3000
-CMD ["node", ".output/server/index.mjs"]
+# run the app
+USER node
+EXPOSE 3000/tcp
+ENTRYPOINT [ "node", ".output/server/index.mjs" ]
