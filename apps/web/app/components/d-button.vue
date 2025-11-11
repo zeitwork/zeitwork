@@ -19,12 +19,12 @@ const props = defineProps<Props>()
 const { variant = "primary", size = "md", type = "button", loading = false } = props
 
 const variantClasses: { [key: string]: string } = {
-  primary: "bg-surface text-neutral hover:bg-surface-subtle border border-neutral shadow-xs",
+  primary: "bg-surface text-neutral hover:bg-surface-subtle border border-neutral shadow-xs active:bg-surface-strong",
   secondary: "bg-neutral-subtle text-neutral hover:bg-neutral-strong active:bg-neutral border border-transparent",
-  transparent: "text-neutral-700 hover:bg-neutral-subtle active:bg-neutral-strong border border-transparent",
-  danger: "bg-red-700 text-white hover:bg-red-600 border border-transparent",
-  "danger-light": "text-red-700 bg-red-100 hover:bg-red-200 active:bg-red-300 border border-transparent",
-  outline: "text-neutral-600 border border-neutral-800/10 hover:bg-neutral-50 active:bg-neutral-100",
+  transparent: "text-neutral-subtle hover:bg-neutral-subtle active:bg-neutral-strong border border-transparent",
+  danger: "bg-danger text-white hover:bg-danger border border-transparent active:bg-danger-strong",
+  "danger-light": "text-danger bg-red-100 hover:bg-danger/30 active:bg-danger/50 border border-transparent",
+  outline: "text-neutral-subtle border border-neutral-subtle hover:bg-neutral-subtle active:bg-neutral-strong",
 }
 
 const paddingClasses: { [key: string]: string } = {

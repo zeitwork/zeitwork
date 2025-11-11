@@ -76,7 +76,7 @@ const hasTrailing = computed(() => {
 
 <template>
   <div
-    class="bg-surface-weak border-neutral text-neutral text-copy has-[:focus]:bg-neutral flex h-8 overflow-hidden rounded-md border leading-none transition-all outline-none has-[:focus]:border-neutral-300 has-[:focus]:ring-2 has-[:focus]:ring-neutral-200"
+    class="bg-surface-weak border-neutral text-neutral text-copy has-[:focus]:bg-neutral has-[:focus]:ring-neutral has-[:focus]:border-neutral-strong/20 flex h-8 overflow-hidden rounded-md border leading-none transition-all outline-none has-[:focus]:ring-2"
     :class="[disabled ? 'bg-neutral-strong cursor-not-allowed opacity-50' : 'hover:border-neutral-strong/15']"
   >
     <div

@@ -36,6 +36,16 @@
   --border-color-neutral-subtle: light-dark(var(--color-neutral-100), var(--color-neutral-900));
   --border-color-neutral-strong: light-dark(var(--color-neutral-950), var(--color-neutral-50));
 
+  /* Outline colors */
+  --outline-color-neutral: light-dark(var(--color-neutral-200), var(--color-neutral-800));
+  --outline-color-neutral-subtle: light-dark(var(--color-neutral-100), var(--color-neutral-900));
+  --outline-color-neutral-strong: light-dark(var(--color-neutral-950), var(--color-neutral-50));
+
+  /* Ring colors */
+  --ring-color-neutral: light-dark(var(--color-neutral-200), var(--color-neutral-800));
+  --ring-color-neutral-subtle: light-dark(var(--color-neutral-100), var(--color-neutral-900));
+  --ring-color-neutral-strong: light-dark(var(--color-neutral-950), var(--color-neutral-50));
+
   /**
 	 * Accent Colors
 	 */
@@ -222,12 +232,12 @@
   }
 }
 
-/* dark mode */
-/* @media (prefers-color-scheme: dark) {
+/*dark mode */
+@media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
   }
-} */
+}
 
 /* base */
 
