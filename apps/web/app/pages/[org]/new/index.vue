@@ -43,8 +43,8 @@ const config = useRuntimeConfig()
 
 // GitHub App installation URL
 const githubAppInstallUrl = computed(() => {
-  const appName = "zeitwork"
-  const redirectUri = `${config.appUrl}/auth/github`
+  const appName = config.public.appName
+  const redirectUri = `${config.public.appUrl}/auth/github`
   return `https://github.com/apps/${appName}/installations/new?redirect_uri=${redirectUri}`
 })
 

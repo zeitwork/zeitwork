@@ -21,7 +21,7 @@ const isActive = computed(() => {
 <template>
   <NuxtLink class="group relative flex h-8 items-center px-3 text-sm" :to="to">
     <div
-      class="bg-surface-strong absolute rounded-lg transition-all group-active:inset-[-1px]"
+      class="bg-surface-strong absolute rounded-md transition-all group-active:inset-[-1px]"
       :class="[isActive ? 'inset-0 opacity-100' : 'inset-1 opacity-0 group-hover:inset-0 group-hover:opacity-100']"
     ></div>
     <div

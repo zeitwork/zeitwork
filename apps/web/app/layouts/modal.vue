@@ -7,11 +7,3 @@
     </div>
   </div>
 </template>
-
-<style lang="postcss">
-html,
-body {
-  overflow: hidden;
-  @apply bg-neutral-50;
-}
-</style>

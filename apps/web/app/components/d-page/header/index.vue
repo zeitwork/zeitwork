@@ -42,7 +42,7 @@ async function logout() {
       </div>
       <div class="flex items-center gap-2">
         <!-- <DThemeSwitcher /> -->
-        <DButton :icon-left="LogOutIcon" variant="secondary" size="MD" @click="logout" />
+        <DButton :icon-left="LogOutIcon" variant="secondary" size="md" @click="logout" />
         <div
           class="bg-neutral-inverse text-neutral-inverse text-copy-sm grid size-8 place-items-center rounded-full font-semibold uppercase"
         >

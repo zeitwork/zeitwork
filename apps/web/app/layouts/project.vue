@@ -26,19 +26,14 @@ const links = [
 
 <template>
   <div class="bg-neutral-strong flex h-screen flex-col">
-    <d-navbar :links="links" />
-    <div class="flex flex-1 flex-col overflow-auto p-2 pt-0">
-      <div class="border-neutral h-full flex-1 overflow-auto rounded-lg border bg-white">
-        <slot></slot>
+    <div class="flex flex-1 flex-col p-1 pt-0">
+      <d-navbar-header class="shrink-0" />
+      <div class="bg-neutral-subtle outline-neutral flex min-h-0 flex-1 flex-col rounded-lg outline">
+        <d-navbar :links="links" />
+        <div class="outline-neutral bg-surface flex-1 overflow-auto rounded-lg outline">
+          <slot></slot>
+        </div>
       </div>
     </div>
   </div>
 </template>
-
-<style lang="postcss">
-html,
-body {
-  overflow: hidden;
-  @apply bg-neutral-50;
-}
-</style>
