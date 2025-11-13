@@ -7,14 +7,16 @@ type Props = {
   to: string
   name: string
   active?: boolean
+  activePrefix?: string
 }
-const { to, name } = defineProps<Props>()
+const { to, name, activePrefix } = defineProps<Props>()
 
 const isActive = computed(() => {
+  const checkPath = activePrefix || to
   if (projectSlug.value) {
-    return to === `/${orgSlug.value}/${projectSlug.value}` ? to === route.path : route.path.startsWith(to)
+    return to === `/${orgSlug.value}/${projectSlug.value}` ? to === route.path : route.path.startsWith(checkPath)
   }
-  return to === `/${orgSlug.value}` ? to === route.path : route.path.startsWith(to)
+  return to === `/${orgSlug.value}` ? to === route.path : route.path.startsWith(checkPath)
 })
 </script>
 

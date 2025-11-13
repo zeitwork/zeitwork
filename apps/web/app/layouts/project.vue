@@ -19,7 +19,8 @@ const links = [
   // },
   {
     name: "Settings",
-    to: `/${orgSlug.value}/${projectSlug.value}/settings`,
+    to: `/${orgSlug.value}/${projectSlug.value}/settings/general`,
+    activePrefix: `/${orgSlug.value}/${projectSlug.value}/settings`,
   },
 ]
 </script>
