@@ -1,12 +1,8 @@
-import * as schema from "../../../../packages/database/schema"
 export { sql, eq, and, or, asc, desc } from "@zeitwork/database/utils/drizzle"
-import { drizzle } from "drizzle-orm/postgres-js"
-import postgres from "postgres"
+import { useClient } from "@zeitwork/database/utils/client"
 
-const client = postgres(process.env.NUXT_DSN!, { prepare: false })
-
-const database = drizzle(client, { schema, casing: "snake_case" })
+const client = useClient({ dsn: process.env.NUXT_DSN! })
 
 export function useDrizzle() {
-  return database
+  return client
 }

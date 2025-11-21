@@ -1,4 +1,4 @@
-import { domains, projects, environmentDomains } from "@zeitwork/database/schema"
+import { domains, projects, environmentDomains, projectEnvironments } from "@zeitwork/database/schema"
 import { and, eq } from "@zeitwork/database/utils/drizzle"
 import { z } from "zod"
 
@@ -7,7 +7,7 @@ const paramsSchema = z.object({
 })
 
 const bodySchema = z.object({
-  name: z.string().min(1).max(255),
+  name: z.hostname().min(1).max(255),
 })
 
 export default defineEventHandler(async (event) => {
@@ -20,21 +20,25 @@ export default defineEventHandler(async (event) => {
   const { id: idOrSlug } = await getValidatedRouterParams(event, paramsSchema.parse)
   const { name } = await readValidatedBody(event, bodySchema.parse)
 
-  const isUuid = z.string().uuid().safeParse(idOrSlug).success
+  const project = await findProjectBySlugOrId(idOrSlug, secure.organisationId!)
+  if (!project) {
+    throw createError({ statusCode: 404, message: "Project not found" })
+  }
 
-  const [project] = await useDrizzle()
+  const [productionEnv] = await useDrizzle()
     .select()
-    .from(projects)
+    .from(projectEnvironments)
     .where(
       and(
-        ...(isUuid ? [eq(projects.id, idOrSlug)] : [eq(projects.slug, idOrSlug)]),
-        eq(projects.organisationId, secure.organisationId!),
+        eq(projectEnvironments.projectId, project.id),
+        eq(projectEnvironments.name, "production"),
+        eq(projectEnvironments.organisationId, secure.organisationId!),
       ),
     )
     .limit(1)
 
-  if (!project) {
-    throw createError({ statusCode: 404, message: "Project not found" })
+  if (!productionEnv) {
+    throw createError({ statusCode: 404, message: "Production environment not found" })
   }
 
   const result = await useDrizzle().transaction(async (tx) => {
@@ -73,7 +77,7 @@ export default defineEventHandler(async (event) => {
       await tx.insert(environmentDomains).values({
         projectId: project.id,
         domainId: existingDomain.id,
-        environmentId: project.productionEnv.id, // TODO: Get the production environment
+        environmentId: productionEnv.id,
         organisationId: secure.organisationId!,
       })
     }
@@ -83,3 +87,17 @@ export default defineEventHandler(async (event) => {
 
   return result
 })
+
+async function findProjectBySlugOrId(slugOrId: string, organisationId: string) {
+  const isUuid = z.uuid().safeParse(slugOrId).success
+
+  const findByField = isUuid ? eq(projects.id, slugOrId) : eq(projects.slug, slugOrId)
+
+  const [project] = await useDrizzle()
+    .select()
+    .from(projects)
+    .where(and(findByField, eq(projects.organisationId, organisationId)))
+    .limit(1)
+
+  return project
+}
