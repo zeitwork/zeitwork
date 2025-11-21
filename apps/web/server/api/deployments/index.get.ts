@@ -1,5 +1,5 @@
 import { deployments, domains, projects } from "@zeitwork/database/schema"
-import { eq, SQL } from "drizzle-orm"
+import { eq, SQL, inArray, desc, and } from "@zeitwork/database/utils/drizzle"
 import { z } from "zod"
 
 const querySchema = z.object({
@@ -27,16 +27,34 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  const query = await useDrizzle()
+  // Query 1: Get deployments (no joins, no duplicates)
+  const deploymentsResult = await useDrizzle()
     .select()
     .from(deployments)
-    .leftJoin(domains, eq(deployments.id, domains.deploymentId))
     .where(and(...wheres))
     .orderBy(desc(deployments.id))
 
-  const result = query.map((row) => ({
-    ...row.deployments,
-    domains: [row.domains],
+  // Query 2: Get all domains for these deployments in one query
+  const deploymentIds = deploymentsResult.map((d) => d.id)
+
+  let domainsResult: any[] = []
+  if (deploymentIds.length > 0) {
+    domainsResult = await useDrizzle().select().from(domains).where(inArray(domains.deploymentId, deploymentIds))
+  }
+
+  // Group domains by deploymentId in memory (fast operation)
+  const domainsByDeployment = new Map()
+  for (const domain of domainsResult) {
+    if (!domainsByDeployment.has(domain.deploymentId)) {
+      domainsByDeployment.set(domain.deploymentId, [])
+    }
+    domainsByDeployment.get(domain.deploymentId).push(domain)
+  }
+
+  // Attach domains to deployments
+  const result = deploymentsResult.map((deployment) => ({
+    ...deployment,
+    domains: domainsByDeployment.get(deployment.id) || [],
   }))
 
   return result

@@ -1,5 +1,5 @@
 import { organisations, organisationMembers } from "@zeitwork/database/schema"
-import { eq } from "drizzle-orm"
+import { eq } from "@zeitwork/database/utils/drizzle"
 import type Stripe from "stripe"
 
 export default defineEventHandler(async (event) => {

@@ -1,5 +1,5 @@
 import { projectEnvironments, projects } from "@zeitwork/database/schema"
-import { eq } from "drizzle-orm"
+import { eq } from "@zeitwork/database/utils/drizzle"
 import { z } from "zod"
 import { useDeploymentModel } from "~~/server/models/deployment"
 

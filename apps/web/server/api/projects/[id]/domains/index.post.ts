@@ -1,5 +1,5 @@
 import { domains, projects, environmentDomains } from "@zeitwork/database/schema"
-import { and, eq } from "drizzle-orm"
+import { and, eq } from "@zeitwork/database/utils/drizzle"
 import { z } from "zod"
 
 const paramsSchema = z.object({

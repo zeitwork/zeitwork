@@ -1,5 +1,5 @@
 import { deployments, domains, projects, environmentDomains } from "@zeitwork/database/schema"
-import { eq, and, inArray } from "drizzle-orm"
+import { eq, and, inArray } from "@zeitwork/database/utils/drizzle"
 import { z } from "zod"
 
 const paramsSchema = z.object({
