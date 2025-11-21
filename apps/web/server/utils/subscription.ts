@@ -1,5 +1,5 @@
 import { organisations, organisationMembers } from "@zeitwork/database/schema"
-import { eq, and } from "drizzle-orm"
+import { eq, and } from "@zeitwork/database/utils/drizzle"
 import type { H3Event } from "h3"
 
 /**

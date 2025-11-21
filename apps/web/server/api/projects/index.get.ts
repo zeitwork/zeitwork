@@ -1,5 +1,5 @@
 import { projects } from "../../../../../packages/database/schema"
-import { eq } from "drizzle-orm"
+import { eq } from "@zeitwork/database/utils/drizzle"
 
 export default defineEventHandler(async (event) => {
   const { secure } = await requireUserSession(event)

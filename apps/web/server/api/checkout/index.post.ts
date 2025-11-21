@@ -1,10 +1,10 @@
 import { organisations } from "@zeitwork/database/schema"
-import { eq } from "drizzle-orm"
+import { eq } from "@zeitwork/database/utils/drizzle"
 import { z } from "zod"
 
 const bodySchema = z.object({
   priceId: z.string(),
-  returnUrl: z.string().url().optional(),
+  returnUrl: z.url().optional(),
 })
 
 export default defineEventHandler(async (event) => {

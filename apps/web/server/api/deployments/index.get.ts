@@ -1,5 +1,5 @@
 import { deployments, domains, projects } from "@zeitwork/database/schema"
-import { eq, SQL, inArray, desc, and } from "drizzle-orm"
+import { eq, SQL, inArray, desc, and } from "@zeitwork/database/utils/drizzle"
 import { z } from "zod"
 
 const querySchema = z.object({

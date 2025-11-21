@@ -1,5 +1,5 @@
 import * as schema from "../../../../packages/database/schema"
-export { sql, eq, and, or, asc, desc } from "drizzle-orm"
+export { sql, eq, and, or, asc, desc } from "@zeitwork/database/utils/drizzle"
 import { drizzle } from "drizzle-orm/postgres-js"
 import postgres from "postgres"
 

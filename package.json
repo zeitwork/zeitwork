@@ -1,5 +1,6 @@
 {
   "name": "zeitwork",
+  "private": true,
   "scripts": {
     "db:generate": "bun --cwd ./packages/database drizzle-kit generate",
     "db:migrate": "bun --cwd ./packages/database drizzle-kit migrate",

@@ -23,8 +23,6 @@
     "@vueuse/router": "^14.0.0",
     "@zeitwork/database": "workspace:*",
     "date-fns": "^4.1.0",
-    "drizzle-kit": "^0.31.6",
-    "drizzle-orm": "^0.44.7",
     "install": "^0.13.0",
     "jose": "^6.1.1",
     "lexorank": "^1.0.5",
