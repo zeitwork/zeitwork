@@ -25,6 +25,8 @@ export default defineNuxtConfig({
     appUrl: process.env.NUXT_APP_URL || "http://localhost:3000",
 
     public: {
+      domainTarget: "167.233.9.179",
+
       appUrl: process.env.NUXT_APP_URL || "http://localhost:3000",
       appName: process.env.NUXT_APP_NAME || "zeitwork",
       graphEndpoint: process.env.NUXT_PUBLIC_GRAPH_ENDPOINT,

@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import { useTimeoutFn } from "@vueuse/core"
-import { ExternalLinkIcon, GitCommitIcon, ClockIcon, CheckCircleIcon } from "lucide-vue-next"
 
 definePageMeta({
-  layout: "project",
+  layout: "environment",
 })
 
 const route = useRoute()
 const orgId = route.params.org as string
 const projectSlug = route.params.project as string
+const environmentName = route.params.env as string
 
 const { data: deployments, refresh: refreshDeployments } = await useFetch(`/api/deployments`, {
   query: {
@@ -59,10 +59,6 @@ function renderDate(date: string) {
   }).format(new Date(date))
 }
 
-function formatDeploymentUrl(deployment: any) {
-  return `http://${deployment.domains?.[0].name}`
-}
-
 function deploymentStatusColor(status: string) {
   switch (status) {
     case "queued":
@@ -96,6 +92,12 @@ function deploymentStatusBgColor(status: string) {
       return "bg-neutral/10"
   }
 }
+
+const prefix = computed(() => `/${orgId}/${projectSlug}/${environmentName}`)
+
+function deploymentLink(deployment: any) {
+  return `${prefix.value}/deployments/${deployment.id}`
+}
 </script>
 
 <template>
@@ -108,7 +110,7 @@ function deploymentStatusBgColor(status: string) {
       <nuxt-link
         v-for="deployment in deployments"
         :key="deployment.id"
-        :to="`/${orgId}/${projectSlug}/deployments/${deployment.id}`"
+        :to="deploymentLink(deployment)"
         class="hover:bg-surface-subtle border-neutral-subtle text-neutral grid cursor-pointer grid-cols-[100px_100px_100px_3fr_1fr] items-center gap-2 border-b p-4 text-sm"
       >
         <div class="font-mono">{{ deployment.deploymentId }}</div>

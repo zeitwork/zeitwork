@@ -19,6 +19,7 @@ type Config struct {
 	BuildTimeout          time.Duration `env:"RECONCILER_BUILD_TIMEOUT" envDefault:"10m"`
 	DeploymentGracePeriod time.Duration `env:"RECONCILER_DEPLOYMENT_GRACE_PERIOD" envDefault:"5m"`
 	LogLevel              string        `env:"RECONCILER_LOG_LEVEL" envDefault:"info"`
+	AllowedIPTarget       string        `env:"NUXT_PUBLIC_DOMAIN_TARGET,required"`
 
 	// Hetzner configuration
 	HetznerToken           string `env:"RECONCILER_HETZNER_TOKEN"`
@@ -77,6 +78,7 @@ func main() {
 		VMPoolSize:             cfg.VMPoolSize,
 		BuildTimeout:           cfg.BuildTimeout,
 		DeploymentGracePeriod:  cfg.DeploymentGracePeriod,
+		AllowedIPTarget:        cfg.AllowedIPTarget,
 		HetznerToken:           cfg.HetznerToken,
 		HetznerSSHKeyName:      cfg.HetznerSSHKeyName,
 		HetznerServerType:      cfg.HetznerServerType,

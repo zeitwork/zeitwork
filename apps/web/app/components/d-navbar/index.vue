@@ -5,7 +5,7 @@ const orgSlug = computed<string>(() => route.params.org as string)
 interface Link {
   name: string
   to: string
-  activePrefix?: string
+  active?: boolean
 }
 
 interface Props {
@@ -17,12 +17,6 @@ const { links } = defineProps<Props>()
 
 <template>
   <div class="flex gap-2 p-2">
-    <d-navbar-link
-      v-for="link in links"
-      :key="link.name"
-      :to="link.to"
-      :name="link.name"
-      :active-prefix="link.activePrefix"
-    />
+    <d-navbar-link v-for="link in links" :key="link.name" :to="link.to" :name="link.name" :active="link.active" />
   </div>
 </template>

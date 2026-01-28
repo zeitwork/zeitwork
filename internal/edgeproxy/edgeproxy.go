@@ -302,21 +302,6 @@ func (s *Service) checkVMHealth(ip string, port int32) bool {
 	return healthy
 }
 
-// getVerifiedDomains returns all verified domain names
-func (s *Service) getVerifiedDomains(ctx context.Context) ([]string, error) {
-	domains, err := s.db.Queries().GetDomainsNeedingCertificates(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get domains needing certificates: %w", err)
-	}
-
-	var domainNames []string
-	for _, domain := range domains {
-		domainNames = append(domainNames, domain.Name)
-	}
-
-	return domainNames, nil
-}
-
 // Note: With on-demand TLS via TLS-ALPN-01, certificates are obtained automatically
 // during the first HTTPS request. We don't need proactive acquisition loops.
 // Certmagic handles certificate renewal automatically via its maintenance routine.

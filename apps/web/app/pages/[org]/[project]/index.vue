@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { GithubIcon } from "lucide-vue-next"
+
 definePageMeta({
   layout: "project",
 })
@@ -7,48 +9,34 @@ const route = useRoute()
 const orgId = route.params.org
 const projectSlug = route.params.project
 
-const { data: project, refresh } = await useFetch(`/api/projects/${projectSlug}`)
+const { data: project } = await useFetch(`/api/projects/${projectSlug}`)
+const { data: environments } = await useFetch(`/api/projects/${projectSlug}/environments`)
 </script>
 
 <template>
   <div class="flex h-full flex-col overflow-auto">
     <div class="border-neutral-subtle flex h-16 items-center justify-between border-b p-4">
       <div class="text-neutral-strong text-sm">Project</div>
-      <!-- <d-button @click="createDeployment">Create Deployment</d-button> -->
     </div>
-    <div v-if="project" class="flex-1 overflow-auto">
-      <!-- <div
-        v-for="deployment in deployments"
-        :key="deployment.id"
-        class="hover:bg-surface-subtle border-neutral-subtle text-neutral grid grid-cols-[100px_100px_100px_3fr_1fr] items-center gap-2 border-b p-4 text-sm"
-      >
-        <div class="font-mono">{{ deployment.deploymentId }}</div>
-        <div>
-          <div
-            :class="[
-              deploymentStatusColor(deployment.status),
-              deploymentStatusBgColor(deployment.status),
-              'w-fit rounded px-1.5 py-0.5',
-            ]"
+    <div v-if="project" class="flex-1 overflow-auto p-4">
+      <div class="flex flex-col gap-2">
+        <div class="text-neutral text-sm">Environments</div>
+        <div class="grid grid-cols-[200px_1fr] items-center gap-2">
+          <NuxtLink
+            v-for="environment in environments"
+            :key="environment.id"
+            :to="`/${route.params.org}/${route.params.project}/${environment.name}`"
+            class="border-neutral flex min-h-32 min-w-64 flex-col justify-between gap-4 rounded-lg border p-4 hover:shadow"
           >
-            {{ deployment.status }}
-          </div>
+            <div class="flex items-center gap-2">
+              <div class="text-neutral text-sm">{{ environment.name }}</div>
+            </div>
+            <div class="flex items-center gap-2">
+              <div><GithubIcon class="text-neutral-subtle size-4" /></div>
+              <div class="text-neutral-subtle text-copy-sm">{{ environment.branch }}</div>
+            </div>
+          </NuxtLink>
         </div>
-        <div class="font-mono">{{ deployment.githubCommit.slice(0, 7) }}</div>
-        <div>
-          <nuxt-link :to="formatDeploymentUrl(deployment)" external target="_blank">
-            {{ deployment.domains?.[0]?.name }}
-          </nuxt-link>
-        </div>
-        <div class="text-right">{{ renderDate(deployment.createdAt) }}</div>
-      </div>
-    </div> -->
-      <div
-        v-for="fieldKey in Object.keys(project)"
-        class="hover:bg-surface-subtle border-neutral-subtle text-neutral grid grid-cols-[200px_1fr] items-center gap-2 border-b p-4 text-sm"
-      >
-        <div>{{ fieldKey }}</div>
-        <div class="text-neutral-subtle">{{ project[fieldKey] }}</div>
       </div>
     </div>
   </div>

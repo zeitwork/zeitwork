@@ -4,25 +4,23 @@ const route = useRoute()
 const orgSlug = computed<string>(() => route.params.org as string)
 const projectSlug = computed<string>(() => route.params.project as string)
 
-const links = [
+const links = computed(() => [
   {
     name: "Overview",
     to: `/${orgSlug.value}/${projectSlug.value}`,
+    active: route.path === `/${orgSlug.value}/${projectSlug.value}`,
   },
   {
-    name: "Deployments",
-    to: `/${orgSlug.value}/${projectSlug.value}/deployments`,
+    name: "Environments",
+    to: `/${orgSlug.value}/${projectSlug.value}/environments`,
+    active: route.path.startsWith(`/${orgSlug.value}/${projectSlug.value}/environments`),
   },
-  // {
-  //   name: "Logs",
-  //   to: `/${orgSlug.value}/${projectSlug.value}/logs`,
-  // },
   {
     name: "Settings",
-    to: `/${orgSlug.value}/${projectSlug.value}/settings/general`,
-    activePrefix: `/${orgSlug.value}/${projectSlug.value}/settings`,
+    to: `/${orgSlug.value}/${projectSlug.value}/settings`,
+    active: route.path.startsWith(`/${orgSlug.value}/${projectSlug.value}/settings`),
   },
-]
+])
 </script>
 
 <template>

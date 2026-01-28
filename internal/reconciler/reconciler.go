@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
-	"net"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/docker/docker/api/types/image"
@@ -18,7 +18,7 @@ import (
 	"github.com/hetznercloud/hcloud-go/v2/hcloud"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/zeitwork/zeitwork/internal/database"
-	"github.com/zeitwork/zeitwork/internal/shared/base58"
+	dnsresolver "github.com/zeitwork/zeitwork/internal/shared/dns"
 	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 	"golang.org/x/crypto/ssh"
 )
@@ -33,6 +33,7 @@ type Config struct {
 	VMPoolSize            int           // Minimum number of VMs to keep in pool
 	BuildTimeout          time.Duration // How long before a build times out
 	DeploymentGracePeriod time.Duration // Grace period before marking old deployments inactive
+	AllowedIPTarget       string        // Allowed IPv4 target customer domains must point to
 
 	// Hetzner configuration
 	HetznerToken           string // Hetzner Cloud API token
@@ -62,6 +63,10 @@ type Service struct {
 
 	// Docker client
 	dockerClient *client.Client
+
+	// DNS resolution
+	dnsResolver     dnsresolver.Resolver
+	allowedIPTarget string
 }
 
 // NewService creates a new reconciler service
@@ -116,12 +121,19 @@ func NewService(cfg Config, logger *slog.Logger) (*Service, error) {
 		logger.Info("Docker client initialized")
 	}
 
+	allowedIP := strings.TrimSpace(cfg.AllowedIPTarget)
+	if allowedIP == "" {
+		return nil, fmt.Errorf("no allowed IP target configured; set NUXT_PUBLIC_DOMAIN_TARGET")
+	}
+
 	s := &Service{
-		cfg:          cfg,
-		db:           db,
-		logger:       logger,
-		hcloudClient: hcloudClient,
-		dockerClient: dockerClient,
+		cfg:             cfg,
+		db:              db,
+		logger:          logger,
+		hcloudClient:    hcloudClient,
+		dockerClient:    dockerClient,
+		dnsResolver:     dnsresolver.NewResolver(),
+		allowedIPTarget: allowedIP,
 	}
 
 	// Initialize SSH keys if Hetzner is configured
@@ -308,7 +320,9 @@ func (s *Service) createRegionWithLoadBalancer(ctx context.Context, locationName
 	return nil
 }
 
-// reconcileDomains verifies domain ownership via DNS TXT records
+const domainResolveTimeout = 10 * time.Second
+
+// reconcileDomains verifies domain ownership by ensuring domains point to approved targets
 func (s *Service) reconcileDomains(ctx context.Context) {
 	domains, err := s.db.Queries().GetUnverifiedDomains(ctx)
 	if err != nil {
@@ -320,77 +334,80 @@ func (s *Service) reconcileDomains(ctx context.Context) {
 		return
 	}
 
-	s.logger.Info("reconciling domains", "count", len(domains))
+	if s.allowedIPTarget == "" {
+		s.logger.Warn("no allowed IP target configured; skipping domain verification")
+		return
+	}
+
+	s.logger.Info("reconciling domains",
+		"count", len(domains),
+		"allowed_ip_target", s.allowedIPTarget,
+	)
 
 	for _, domain := range domains {
 		domainID := uuid.ToString(domain.ID)
 		domainName := domain.Name
 
-		s.logger.Debug("checking domain verification",
-			"domain_id", domainID,
-			"domain_name", domainName,
-		)
-
-		// Skip if no verification token
-		if !domain.VerificationToken.Valid || domain.VerificationToken.String == "" {
-			s.logger.Debug("skipping domain without verification token",
+		resolveCtx, cancel := context.WithTimeout(ctx, domainResolveTimeout)
+		resolution, err := s.dnsResolver.Resolve(resolveCtx, domainName)
+		cancel()
+		if err != nil {
+			s.logger.Debug("domain resolution failed",
 				"domain_id", domainID,
 				"domain_name", domainName,
-			)
-			continue
-		}
-
-		// Build expected TXT record name: {base58(domain.id)}-zeitwork.{domain.name}
-		base58ID := base58.EncodeUUID(domain.ID)
-		txtRecordName := fmt.Sprintf("%s-zeitwork.%s", base58ID, domainName)
-
-		s.logger.Debug("looking up DNS TXT record",
-			"domain_id", domainID,
-			"txt_record", txtRecordName,
-		)
-
-		// Lookup TXT records
-		txtRecords, err := net.LookupTXT(txtRecordName)
-		if err != nil {
-			s.logger.Debug("DNS lookup failed",
-				"domain_id", domainID,
-				"txt_record", txtRecordName,
 				"error", err,
 			)
 			continue
 		}
 
-		// Check if any TXT record contains the verification token
-		verified := false
-		for _, record := range txtRecords {
-			if record == domain.VerificationToken.String {
-				verified = true
-				break
-			}
+		matchedIP := matchesAllowedIP(resolution, s.allowedIPTarget)
+
+		s.logger.Debug("domain resolution complete",
+			"domain_id", domainID,
+			"domain_name", domainName,
+			"host_chain", resolution.HostChain,
+			"ipv4", resolution.IPv4,
+			"ipv6", resolution.IPv6,
+			"matched_ip", matchedIP,
+		)
+
+		if !matchedIP {
+			s.logger.Debug("domain does not point to allowed targets",
+				"domain_id", domainID,
+				"domain_name", domainName,
+			)
+			continue
 		}
 
-		if verified {
-			// Mark domain as verified
-			if err := s.db.Queries().MarkDomainVerified(ctx, domain.ID); err != nil {
-				s.logger.Error("failed to mark domain as verified",
-					"domain_id", domainID,
-					"error", err,
-				)
-				continue
-			}
+		if err := s.db.Queries().MarkDomainVerified(ctx, domain.ID); err != nil {
+			s.logger.Error("failed to mark domain as verified",
+				"domain_id", domainID,
+				"domain_name", domainName,
+				"error", err,
+			)
+			continue
+		}
 
-			s.logger.Info("domain verified",
-				"domain_id", domainID,
-				"domain_name", domainName,
-			)
-		} else {
-			s.logger.Debug("verification token not found in DNS records",
-				"domain_id", domainID,
-				"domain_name", domainName,
-				"expected_token", domain.VerificationToken.String,
-			)
+		s.logger.Info("domain verified",
+			"domain_id", domainID,
+			"domain_name", domainName,
+			"matched_ip", matchedIP,
+		)
+	}
+}
+
+func matchesAllowedIP(resolution *dnsresolver.Resolution, allowedIP string) bool {
+	if allowedIP == "" {
+		return false
+	}
+
+	for _, ip := range resolution.IPv4 {
+		if ip == allowedIP {
+			return true
 		}
 	}
+
+	return false
 }
 
 // reconcileBuilds monitors build timeouts

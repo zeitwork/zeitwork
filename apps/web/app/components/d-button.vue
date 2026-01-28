@@ -21,7 +21,7 @@ const { variant = "primary", size = "md", type = "button", loading = false } = p
 const variantClasses: { [key: string]: string } = {
   primary: "bg-surface text-neutral hover:bg-surface-subtle border border-neutral shadow-xs active:bg-surface-strong",
   secondary: "bg-neutral-subtle text-neutral hover:bg-neutral-strong active:bg-neutral border border-transparent",
-  transparent: "text-neutral-subtle hover:bg-neutral-subtle active:bg-neutral-strong border border-transparent",
+  transparent: "text-neutral-subtle hover:bg-neutral-subtle active:bg-neutral-strong border !border-transparent",
   danger: "bg-danger text-white hover:bg-danger border border-transparent active:bg-danger-strong",
   "danger-light": "text-danger bg-red-100 hover:bg-danger/30 active:bg-danger/50 border border-transparent",
   outline: "text-neutral-subtle border border-neutral-subtle hover:bg-neutral-subtle active:bg-neutral-strong",

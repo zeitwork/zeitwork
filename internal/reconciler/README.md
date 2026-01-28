@@ -31,19 +31,15 @@ The reconciler operates on four main resources:
 
 ### 1. Domain Reconciliation
 
-**Purpose**: Verify domain ownership via DNS TXT records
+**Purpose**: Confirm that customer domains route traffic through Zeitwork infrastructure.
 
 **Flow**:
 
-1. Query domains where `verified_at IS NULL` and `updated_at` within last 48 hours
-2. Look up DNS TXT record: `{base58(domain.id)}-zeitwork.{domain.name}`
-3. If record contains verification token, mark domain as verified
+1. Query domains where `verified_at IS NULL` and `updated_at` within last 48 hours.
+2. Resolve the domain, following CNAME hops until an A/AAAA record is found.
+3. Mark the domain as verified when any A/AAAA record matches one of the IPs specified via `NUXT_PUBLIC_DOMAIN_TARGET` (comma-separated list shared with the web app).
 
-**Example DNS record**:
-
-```
-xyz123-zeitwork.example.com. TXT "abc123verificationtoken"
-```
+This approach removes the need for TXT verification tokens—customers simply point their DNS at our edge and the reconciler takes care of the rest.
 
 ### 2. Deployment Reconciliation
 
@@ -146,23 +142,24 @@ export RECONCILER_SSH_PRIVATE_KEY="LS0tLS1CRUd..."  # base64 encoded
 
 Environment variables:
 
-| Variable                              | Required | Default                   | Description                                 |
-| ------------------------------------- | -------- | ------------------------- | ------------------------------------------- |
-| `RECONCILER_DATABASE_URL`             | Yes      | -                         | PostgreSQL connection string                |
-| `RECONCILER_INTERVAL`                 | No       | `5s`                      | How often to run reconciliation loop        |
-| `RECONCILER_VM_POOL_SIZE`             | No       | `3`                       | Minimum number of VMs in pool               |
-| `RECONCILER_BUILD_TIMEOUT`            | No       | `10m`                     | Build timeout duration                      |
-| `RECONCILER_DEPLOYMENT_GRACE_PERIOD`  | No       | `5m`                      | Grace period before superseding deployments |
-| `RECONCILER_LOG_LEVEL`                | No       | `info`                    | Log level: debug, info, warn, error         |
-| `RECONCILER_HETZNER_TOKEN`            | No       | -                         | Hetzner Cloud API token                     |
-| `RECONCILER_HETZNER_SSH_KEY_NAME`     | No       | `zeitwork-reconciler-key` | SSH key name in Hetzner                     |
-| `RECONCILER_HETZNER_SERVER_TYPE`      | No       | `cx22`                    | Hetzner server type                         |
-| `RECONCILER_HETZNER_IMAGE`            | No       | `ubuntu-24.04`            | Hetzner server OS image                     |
-| `RECONCILER_DOCKER_REGISTRY_URL`      | No       | -                         | Docker registry URL                         |
-| `RECONCILER_DOCKER_REGISTRY_USERNAME` | No       | -                         | Docker registry username                    |
-| `RECONCILER_DOCKER_REGISTRY_PASSWORD` | No       | -                         | Docker registry password                    |
-| `RECONCILER_SSH_PUBLIC_KEY`           | Yes      | -                         | SSH public key for server access            |
-| `RECONCILER_SSH_PRIVATE_KEY`          | Yes      | -                         | SSH private key (base64 encoded)            |
+| Variable                              | Required | Default                   | Description                                                   |
+| ------------------------------------- | -------- | ------------------------- | ------------------------------------------------------------- |
+| `RECONCILER_DATABASE_URL`             | Yes      | -                         | PostgreSQL connection string                                  |
+| `RECONCILER_INTERVAL`                 | No       | `5s`                      | How often to run reconciliation loop                          |
+| `RECONCILER_VM_POOL_SIZE`             | No       | `3`                       | Minimum number of VMs in pool                                 |
+| `RECONCILER_BUILD_TIMEOUT`            | No       | `10m`                     | Build timeout duration                                        |
+| `RECONCILER_DEPLOYMENT_GRACE_PERIOD`  | No       | `5m`                      | Grace period before superseding deployments                   |
+| `NUXT_PUBLIC_DOMAIN_TARGET`           | Yes      | -                         | Comma-separated IPv4/IPv6 addresses customer domains must resolve to |
+| `RECONCILER_LOG_LEVEL`                | No       | `info`                    | Log level: debug, info, warn, error                           |
+| `RECONCILER_HETZNER_TOKEN`            | No       | -                         | Hetzner Cloud API token                                       |
+| `RECONCILER_HETZNER_SSH_KEY_NAME`     | No       | `zeitwork-reconciler-key` | SSH key name in Hetzner                                       |
+| `RECONCILER_HETZNER_SERVER_TYPE`      | No       | `cx22`                    | Hetzner server type                                           |
+| `RECONCILER_HETZNER_IMAGE`            | No       | `ubuntu-24.04`            | Hetzner server OS image                                       |
+| `RECONCILER_DOCKER_REGISTRY_URL`      | No       | -                         | Docker registry URL                                           |
+| `RECONCILER_DOCKER_REGISTRY_USERNAME` | No       | -                         | Docker registry username                                      |
+| `RECONCILER_DOCKER_REGISTRY_PASSWORD` | No       | -                         | Docker registry password                                      |
+| `RECONCILER_SSH_PUBLIC_KEY`           | Yes      | -                         | SSH public key for server access                              |
+| `RECONCILER_SSH_PRIVATE_KEY`          | Yes      | -                         | SSH private key (base64 encoded)                              |
 
 ## Building
 
@@ -208,13 +205,13 @@ CMD ["./reconciler"]
 
 ### Domain Verification
 
-The reconciler uses Base58-encoded domain IDs in DNS TXT records to prevent confusion with similar-looking characters:
+The reconciler continually checks whether customer domains resolve to the explicitly configured ingress IPs:
 
-```go
-// Expected DNS record format
-txtRecordName := fmt.Sprintf("%s-zeitwork.%s", base58.EncodeUUID(domainID), domainName)
-// Example: "5HpjkF8qKvW-zeitwork.example.com"
-```
+- `NUXT_PUBLIC_DOMAIN_TARGET` contains the comma-separated IPv4/IPv6 values that customers should point at (shared with the web UI).
+- Each pending domain is resolved (following any CNAME chain) using the shared DNS resolver until an A/AAAA record is produced.
+- Verification succeeds when at least one resolved IP exactly matches one of the configured targets.
+
+Operationally, this means customers simply create A/AAAA records pointing to the published IPs; once DNS propagates, the reconciler automatically flips `verified_at`.
 
 ### Deployment Supersession
 
