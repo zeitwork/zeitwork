@@ -1,14 +1,14 @@
 <script setup lang="ts">
 type Props = {
-  rows?: number
-  cols?: number
-  placeholder?: string
-  disabled?: boolean
-}
+  rows?: number;
+  cols?: number;
+  placeholder?: string;
+  disabled?: boolean;
+};
 
-const { rows = 5, cols = 50, placeholder = "", disabled = false } = defineProps<Props>()
+const { rows = 5, cols = 50, placeholder = "", disabled = false } = defineProps<Props>();
 
-const model = defineModel<string>()
+const model = defineModel<string>();
 </script>
 <template>
   <textarea

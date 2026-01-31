@@ -1,9 +1,9 @@
 <script setup lang="ts">
 type Props = {
-  name: string
-  to: string
-}
-const { to, name } = defineProps<Props>()
+  name: string;
+  to: string;
+};
+const { to, name } = defineProps<Props>();
 </script>
 <template>
   <NuxtLink

@@ -1,23 +1,25 @@
 <script setup lang="ts">
-const route = useRoute()
-const orgId = route.params.org as string
-const projectSlug = route.params.project as string
+const route = useRoute();
+const orgId = route.params.org as string;
+const projectSlug = route.params.project as string;
 
-const { data: domains, refresh: refreshDomains } = await useFetch(`/api/projects/${projectSlug}/domains`)
+const { data: domains, refresh: refreshDomains } = await useFetch(
+  `/api/projects/${projectSlug}/domains`,
+);
 
-const domainName = ref("")
+const domainName = ref("");
 
 async function createDomain() {
   try {
-    if (!domainName.value) return
+    if (!domainName.value) return;
     await $fetch(`/api/projects/${projectSlug}/domains`, {
       method: "POST",
       body: { name: domainName.value },
-    })
-    domainName.value = ""
-    await refreshDomains()
+    });
+    domainName.value = "";
+    await refreshDomains();
   } catch (error) {
-    console.error("Failed to create domain:", error)
+    console.error("Failed to create domain:", error);
   }
 }
 </script>
@@ -46,7 +48,11 @@ async function createDomain() {
       </DDialog>
     </div>
     <div class="flex-1 overflow-auto">
-      <div v-for="domain in domains" :key="domain.id" class="border-neutral-subtle flex justify-between border-b p-4">
+      <div
+        v-for="domain in domains"
+        :key="domain.id"
+        class="border-neutral-subtle flex justify-between border-b p-4"
+      >
         <div class="text-neutral text-sm">{{ domain.name }}</div>
         <div class="text-neutral text-sm">{{ domain.verifiedAt ? "Verified" : "Unverified" }}</div>
       </div>

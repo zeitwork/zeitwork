@@ -1,55 +1,60 @@
 <script setup lang="ts">
-import { MagnifyingGlassIcon, PlusIcon, XMarkIcon } from "@heroicons/vue/16/solid"
+import { MagnifyingGlassIcon, PlusIcon, XMarkIcon } from "@heroicons/vue/16/solid";
 
 definePageMeta({
   layout: "modal",
-})
+});
 
-const route = useRoute()
-const org = route.params.org
+const route = useRoute();
+const org = route.params.org;
 
-const { data: connections } = await useFetch(`/api/github/organisations`)
+const { data: connections } = await useFetch(`/api/github/organisations`);
 
 const githubConnections = computed(() => {
-  if (!connections.value) return []
-  return connections.value.map((connection) => ({ value: connection.account, label: connection.account }))
-})
+  if (!connections.value) return [];
+  return connections.value.map((connection) => ({
+    value: connection.account,
+    label: connection.account,
+  }));
+});
 
-const selectedValue = ref(githubConnections.value[0]?.value)
+const selectedValue = ref(githubConnections.value[0]?.value);
 
 const { data: projectList } = useFetch(`/api/github/repositories`, {
   params: {
     account: selectedValue,
   },
-})
+});
 
-const search = ref("")
+const search = ref("");
 
 const projects = computed(() => {
-  if (!projectList.value) return []
+  if (!projectList.value) return [];
   return projectList.value.map((project) => ({
     value: project.fullName,
     label: project.fullName,
     framework: "go",
-  }))
-})
+  }));
+});
 
 const filteredProjects = computed(() => {
-  if (!projects.value) return []
-  return projects.value.filter((project) => project.label.toLowerCase().includes(search.value.toLowerCase()))
-})
+  if (!projects.value) return [];
+  return projects.value.filter((project) =>
+    project.label.toLowerCase().includes(search.value.toLowerCase()),
+  );
+});
 
-const config = useRuntimeConfig()
+const config = useRuntimeConfig();
 
 // GitHub App installation URL
 const githubAppInstallUrl = computed(() => {
-  const appName = config.public.appName
-  const redirectUri = `${config.public.appUrl}/auth/github`
-  return `https://github.com/apps/${appName}/installations/new?redirect_uri=${redirectUri}`
-})
+  const appName = config.public.appName;
+  const redirectUri = `${config.public.appUrl}/auth/github`;
+  return `https://github.com/apps/${appName}/installations/new?redirect_uri=${redirectUri}`;
+});
 
 function addGitHubAccount() {
-  window.location.href = githubAppInstallUrl.value
+  window.location.href = githubAppInstallUrl.value;
 }
 </script>
 
@@ -77,12 +82,20 @@ function addGitHubAccount() {
                 </div>
               </template>
               <template #default="{ filteredItems }">
-                <DComboboxItem v-for="item in filteredItems" :key="item.value" :value="item.value" :label="item.label">
+                <DComboboxItem
+                  v-for="item in filteredItems"
+                  :key="item.value"
+                  :value="item.value"
+                  :label="item.label"
+                >
                   <template #leading><img src="/icons/github-mark.svg" /></template>
                 </DComboboxItem>
               </template>
               <template #footer>
-                <div class="border-neutral-subtle mt-1 border-t pt-1" @click.prevent="addGitHubAccount">
+                <div
+                  class="border-neutral-subtle mt-1 border-t pt-1"
+                  @click.prevent="addGitHubAccount"
+                >
                   <DComboboxItem value="add-account" label="Add GitHub account">
                     <template #leading>
                       <PlusIcon class="size-4" />
@@ -103,14 +116,23 @@ function addGitHubAccount() {
           </div>
           <div class="flex flex-col gap-1">
             <DHover v-for="project in filteredProjects" class="group">
-              <NuxtLink class="flex h-10 w-full items-center justify-between p-2 pr-[6px]" :to="`/${org}/new/setup`">
+              <NuxtLink
+                class="flex h-10 w-full items-center justify-between p-2 pr-[6px]"
+                :to="`/${org}/new/setup`"
+              >
                 <div class="flex items-center gap-2">
                   <div class="bg-surface-subtle size-6 overflow-hidden rounded-full">
-                    <img :src="`/icons/framework/${project.framework}.png`" class="size-full" alt="" />
+                    <img
+                      :src="`/icons/framework/${project.framework}.png`"
+                      class="size-full"
+                      alt=""
+                    />
                   </div>
                   <p class="text-neutral text-copy">{{ project.label }}</p>
                 </div>
-                <DButton variant="primary" :to="`/${org}/new/setup?repo=${project.value}`">Import</DButton>
+                <DButton variant="primary" :to="`/${org}/new/setup?repo=${project.value}`"
+                  >Import</DButton
+                >
               </NuxtLink>
             </DHover>
           </div>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronRightIcon } from "@heroicons/vue/16/solid"
+import { ChevronRightIcon } from "@heroicons/vue/16/solid";
 </script>
 <template>
   <div class="px-2">

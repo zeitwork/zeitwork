@@ -1,14 +1,16 @@
 <script setup lang="ts">
 definePageMeta({
   layout: "environment",
-})
+});
 
-const route = useRoute()
-const orgId = route.params.org
-const projectSlug = route.params.project
-const environmentName = route.params.env
+const route = useRoute();
+const orgId = route.params.org;
+const projectSlug = route.params.project;
+const environmentName = route.params.env;
 
-const { data: environment } = await useFetch(`/api/projects/${projectSlug}/environments/${environmentName}`)
+const { data: environment } = await useFetch(
+  `/api/projects/${projectSlug}/environments/${environmentName}`,
+);
 </script>
 
 <template>

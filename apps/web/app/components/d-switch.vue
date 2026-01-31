@@ -20,11 +20,11 @@
 <script setup>
 const props = defineProps({
   modelValue: Boolean,
-})
+});
 
-const emit = defineEmits(["update:modelValue"])
+const emit = defineEmits(["update:modelValue"]);
 
 const toggle = () => {
-  emit("update:modelValue", !props.modelValue)
-}
+  emit("update:modelValue", !props.modelValue);
+};
 </script>

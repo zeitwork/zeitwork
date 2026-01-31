@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Icon } from "@iconify/vue"
+import { Icon } from "@iconify/vue";
 import {
   DialogClose,
   DialogContent,
@@ -9,7 +9,7 @@ import {
   DialogRoot,
   DialogTitle,
   DialogTrigger,
-} from "reka-ui"
+} from "reka-ui";
 </script>
 
 <template>

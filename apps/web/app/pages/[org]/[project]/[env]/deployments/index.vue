@@ -1,51 +1,51 @@
 <script setup lang="ts">
-import { useTimeoutFn } from "@vueuse/core"
+import { useTimeoutFn } from "@vueuse/core";
 
 definePageMeta({
   layout: "environment",
-})
+});
 
-const route = useRoute()
-const orgId = route.params.org as string
-const projectSlug = route.params.project as string
-const environmentName = route.params.env as string
+const route = useRoute();
+const orgId = route.params.org as string;
+const projectSlug = route.params.project as string;
+const environmentName = route.params.env as string;
 
 const { data: deployments, refresh: refreshDeployments } = await useFetch(`/api/deployments`, {
   query: {
     projectSlug,
   },
-})
+});
 
 const { isPending, start, stop } = useTimeoutFn(() => {
-  refreshDeployments()
-}, 1000)
+  refreshDeployments();
+}, 1000);
 
-start()
+start();
 
 watch(isPending, (newVal) => {
   if (newVal) {
-    start()
+    start();
   } else {
-    start()
+    start();
   }
-})
+});
 
-const isCreatingDeployment = ref(false)
+const isCreatingDeployment = ref(false);
 
 async function createDeployment() {
-  isCreatingDeployment.value = true
+  isCreatingDeployment.value = true;
   try {
     await $fetch(`/api/deployments`, {
       method: "POST",
       body: {
         projectSlug,
       },
-    })
-    await refreshDeployments()
+    });
+    await refreshDeployments();
   } catch (error) {
-    console.error("Failed to create deployment:", error)
+    console.error("Failed to create deployment:", error);
   } finally {
-    isCreatingDeployment.value = false
+    isCreatingDeployment.value = false;
   }
 }
 
@@ -56,47 +56,47 @@ function renderDate(date: string) {
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(date))
+  }).format(new Date(date));
 }
 
 function deploymentStatusColor(status: string) {
   switch (status) {
     case "queued":
-      return "text-yellow-500"
+      return "text-yellow-500";
     case "building":
-      return "text-blue-500"
+      return "text-blue-500";
     case "ready":
-      return "text-green-500"
+      return "text-green-500";
     case "failed":
-      return "text-red-500"
+      return "text-red-500";
     case "inactive":
-      return "text-neutral-subtle"
+      return "text-neutral-subtle";
     default:
-      return "text-neutral"
+      return "text-neutral";
   }
 }
 
 function deploymentStatusBgColor(status: string) {
   switch (status) {
     case "queued":
-      return "bg-yellow-100"
+      return "bg-yellow-100";
     case "building":
-      return "bg-blue-100"
+      return "bg-blue-100";
     case "ready":
-      return "bg-green-100"
+      return "bg-green-100";
     case "failed":
-      return "bg-red-100"
+      return "bg-red-100";
     case "inactive":
-      return "bg-neutral-subtle"
+      return "bg-neutral-subtle";
     default:
-      return "bg-neutral/10"
+      return "bg-neutral/10";
   }
 }
 
-const prefix = computed(() => `/${orgId}/${projectSlug}/${environmentName}`)
+const prefix = computed(() => `/${orgId}/${projectSlug}/${environmentName}`);
 
 function deploymentLink(deployment: any) {
-  return `${prefix.value}/deployments/${deployment.id}`
+  return `${prefix.value}/deployments/${deployment.id}`;
 }
 </script>
 
@@ -104,7 +104,9 @@ function deploymentLink(deployment: any) {
   <div class="flex h-full flex-col overflow-auto">
     <div class="border-neutral-subtle flex h-16 items-center justify-between border-b p-4">
       <div class="text-neutral-strong text-sm">Deployments</div>
-      <d-button @click="createDeployment" :loading="isCreatingDeployment">Create Deployment</d-button>
+      <d-button @click="createDeployment" :loading="isCreatingDeployment"
+        >Create Deployment</d-button
+      >
     </div>
     <div class="flex-1 overflow-auto">
       <nuxt-link

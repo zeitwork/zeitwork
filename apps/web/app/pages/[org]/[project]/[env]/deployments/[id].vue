@@ -1,15 +1,15 @@
 <script setup lang="ts">
-import { DotIcon } from "lucide-vue-next"
+import { DotIcon } from "lucide-vue-next";
 definePageMeta({
   layout: "environment",
-})
+});
 
-const route = useRoute()
-const deploymentId = route.params.id as string
+const route = useRoute();
+const deploymentId = route.params.id as string;
 
-const formattedId = computed(() => uuidToB58(deploymentId))
+const formattedId = computed(() => uuidToB58(deploymentId));
 
-const prefix = computed(() => `/${route.params.org}/${route.params.project}/${route.params.env}`)
+const prefix = computed(() => `/${route.params.org}/${route.params.project}/${route.params.env}`);
 </script>
 
 <template>

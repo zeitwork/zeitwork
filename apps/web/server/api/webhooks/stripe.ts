@@ -1,14 +1,14 @@
-import { organisations, organisationMembers } from "@zeitwork/database/schema"
-import { eq } from "@zeitwork/database/utils/drizzle"
-import type Stripe from "stripe"
+import { organisations, organisationMembers } from "@zeitwork/database/schema";
+import { eq } from "@zeitwork/database/utils/drizzle";
+import type Stripe from "stripe";
 
 export default defineEventHandler(async (event) => {
-  const config = useRuntimeConfig()
-  const stripe = useStripe()
+  const config = useRuntimeConfig();
+  const stripe = useStripe();
 
   // Get raw body for signature verification
-  const body = await readRawBody(event, "utf-8")
-  const signature = getHeader(event, "stripe-signature")
+  const body = await readRawBody(event, "utf-8");
+  const signature = getHeader(event, "stripe-signature");
 
   console.log("Webhook received:", {
     hasBody: !!body,
@@ -16,26 +16,26 @@ export default defineEventHandler(async (event) => {
     hasSignature: !!signature,
     webhookSecretConfigured: !!config.stripe.webhookSecret,
     webhookSecretPrefix: config.stripe.webhookSecret?.substring(0, 10),
-  })
+  });
 
   if (!body || !signature) {
     throw createError({
       statusCode: 400,
       message: "Missing body or signature",
-    })
+    });
   }
 
-  let stripeEvent: Stripe.Event
+  let stripeEvent: Stripe.Event;
 
   try {
     // Verify webhook signature
-    stripeEvent = stripe.webhooks.constructEvent(body, signature, config.stripe.webhookSecret)
+    stripeEvent = stripe.webhooks.constructEvent(body, signature, config.stripe.webhookSecret);
   } catch (err: any) {
-    console.error("Webhook signature verification failed:", err.message)
+    console.error("Webhook signature verification failed:", err.message);
     throw createError({
       statusCode: 400,
       message: `Webhook Error: ${err.message}`,
-    })
+    });
   }
 
   // Handle the event
@@ -43,47 +43,47 @@ export default defineEventHandler(async (event) => {
     switch (stripeEvent.type) {
       case "customer.subscription.created":
       case "customer.subscription.updated":
-        await handleSubscriptionUpdate(stripeEvent.data.object as Stripe.Subscription)
-        break
+        await handleSubscriptionUpdate(stripeEvent.data.object as Stripe.Subscription);
+        break;
 
       case "customer.subscription.deleted":
-        await handleSubscriptionDeleted(stripeEvent.data.object as Stripe.Subscription)
-        break
+        await handleSubscriptionDeleted(stripeEvent.data.object as Stripe.Subscription);
+        break;
 
       case "checkout.session.completed":
-        await handleCheckoutCompleted(stripeEvent.data.object as Stripe.Checkout.Session)
-        break
+        await handleCheckoutCompleted(stripeEvent.data.object as Stripe.Checkout.Session);
+        break;
 
       default:
-        console.log(`Unhandled event type: ${stripeEvent.type}`)
+        console.log(`Unhandled event type: ${stripeEvent.type}`);
     }
   } catch (err: any) {
-    console.error("Error processing webhook:", err)
+    console.error("Error processing webhook:", err);
     throw createError({
       statusCode: 500,
       message: "Error processing webhook",
-    })
+    });
   }
 
-  return { received: true }
-})
+  return { received: true };
+});
 
 async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
-  const customerId = subscription.customer as string
+  const customerId = subscription.customer as string;
 
   // Find organization by customer ID
   const [organisation] = await useDrizzle()
     .select()
     .from(organisations)
     .where(eq(organisations.stripeCustomerId, customerId))
-    .limit(1)
+    .limit(1);
 
   if (!organisation) {
-    console.error(`Organization not found for customer ${customerId}`)
-    return
+    console.error(`Organization not found for customer ${customerId}`);
+    return;
   }
 
-  const isNewSubscription = !organisation.stripeSubscriptionId
+  const isNewSubscription = !organisation.stripeSubscriptionId;
 
   // Update organization with subscription details
   await useDrizzle()
@@ -92,19 +92,19 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
       stripeSubscriptionId: subscription.id,
       stripeSubscriptionStatus: subscription.status,
     })
-    .where(eq(organisations.id, organisation.id))
+    .where(eq(organisations.id, organisation.id));
 
-  console.log(`Updated subscription for org ${organisation.id}: ${subscription.status}`)
+  console.log(`Updated subscription for org ${organisation.id}: ${subscription.status}`);
 
   // Track subscription events
-  const posthog = usePostHog()
+  const posthog = usePostHog();
 
   // Find the user associated with this organization to track against their user ID
   const [orgMember] = await useDrizzle()
     .select()
     .from(organisationMembers)
     .where(eq(organisationMembers.organisationId, organisation.id))
-    .limit(1)
+    .limit(1);
 
   if (orgMember) {
     if (isNewSubscription && subscription.status === "active") {
@@ -122,7 +122,7 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
           plan_currency: subscription.items.data[0]?.price.currency,
           plan_interval: subscription.items.data[0]?.price.recurring?.interval,
         },
-      })
+      });
     } else {
       // Track subscription update
       posthog.capture({
@@ -134,24 +134,24 @@ async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
           subscription_id: subscription.id,
           subscription_status: subscription.status,
         },
-      })
+      });
     }
   }
 }
 
 async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
-  const customerId = subscription.customer as string
+  const customerId = subscription.customer as string;
 
   // Find organization by customer ID
   const [organisation] = await useDrizzle()
     .select()
     .from(organisations)
     .where(eq(organisations.stripeCustomerId, customerId))
-    .limit(1)
+    .limit(1);
 
   if (!organisation) {
-    console.error(`Organization not found for customer ${customerId}`)
-    return
+    console.error(`Organization not found for customer ${customerId}`);
+    return;
   }
 
   // Update organization subscription status
@@ -160,19 +160,19 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
     .set({
       stripeSubscriptionStatus: "canceled",
     })
-    .where(eq(organisations.id, organisation.id))
+    .where(eq(organisations.id, organisation.id));
 
-  console.log(`Subscription deleted for org ${organisation.id}`)
+  console.log(`Subscription deleted for org ${organisation.id}`);
 
   // Track subscription cancellation
-  const posthog = usePostHog()
+  const posthog = usePostHog();
 
   // Find the user associated with this organization to track against their user ID
   const [orgMember] = await useDrizzle()
     .select()
     .from(organisationMembers)
     .where(eq(organisationMembers.organisationId, organisation.id))
-    .limit(1)
+    .limit(1);
 
   if (orgMember) {
     posthog.capture({
@@ -183,19 +183,19 @@ async function handleSubscriptionDeleted(subscription: Stripe.Subscription) {
         organisation_slug: organisation.slug,
         subscription_id: subscription.id,
       },
-    })
+    });
   }
 }
 
 async function handleCheckoutCompleted(session: Stripe.Checkout.Session) {
-  const organisationId = session.metadata?.organisationId
+  const organisationId = session.metadata?.organisationId;
 
   if (!organisationId) {
-    console.error("No organisation ID in checkout session metadata")
-    return
+    console.error("No organisation ID in checkout session metadata");
+    return;
   }
 
   // The subscription will be updated via subscription.created event
   // This is mainly for logging/analytics
-  console.log(`Checkout completed for organisation ${organisationId}`)
+  console.log(`Checkout completed for organisation ${organisationId}`);
 }

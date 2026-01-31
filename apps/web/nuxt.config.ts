@@ -1,4 +1,4 @@
-import tailwindcss from "@tailwindcss/vite"
+import tailwindcss from "@tailwindcss/vite";
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
@@ -50,7 +50,8 @@ export default defineNuxtConfig({
     oauth: {
       github: {
         clientId: process.env.NUXT_PUBLIC_GITHUB_CLIENT_ID || "",
-        redirectURL: process.env.NUXT_OAUTH_GITHUB_REDIRECT_URL || "http://localhost:3000/auth/github",
+        redirectURL:
+          process.env.NUXT_OAUTH_GITHUB_REDIRECT_URL || "http://localhost:3000/auth/github",
       },
     },
 
@@ -68,7 +69,7 @@ export default defineNuxtConfig({
   },
 
   modules: ["@nuxt/icon", "@nuxt/fonts", "nuxt-auth-utils", "motion-v/nuxt"],
-})
+});
 
 function head() {
   return {
@@ -109,7 +110,10 @@ function head() {
 
       // Twitter
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:title", content: "Zeitwork - The fastest way to deploy and scale any application" },
+      {
+        name: "twitter:title",
+        content: "Zeitwork - The fastest way to deploy and scale any application",
+      },
       {
         name: "twitter:description",
         content:
@@ -118,5 +122,5 @@ function head() {
       { name: "twitter:image", content: "https://zeitwork.com/og-image.png" },
       { name: "twitter:site", content: "@zeitwork" },
     ],
-  }
+  };
 }

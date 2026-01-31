@@ -1,9 +1,9 @@
 <script setup lang="ts">
 type Props = {
-  wide?: boolean
-}
+  wide?: boolean;
+};
 
-const { wide = false } = defineProps<Props>()
+const { wide = false } = defineProps<Props>();
 </script>
 <template>
   <div class="flex px-6">

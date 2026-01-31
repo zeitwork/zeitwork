@@ -21,7 +21,6 @@ A production-grade HTTPS reverse proxy that routes domain traffic to VMs based o
 ### Traffic Flow
 
 1. **HTTP Request (Port 80)**:
-
    - If path is `/.well-known/acme-challenge/*`: Serve ACME challenge response
    - Otherwise: Redirect to HTTPS (301 Moved Permanently)
 
@@ -36,12 +35,10 @@ A production-grade HTTPS reverse proxy that routes domain traffic to VMs based o
 ### Certificate Management
 
 1. **On Startup**:
-
    - Configure on-demand TLS with verification check
    - Only verified domains (`verified_at IS NOT NULL`) can obtain certificates. Domains are marked verified by the reconciler once their DNS resolves to either an allowed CNAME target (e.g., `edge.zeitwork.com`) or one of the region load balancer IPs stored in the database.
 
 2. **Certificate Acquisition** (On-Demand via TLS-ALPN-01):
-
    - When first HTTPS request arrives for a domain:
      1. DecisionFunc checks if domain is verified in database
      2. If verified, certmagic obtains certificate via TLS-ALPN-01 during TLS handshake
@@ -161,7 +158,6 @@ docker-compose up edgeproxy
 Let's Encrypt has rate limits to prevent abuse. The edgeproxy includes built-in rate limiting to respect these limits:
 
 - **Staging environment** (recommended for testing):
-
   - No rate limits
   - Issues test certificates (not trusted by browsers)
   - Set `EDGEPROXY_ACME_STAGING=true`

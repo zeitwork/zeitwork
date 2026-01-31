@@ -1,8 +1,8 @@
-export { sql, eq, and, or, asc, desc } from "@zeitwork/database/utils/drizzle"
-import { useClient } from "@zeitwork/database/utils/client"
+export { sql, eq, and, or, asc, desc } from "@zeitwork/database/utils/drizzle";
+import { useClient } from "@zeitwork/database/utils/client";
 
-const client = useClient({ dsn: process.env.NUXT_DSN! })
+const client = useClient({ dsn: process.env.NUXT_DSN! });
 
 export function useDrizzle() {
-  return client
+  return client;
 }

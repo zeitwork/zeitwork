@@ -1,8 +1,8 @@
 <script setup lang="ts">
-const route = useRoute()
-const orgSlug = computed<string>(() => route.params.org as string)
-const projectName = computed<string>(() => route.params.project as string)
-const environmentName = computed<string>(() => route.params.env as string)
+const route = useRoute();
+const orgSlug = computed<string>(() => route.params.org as string);
+const projectName = computed<string>(() => route.params.project as string);
+const environmentName = computed<string>(() => route.params.env as string);
 </script>
 <template>
   <div class="flex items-center px-3 py-2">

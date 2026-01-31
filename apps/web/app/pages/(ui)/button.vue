@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { PlusIcon } from "@heroicons/vue/16/solid"
+import { PlusIcon } from "@heroicons/vue/16/solid";
 </script>
 <template>
   <div class="flex">

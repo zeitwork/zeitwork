@@ -1,6 +1,10 @@
 {
   "name": "zeitwork",
   "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "db:generate": "bun --cwd ./packages/database drizzle-kit generate",
     "db:migrate": "bun --cwd ./packages/database drizzle-kit migrate",
@@ -10,9 +14,5 @@
     "web:dev": "bun --cwd ./apps/web dev",
     "web:build": "bun --cwd ./apps/web build",
     "api:start": "bun --cwd ./apps/api start"
-  },
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ]
+  }
 }

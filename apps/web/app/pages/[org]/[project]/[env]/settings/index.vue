@@ -1,11 +1,11 @@
 <script setup lang="ts">
 definePageMeta({
   layout: "environment",
-})
+});
 
-const route = useRoute()
-const orgId = route.params.org
-const projectSlug = route.params.project
+const route = useRoute();
+const orgId = route.params.org;
+const projectSlug = route.params.project;
 </script>
 
 <template>

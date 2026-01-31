@@ -1,16 +1,16 @@
 <script setup lang="ts">
-import { GithubIcon } from "lucide-vue-next"
+import { GithubIcon } from "lucide-vue-next";
 
 definePageMeta({
   layout: "project",
-})
+});
 
-const route = useRoute()
-const orgId = route.params.org
-const projectSlug = route.params.project
+const route = useRoute();
+const orgId = route.params.org;
+const projectSlug = route.params.project;
 
-const { data: project } = await useFetch(`/api/projects/${projectSlug}`)
-const { data: environments } = await useFetch(`/api/projects/${projectSlug}/environments`)
+const { data: project } = await useFetch(`/api/projects/${projectSlug}`);
+const { data: environments } = await useFetch(`/api/projects/${projectSlug}/environments`);
 </script>
 
 <template>
