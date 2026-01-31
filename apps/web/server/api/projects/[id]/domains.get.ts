@@ -1,7 +1,6 @@
-import { projects } from "@zeitwork/database/schema";
+import { deployments, domains, projects } from "@zeitwork/database/schema";
 import { eq, and } from "@zeitwork/database/utils/drizzle";
 import { z } from "zod";
-import { useDeploymentModel } from "~~/server/models/deployment";
 
 const paramsSchema = z.object({
   id: z.string(),
@@ -25,12 +24,13 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // Create a new deployment
-  const deploymentModel = useDeploymentModel();
-  const { data: deployment } = await deploymentModel.create({
-    projectId: project.id,
-    organisationId: secure.organisationId,
-  });
+  const domainList = await useDrizzle()
+    .select()
+    .from(domains)
+    .where(
+      and(eq(domains.projectId, project.id), eq(domains.organisationId, secure.organisationId)),
+    )
+    .orderBy(desc(deployments.id));
 
-  return deployment;
+  return domainList;
 });

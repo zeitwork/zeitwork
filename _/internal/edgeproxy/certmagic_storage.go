@@ -13,7 +13,6 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/zeitwork/zeitwork/internal/database"
-	"github.com/zeitwork/zeitwork/internal/database/queries"
 )
 
 // PostgreSQLStorage implements certmagic.Storage using PostgreSQL via sqlc
@@ -36,7 +35,7 @@ func (s *PostgreSQLStorage) Store(ctx context.Context, key string, value []byte)
 		slog.Info("storing certmagic JSON", "key", key, "size", len(value), "content", string(value))
 	}
 
-	err := s.db.Queries().StoreCertmagicData(ctx, queries.StoreCertmagicDataParams{
+	err := s.db.Queries().StoreCertmagicData(ctx, &database.StoreCertmagicDataParams{
 		Key:   key,
 		Value: encodedValue,
 		Modified: pgtype.Timestamptz{
@@ -147,7 +146,7 @@ func (s *PostgreSQLStorage) Lock(ctx context.Context, key string) error {
 		Valid: true,
 	}
 
-	rowsAffected, err := s.db.Queries().AcquireCertmagicLock(ctx, queries.AcquireCertmagicLockParams{
+	rowsAffected, err := s.db.Queries().AcquireCertmagicLock(ctx, &database.AcquireCertmagicLockParams{
 		Key:     key,
 		Expires: lockExpiration,
 	})

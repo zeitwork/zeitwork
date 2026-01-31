@@ -9,14 +9,29 @@ const projectSlug = route.params.project as string;
 </script>
 
 <template>
-  <div class="flex h-full shrink-0 flex-row overflow-auto">
-    <div class="border-neutral-subtle flex w-50 flex-col gap-1 border-r p-2">
-      <DNavbarLink name="General" :to="`/${orgId}/${projectSlug}/settings/general`"></DNavbarLink>
-      <DNavbarLink name="Domains" :to="`/${orgId}/${projectSlug}/settings/domains`"></DNavbarLink>
-    </div>
-    <div class="flex flex-1 flex-col overflow-auto">
-      <div class="flex-1 overflow-auto">
-        <NuxtPage />
+  <div class="flex h-full flex-col overflow-auto">
+    <!-- <div class="border-neutral-subtle flex h-16 items-center justify-between border-b p-4">
+      <div class="text-neutral-strong text-sm">Settings</div>
+    </div> -->
+    <div class="flex-1 overflow-auto">
+      <div class="flex h-full shrink-0 flex-row overflow-auto">
+        <div class="border-neutral-subtle flex w-64 flex-col gap-1 border-r p-2">
+          <DNavbarLink
+            name="General"
+            :active="route.path == `/${orgId}/${projectSlug}/settings`"
+            :to="`/${orgId}/${projectSlug}/settings`"
+          />
+          <DNavbarLink
+            name="Domains"
+            :active="route.path == `/${orgId}/${projectSlug}/settings/domains`"
+            :to="`/${orgId}/${projectSlug}/settings/domains`"
+          />
+        </div>
+        <div class="flex flex-1 flex-col overflow-auto">
+          <div class="flex-1 overflow-auto">
+            <NuxtPage />
+          </div>
+        </div>
       </div>
     </div>
   </div>

@@ -54,6 +54,8 @@ export const domains = pgTable(
     projectId: uuid()
       .notNull()
       .references(() => projects.id),
+    deploymentId: uuid().references(() => deployments.id),
+    verifiedAt: timestamp({ withTimezone: true }),
     ...organisationId,
     ...timestamps,
   },
@@ -94,7 +96,9 @@ export const environmentVariables = pgTable(
 export const deploymentStatusEnum = pgEnum("deployment_status", [
   "pending",
   "building",
+  "starting",
   "running",
+  "stopping",
   "stopped",
   "failed",
 ]);
@@ -124,7 +128,12 @@ export const deploymentLogs = pgTable("deployment_logs", {
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });
 
-export const buildStatusEnum = pgEnum("build_status", ["pending", "building", "success", "error"]);
+export const buildStatusEnum = pgEnum("build_status", [
+  "pending",
+  "building",
+  "succesful",
+  "failed",
+]);
 
 export const builds = pgTable("builds", {
   id: uuid().primaryKey().$defaultFn(uuidv7),
@@ -136,6 +145,10 @@ export const builds = pgTable("builds", {
   githubBranch: text().notNull(),
   imageId: uuid().references(() => images.id),
   vmId: uuid().references(() => vms.id),
+  pendingAt: timestamp({ withTimezone: true }),
+  buildingAt: timestamp({ withTimezone: true }),
+  successfulAt: timestamp({ withTimezone: true }),
+  failedAt: timestamp({ withTimezone: true }),
   ...organisationId,
   ...timestamps,
 });
@@ -152,7 +165,7 @@ export const buildLogs = pgTable("build_logs", {
 });
 
 // Certificate storage for certmagic
-export const certmagic = pgTable("certmagic", {
+export const certmagicData = pgTable("certmagic_data", {
   key: text().primaryKey(), // e.g., "acme/example.com/sites/example.com/example.com.crt"
   value: text().notNull(), // bytea in Postgres, stores certificates/keys as binary
   modified: timestamp({ withTimezone: true }).notNull().defaultNow(),

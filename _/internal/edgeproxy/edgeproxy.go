@@ -30,8 +30,10 @@ type Config struct {
 
 // Route represents routing information for a domain
 type Route struct {
-	Port int32  // VM's port
-	IP   string // VM's IP address
+	PublicIP string // VM's public IP address
+	Port     int32  // VM's port
+	RegionID string // VM's region UUID
+	RegionIP string // Region's public IP (load balancer) for cross-region routing
 }
 
 // Service is the edgeproxy service
@@ -71,7 +73,7 @@ func NewService(cfg Config, logger *slog.Logger) (*Service, error) {
 	}
 
 	// Initialize database connection
-	db, err := database.New(cfg.DatabaseURL)
+	db, err := database.NewDB(cfg.DatabaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
@@ -109,7 +111,7 @@ func NewService(cfg Config, logger *slog.Logger) (*Service, error) {
 			logger := slog.With("domain", name)
 
 			// Check if domain exists and is verified using sqlc
-			verifiedAt, err := db.Queries().DomainVerified(ctx, name)
+			verifiedAt, err := db.Queries().IsDomainVerified(ctx, name)
 			if err != nil {
 				logger.Warn("domain not found or not verified", "error", err)
 				return fmt.Errorf("domain not authorized: %s", name)
@@ -224,7 +226,7 @@ func (s *Service) Stop(ctx context.Context) error {
 
 // loadRoutes fetches active routes from database and updates the routing table
 func (s *Service) loadRoutes(ctx context.Context) error {
-	rows, err := s.db.Queries().RouteFindActive(ctx)
+	rows, err := s.db.Queries().GetActiveRoutes(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get active routes: %w", err)
 	}
@@ -232,19 +234,33 @@ func (s *Service) loadRoutes(ctx context.Context) error {
 	newRoutes := make(map[string]Route)
 	for _, row := range rows {
 		// Skip routes where VM doesn't have a public IP yet
-		if !row.VmIp.Valid {
+		if !row.VmPublicIp.Valid || row.VmPublicIp.String == "" {
+			s.logger.Warn("skipping route with invalid public IP",
+				"domain", row.DomainName,
+			)
 			continue
 		}
 
 		newRoutes[row.DomainName] = Route{
-			IP:   row.VmIp.String,
-			Port: row.VmPort.Int32,
+			PublicIP: row.VmPublicIp.String,
+			Port:     row.VmPort,
+			RegionID: uuid.ToString(row.VmRegionID),
+			RegionIP: row.RegionLoadBalancerIp,
 		}
 	}
 
 	s.mu.Lock()
 	s.routes = newRoutes
 	s.mu.Unlock()
+
+	s.logger.Info("routes loaded", "count", len(newRoutes))
+	for domain, route := range newRoutes {
+		s.logger.Debug("route",
+			"domain", domain,
+			"vm", fmt.Sprintf("%s:%d", route.PublicIP, route.Port),
+			"region", route.RegionID,
+		)
+	}
 
 	return nil
 }
@@ -286,10 +302,11 @@ func (s *Service) checkVMHealth(ip string, port int32) bool {
 	return healthy
 }
 
-// serveHTTP handles HTTP requests (redirects to HTTPS)
 // Note: With on-demand TLS via TLS-ALPN-01, certificates are obtained automatically
 // during the first HTTPS request. We don't need proactive acquisition loops.
 // Certmagic handles certificate renewal automatically via its maintenance routine.
+
+// serveHTTP handles HTTP requests (redirects to HTTPS)
 func (s *Service) serveHTTP(w http.ResponseWriter, r *http.Request) {
 	// ACME TLS-ALPN-01 challenges are handled automatically by certmagic
 	// on the HTTPS port (8443) via special TLS handshake, so HTTP port
@@ -321,19 +338,35 @@ func (s *Service) serveHTTPS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var targetURL string
-	// Same region: route directly to VM
-	// First, health check the VM
-	if !s.checkVMHealth(route.IP, route.Port) {
-		s.logger.Warn("VM health check failed",
-			"host", host,
-			"vm", fmt.Sprintf("%s:%d", route.IP, route.Port),
-		)
-		http.Error(w, "Service Unavailable - VM not responding", http.StatusServiceUnavailable)
-		return
-	}
+	// Check if this is same-region or cross-region routing
+	currentRegionIDStr := uuid.ToString(s.regionID)
+	isSameRegion := route.RegionID == currentRegionIDStr
 
-	targetURL = fmt.Sprintf("http://%s:%d", route.IP, route.Port)
+	s.logger.Debug("region comparison",
+		"host", host,
+		"current_region", currentRegionIDStr,
+		"vm_region", route.RegionID,
+		"is_same_region", isSameRegion,
+	)
+
+	var targetURL string
+	if isSameRegion {
+		// Same region: route directly to VM
+		// First, health check the VM
+		if !s.checkVMHealth(route.PublicIP, route.Port) {
+			s.logger.Warn("VM health check failed",
+				"host", host,
+				"vm", fmt.Sprintf("%s:%d", route.PublicIP, route.Port),
+			)
+			http.Error(w, "Service Unavailable - VM not responding", http.StatusServiceUnavailable)
+			return
+		}
+
+		targetURL = fmt.Sprintf("http://%s:%d", route.PublicIP, route.Port)
+	} else {
+		// Cross-region: route to other region's load balancer
+		targetURL = fmt.Sprintf("http://%s:80", route.RegionIP)
+	}
 
 	// Parse target URL
 	target, err := url.Parse(targetURL)
@@ -370,6 +403,7 @@ func (s *Service) serveHTTPS(w http.ResponseWriter, r *http.Request) {
 		"host", host,
 		"path", r.URL.Path,
 		"target", targetURL,
+		"same_region", isSameRegion,
 		"remote_addr", r.RemoteAddr,
 	)
 

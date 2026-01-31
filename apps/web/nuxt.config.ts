@@ -22,44 +22,25 @@ export default defineNuxtConfig({
   },
 
   runtimeConfig: {
-    appUrl: process.env.NUXT_APP_URL || "http://localhost:3000",
+    appUrl: "http://localhost:3000",
 
     public: {
-      domainTarget: "167.233.9.179",
-
-      appUrl: process.env.NUXT_APP_URL || "http://localhost:3000",
-      appName: process.env.NUXT_APP_NAME || "zeitwork",
-      graphEndpoint: process.env.NUXT_PUBLIC_GRAPH_ENDPOINT,
-      githubClientId: process.env.NUXT_PUBLIC_GITHUB_CLIENT_ID || "",
-
-      stripeEnabled: process.env.NUXT_STRIPE_ENABLED !== "false",
-
-      stripe: {
-        planEarlyAccessId: process.env.NUXT_PUBLIC_STRIPE_PLAN_EARLY_ACCESS_ID || "",
-        planHobbyId: process.env.NUXT_PUBLIC_STRIPE_PLAN_HOBBY_ID || "",
-        planBusinessId: process.env.NUXT_PUBLIC_STRIPE_PLAN_BUSINESS_ID || "",
-      },
+      appUrl: "http://localhost:3000",
+      appName: "zeitwork",
+      githubClientId: "",
     },
 
     oauth: {
       github: {
-        clientId: process.env.NUXT_PUBLIC_GITHUB_CLIENT_ID || "",
-        redirectURL:
-          process.env.NUXT_OAUTH_GITHUB_REDIRECT_URL || "http://localhost:3000/auth/github",
+        clientId: "",
+        redirectURL: "http://localhost:3000/auth/github",
       },
     },
 
-    githubAppId: process.env.NUXT_GITHUB_APP_ID || "",
-    githubAppPrivateKey: process.env.NUXT_GITHUB_APP_PRIVATE_KEY || "",
+    githubAppId: "",
+    githubAppPrivateKey: "",
 
     githubWebhookSecret: "",
-
-    kubeConfig: process.env.NUXT_KUBE_CONFIG || "",
-
-    stripe: {
-      secretKey: process.env.NUXT_STRIPE_SECRET_KEY || "",
-      webhookSecret: process.env.NUXT_STRIPE_WEBHOOK_SECRET || "",
-    },
   },
 
   modules: ["@nuxt/icon", "@nuxt/fonts", "nuxt-auth-utils", "motion-v/nuxt"],

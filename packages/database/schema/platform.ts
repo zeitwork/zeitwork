@@ -2,7 +2,14 @@ import { integer, pgEnum, pgTable, text, uuid, jsonb } from "drizzle-orm/pg-core
 import { timestamps } from "../utils/timestamps";
 import { uuidv7 } from "uuidv7";
 
-export const vmStatusEnum = pgEnum("vm_status", ["pending", "starting", "running", "stopped"]);
+export const vmStatusEnum = pgEnum("vm_status", [
+  "pending",
+  "starting",
+  "running",
+  "stopping",
+  "stopped",
+  "failed",
+]);
 
 export const vms = pgTable("vms", {
   id: uuid().primaryKey().$defaultFn(uuidv7),
@@ -10,7 +17,8 @@ export const vms = pgTable("vms", {
   memory: integer().notNull(),
   status: vmStatusEnum().notNull(),
   imageId: uuid().references(() => images.id),
-  port: integer().notNull(),
+  port: integer(),
+  ipAddress: text(),
   metadata: jsonb(), // { pid: 1234 }
   ...timestamps,
 });

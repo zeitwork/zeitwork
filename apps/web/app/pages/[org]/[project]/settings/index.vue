@@ -1,5 +1,6 @@
 <script setup lang="ts">
 const route = useRoute();
+
 const orgId = route.params.org as string;
 const projectSlug = route.params.project as string;
 </script>

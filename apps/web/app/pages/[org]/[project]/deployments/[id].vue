@@ -5,11 +5,17 @@ definePageMeta({
 });
 
 const route = useRoute();
+const projectSlug = route.params.project as string;
 const deploymentId = route.params.id as string;
 
 const formattedId = computed(() => uuidToB58(deploymentId));
 
-const prefix = computed(() => `/${route.params.org}/${route.params.project}/${route.params.env}`);
+const { data: logs } = await useFetch(`/api/logs`, {
+  query: {
+    projectSlug,
+    deploymentId,
+  },
+});
 </script>
 
 <template>
@@ -28,6 +34,7 @@ const prefix = computed(() => `/${route.params.org}/${route.params.project}/${ro
     <!-- Logs Terminal -->
     <div class="flex-1 overflow-auto bg-black p-4 font-mono text-sm">
       <div class="text-xs text-neutral-500">No logs available yet...</div>
+      <pre class="text-xs text-neutral-500">{{ logs }}</pre>
     </div>
   </div>
 </template>

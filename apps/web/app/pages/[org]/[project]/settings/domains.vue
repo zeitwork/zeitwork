@@ -1,6 +1,5 @@
 <script setup lang="ts">
 const route = useRoute();
-const orgId = route.params.org as string;
 const projectSlug = route.params.project as string;
 
 const { data: domains, refresh: refreshDomains } = await useFetch(
@@ -54,7 +53,7 @@ async function createDomain() {
         class="border-neutral-subtle flex justify-between border-b p-4"
       >
         <div class="text-neutral text-sm">{{ domain.name }}</div>
-        <div class="text-neutral text-sm">{{ domain.verifiedAt ? "Verified" : "Unverified" }}</div>
+        <!-- <div class="text-neutral text-sm">{{ domain.verifiedAt ? "Verified" : "Unverified" }}</div> -->
       </div>
     </div>
   </div>
