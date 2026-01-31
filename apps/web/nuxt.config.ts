@@ -39,12 +39,6 @@ export default defineNuxtConfig({
         planHobbyId: process.env.NUXT_PUBLIC_STRIPE_PLAN_HOBBY_ID || "",
         planBusinessId: process.env.NUXT_PUBLIC_STRIPE_PLAN_BUSINESS_ID || "",
       },
-
-      posthog: {
-        publicKey: process.env.NUXT_PUBLIC_POSTHOG_PUBLIC_KEY || "",
-        host: process.env.NUXT_PUBLIC_POSTHOG_HOST || "https://us.i.posthog.com",
-        defaults: process.env.NUXT_PUBLIC_POSTHOG_DEFAULTS || "2025-05-24",
-      },
     },
 
     oauth: {

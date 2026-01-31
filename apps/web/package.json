@@ -33,8 +33,6 @@
     "nuxt-auth-utils": "0.5.25",
     "octokit": "^5.0.5",
     "postgres-js": "^0.1.0",
-    "posthog-js": "^1.290.0",
-    "posthog-node": "^5.11.2",
     "prettier": "^3.6.2",
     "prettier-plugin-tailwindcss": "^0.7.1",
     "reka-ui": "^2.6.0",

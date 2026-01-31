@@ -1,4 +1,4 @@
-import { deployments, domains } from "@zeitwork/database/schema";
+import { deployments } from "@zeitwork/database/schema";
 import { eq, and } from "@zeitwork/database/utils/drizzle";
 
 export default defineEventHandler(async (event) => {
@@ -11,24 +11,15 @@ export default defineEventHandler(async (event) => {
   }
 
   // Get the deployment with domains
-  const query = await useDrizzle()
+  const [deployment] = await useDrizzle()
     .select()
     .from(deployments)
-    .leftJoin(domains, eq(deployments.id, domains.deploymentId))
     .where(
       and(eq(deployments.id, deploymentId), eq(deployments.organisationId, secure.organisationId)),
     );
-
-  if (query.length === 0) {
+  if (!deployment) {
     throw createError({ statusCode: 404, message: "Deployment not found" });
   }
 
-  // Group domains with deployment
-  const deployment = query[0].deployments;
-  const deploymentDomains = query.map((row) => row.domains).filter(Boolean);
-
-  return {
-    ...deployment,
-    domains: deploymentDomains,
-  };
+  return deployment;
 });

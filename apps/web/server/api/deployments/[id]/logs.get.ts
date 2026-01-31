@@ -1,5 +1,5 @@
 import { deploymentLogs, deployments } from "@zeitwork/database/schema";
-import { eq, and, desc } from "@zeitwork/database/utils/drizzle";
+import { eq, and } from "@zeitwork/database/utils/drizzle";
 
 export default defineEventHandler(async (event) => {
   const { secure } = await requireUserSession(event);

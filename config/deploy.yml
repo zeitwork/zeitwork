@@ -48,9 +48,7 @@ env:
   clear:
     NUXT_OAUTH_GITHUB_REDIRECT_URL: https://app.zeitwork.com/auth/github
     NUXT_APP_URL: https://app.zeitwork.com
-    NUXT_PUBLIC_POSTHOG_PUBLIC_KEY: "phc_p3FzN1MiqN636w6viR1nmJeKUpedt4bqYHi6BY3d8pI"
-    NUXT_PUBLIC_POSTHOG_HOST: https://us.i.posthog.com
-    NUXT_PUBLIC_POSTHOG_DEFAULTS: "2025-05-24"
+
   secret:
     - NUXT_DSN
     - NUXT_SESSION_PASSWORD

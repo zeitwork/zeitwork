@@ -1,4 +1,4 @@
-import { projects } from "../../../../../packages/database/schema";
+import { projects } from "@zeitwork/database/schema";
 import { eq } from "@zeitwork/database/utils/drizzle";
 
 export default defineEventHandler(async (event) => {

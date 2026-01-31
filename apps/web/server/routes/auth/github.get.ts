@@ -165,34 +165,6 @@ export default defineOAuthGitHubEventHandler({
             `[GitHub Auth] Failed to create organisation for user ${dbUser.id}, continuing...`,
           );
         }
-
-        // Track new user sign up (non-blocking)
-        try {
-          const posthog = usePostHog();
-          posthog.capture({
-            distinctId: dbUser.id,
-            event: "user_signed_up",
-            properties: {
-              username: dbUser.username,
-              email: dbUser.email,
-              github_id: dbUser.githubAccountId,
-              sign_up_method: "github",
-            },
-          });
-
-          posthog.identify({
-            distinctId: dbUser.id,
-            properties: {
-              email: dbUser.email,
-              name: dbUser.name,
-              username: dbUser.username,
-            },
-          });
-        } catch (error) {
-          // PostHog errors should not break authentication
-          logAuthError("PostHog Tracking", error, { userId: dbUser.id });
-          console.warn(`[GitHub Auth] PostHog tracking failed, continuing...`);
-        }
       }
 
       if (!dbUser) {

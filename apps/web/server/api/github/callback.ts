@@ -1,12 +1,6 @@
-import {
-  users,
-  organisations,
-  organisationMembers,
-  githubInstallations,
-} from "@zeitwork/database/schema";
+import { users, organisations, githubInstallations } from "@zeitwork/database/schema";
 import type { H3Event } from "h3";
 import { useDrizzle, eq } from "../../utils/drizzle";
-import { useGitHub } from "../../utils/github";
 import { Octokit } from "octokit";
 import { z } from "zod";
 
@@ -28,7 +22,7 @@ export default defineEventHandler(async (event) => {
     let query;
     try {
       query = await getValidatedQuery(event, querySchema.parse);
-    } catch (error: any) {
+    } catch {
       throw createError({
         statusCode: 400,
         message: "Invalid GitHub callback parameters",

@@ -4,9 +4,7 @@ import {
   projects,
   domains,
   githubInstallations,
-  projectEnvironments,
 } from "@zeitwork/database/schema";
-import { customAlphabet } from "nanoid";
 import { eq } from "../utils/drizzle";
 
 type ModelResponse<T> =
@@ -22,7 +20,6 @@ type ModelResponse<T> =
 export function useDeploymentModel() {
   interface CreateDeploymentParams {
     projectId: string;
-    environmentId: string;
     organisationId: string;
   }
 
@@ -38,7 +35,6 @@ export function useDeploymentModel() {
         .from(projects)
         .where(eq(projects.id, params.projectId))
         .limit(1);
-
       if (!project) {
         return { data: null, error: new Error("Project not found") };
       }
@@ -48,31 +44,17 @@ export function useDeploymentModel() {
         .from(organisations)
         .where(eq(organisations.id, params.organisationId))
         .limit(1);
-
       if (!organisation) {
         return { data: null, error: new Error("Organisation not found") };
       }
-
-      const deploymentId = generateDeploymentId();
 
       const [githubInstallation] = await useDrizzle()
         .select()
         .from(githubInstallations)
         .where(eq(githubInstallations.id, project.githubInstallationId))
         .limit(1);
-
       if (!githubInstallation) {
         return { data: null, error: new Error("GitHub installation not found") };
-      }
-
-      // environment
-      const [environment] = await useDrizzle()
-        .select()
-        .from(projectEnvironments)
-        .where(eq(projectEnvironments.id, params.environmentId))
-        .limit(1);
-      if (!environment) {
-        return { data: null, error: new Error("Environment not found") };
       }
 
       const { data: latestCommitHash, error: latestCommitHashError } =
@@ -80,7 +62,7 @@ export function useDeploymentModel() {
           githubInstallation.githubInstallationId,
           project.githubRepository.split("/")[0],
           project.githubRepository.split("/")[1],
-          environment.branch,
+          "main",
         );
       if (latestCommitHashError) {
         return { data: null, error: new Error("Failed to get latest commit hash") };
@@ -89,11 +71,9 @@ export function useDeploymentModel() {
       const [deployment] = await useDrizzle()
         .insert(deployments)
         .values({
-          deploymentId: deploymentId,
-          status: "queued",
+          status: "pending",
           projectId: project.id,
           githubCommit: latestCommitHash,
-          environmentId: params.environmentId,
           organisationId: params.organisationId,
         })
         .returning();
@@ -105,15 +85,14 @@ export function useDeploymentModel() {
       // Create internal domain for the deployment
       const internalDomainName = generateInternalDomain(
         project.slug,
-        deploymentId,
+        deployment.id,
         organisation.slug,
       );
 
       try {
         await useDrizzle().insert(domains).values({
           name: internalDomainName,
-          deploymentId: deployment.id,
-          verifiedAt: new Date(), // Internal domains are always verified
+          projectId: project.id,
           organisationId: params.organisationId,
         });
       } catch (domainError) {
@@ -132,13 +111,6 @@ export function useDeploymentModel() {
   };
 }
 
-const deploymentIdAlphabet = "123456789abcdefghijkmnopqrstuvwxyz";
-const deploymentIdGenerator = customAlphabet(deploymentIdAlphabet, 10);
-
-function generateDeploymentId(): string {
-  return deploymentIdGenerator();
-}
-
 /**
  * Generates an internal domain name for a deployment
  * Pattern: <project-slug>-<deployment-id>-<org-slug>.zeitwork.app (production)
@@ -152,5 +124,5 @@ function generateInternalDomain(
   const isDevelopment =
     process.env.NODE_ENV === "development" || process.env.ENVIRONMENT === "development";
   const baseDomain = isDevelopment ? "zeitwork.localhost" : "zeitwork.app";
-  return `${projectSlug}-${deploymentId}-${orgSlug}.${baseDomain}`;
+  return `${projectSlug}-${uuidToBase58(deploymentId)}-${orgSlug}.${baseDomain}`;
 }

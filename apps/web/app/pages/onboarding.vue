@@ -6,22 +6,11 @@ definePageMeta({
 const config = useRuntimeConfig();
 const loading = ref(false);
 const checkoutLoading = ref<string | null>(null);
-const { $posthog } = useNuxtApp();
-
-// Track onboarding page view
-onMounted(() => {
-  $posthog().capture("onboarding_viewed");
-});
 
 async function subscribe(plan: "early-access" | "hobby" | "business") {
   checkoutLoading.value = plan;
 
   // Track plan selection
-  $posthog().capture("plan_selected", {
-    plan: plan,
-    price: plan === "early-access" ? "$0/month" : plan === "hobby" ? "$5/month" : "$25/month",
-  });
-
   try {
     let priceId: string;
     if (plan === "early-access") {
@@ -45,21 +34,11 @@ async function subscribe(plan: "early-access" | "hobby" | "business") {
     });
 
     if (response?.url) {
-      // Track checkout initiated
-      $posthog().capture("checkout_initiated", {
-        plan: plan,
-        price_id: priceId,
-      });
-
       // Redirect to Stripe checkout
       window.location.href = response.url;
     }
   } catch (err) {
     console.error("Failed to create checkout session:", err);
-    $posthog().capture("checkout_failed", {
-      plan: plan,
-      error: err instanceof Error ? err.message : "Unknown error",
-    });
   } finally {
     checkoutLoading.value = null;
   }
