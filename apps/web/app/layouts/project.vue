@@ -6,14 +6,9 @@ const projectSlug = computed<string>(() => route.params.project as string);
 
 const links = computed(() => [
   {
-    name: "Overview",
+    name: "Deployments",
     to: `/${orgSlug.value}/${projectSlug.value}`,
     active: route.path === `/${orgSlug.value}/${projectSlug.value}`,
-  },
-  {
-    name: "Environments",
-    to: `/${orgSlug.value}/${projectSlug.value}/environments`,
-    active: route.path.startsWith(`/${orgSlug.value}/${projectSlug.value}/environments`),
   },
   {
     name: "Settings",

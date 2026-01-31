@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { DotIcon } from "lucide-vue-next";
 definePageMeta({
-  layout: "environment",
+  layout: "project",
 });
 
 const route = useRoute();

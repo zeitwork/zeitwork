@@ -1,7 +1,6 @@
-import { environmentVariables, projects } from "@zeitwork/database/schema";
-import { useDeploymentModel } from "~~/server/models/deployment";
-import z from "zod";
+import { environmentVariables, githubInstallations, projects } from "@zeitwork/database/schema";
 import { count } from "@zeitwork/database/utils/drizzle";
+import z from "zod";
 
 const bodySchema = z.object({
   name: z.string().min(1).max(255),
@@ -18,7 +17,7 @@ const bodySchema = z.object({
 });
 
 export default defineEventHandler(async (event) => {
-  const { secure } = await requireUserSession(event);
+  const { user, secure } = await requireUserSession(event);
   if (!secure) throw createError({ statusCode: 401, message: "Unauthorized" });
 
   const body = await readValidatedBody(event, bodySchema.parse);
@@ -52,8 +51,28 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: "Project already exists" });
   }
 
-  // TODO: Check if we have access to the GitHub repository and find the githubInstallationId
-  const githubInstallationId = "123";
+  // Check if we have access to the GitHub repository and find the githubInstallationId
+  const github = useGitHub();
+
+  const installations = await useDrizzle()
+    .select()
+    .from(githubInstallations)
+    .where(eq(githubInstallations.organisationId, secure.organisationId));
+
+  let githubInstallationId: null | string = null;
+  for (const installation of installations) {
+    const { data: repo } = await github.repository.get(
+      installation.githubInstallationId,
+      body.repository.owner,
+      body.repository.repo,
+    );
+    if (repo) {
+      githubInstallationId = installation.id;
+    }
+  }
+  if (!githubInstallationId) {
+    throw createError({ statusCode: 500, message: "Installation not found" });
+  }
 
   // Create project and environment variables in a transaction
   const { project } = await useDrizzle().transaction(async (tx) => {
