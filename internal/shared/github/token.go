@@ -13,26 +13,35 @@ import (
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/google/go-github/v67/github"
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/zeitwork/zeitwork/internal/database"
-	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 )
 
+type Config struct {
+	DB              database.DB
+	AppID           string
+	PrivatKeyBase64 string
+}
+
 // TokenService handles GitHub App authentication and token generation
-type TokenService struct {
+type Service struct {
+	db         database.DB
 	appID      int64
 	privateKey *rsa.PrivateKey
 }
 
 // NewTokenService creates a new GitHub token service
 // privateKeyBase64 should be a base64-encoded PEM private key
-func NewTokenService(appID string, privateKeyBase64 string) (*TokenService, error) {
-	id, err := strconv.ParseInt(appID, 10, 64)
+func NewTokenService(cfg Config) (*Service, error) {
+	id, err := strconv.ParseInt(cfg.AppID, 10, 64)
 	if err != nil {
 		return nil, fmt.Errorf("invalid GitHub App ID: %w", err)
 	}
 
 	// Decode base64 to get PEM
-	privateKeyPEM, err := base64.StdEncoding.DecodeString(privateKeyBase64)
+	privateKeyPEM, err := base64.StdEncoding.DecodeString(cfg.PrivatKeyBase64)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode base64 private key: %w", err)
 	}
@@ -58,35 +67,16 @@ func NewTokenService(appID string, privateKeyBase64 string) (*TokenService, erro
 		}
 	}
 
-	return &TokenService{
+	return &Service{
 		appID:      id,
 		privateKey: privateKey,
 	}, nil
 }
 
-// createJWT generates a JWT for GitHub App authentication
-func (s *TokenService) createJWT() (string, error) {
-	now := time.Now()
-	claims := jwt.RegisteredClaims{
-		IssuedAt:  jwt.NewNumericDate(now),
-		ExpiresAt: jwt.NewNumericDate(now.Add(10 * time.Minute)),
-		Issuer:    strconv.FormatInt(s.appID, 10),
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
-	return token.SignedString(s.privateKey)
-}
-
 // GetInstallationToken generates a short-lived access token for the given GitHub installation
-func (s *TokenService) GetInstallationToken(ctx context.Context, db *database.DB, installationUUID string) (string, error) {
-	// Parse the UUID
-	installationID, err := uuid.Parse(installationUUID)
-	if err != nil {
-		return "", fmt.Errorf("invalid installation UUID: %w", err)
-	}
-
+func (s *Service) GetInstallationToken(ctx context.Context, installationID uuid.UUID) (string, error) {
 	// Look up the GitHub installation ID from our database
-	installation, err := db.Queries().GetGithubInstallationByID(ctx, installationID)
+	installation, err := s.db.Queries().GithubInstallationFindByID(ctx, pgtype.UUID{Bytes: installationID, Valid: true})
 	if err != nil {
 		return "", fmt.Errorf("failed to get GitHub installation: %w", err)
 	}
@@ -120,6 +110,19 @@ func (s *TokenService) GetInstallationToken(ctx context.Context, db *database.DB
 // jwtTransport is a custom http.RoundTripper that adds JWT authentication
 type jwtTransport struct {
 	token string
+}
+
+// createJWT generates a JWT for GitHub App authentication
+func (s *Service) createJWT() (string, error) {
+	now := time.Now()
+	claims := jwt.RegisteredClaims{
+		IssuedAt:  jwt.NewNumericDate(now),
+		ExpiresAt: jwt.NewNumericDate(now.Add(10 * time.Minute)),
+		Issuer:    strconv.FormatInt(s.appID, 10),
+	}
+
+	token := jwt.NewWithClaims(jwt.SigningMethodRS256, claims)
+	return token.SignedString(s.privateKey)
 }
 
 func (t *jwtTransport) RoundTrip(req *http.Request) (*http.Response, error) {

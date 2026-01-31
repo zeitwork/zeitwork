@@ -1,5 +1,5 @@
 {
-  "id": "08f7af84-956a-4915-ab1b-1bf8a0bd9191",
+  "id": "74436439-c5c4-462a-b769-5cb2d6d62e9c",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -106,7 +106,7 @@
           "name": "port",
           "type": "integer",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "ip_address": {
           "name": "ip_address",

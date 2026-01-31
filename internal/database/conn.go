@@ -50,7 +50,7 @@ func (db *DB) WithTx(ctx context.Context, fn func(*queries.Queries) error) error
 	}
 	defer tx.Rollback(ctx)
 
-	q := db.Queries.WithTx(tx)
+	q := db.Queries().WithTx(tx)
 	if err := fn(q); err != nil {
 		return err
 	}

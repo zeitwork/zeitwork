@@ -18,7 +18,7 @@ CREATE TABLE "vms" (
 	"memory" integer NOT NULL,
 	"status" "vm_status" NOT NULL,
 	"image_id" uuid,
-	"port" integer NOT NULL,
+	"port" integer,
 	"ip_address" text,
 	"metadata" jsonb,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,

@@ -218,3 +218,50 @@ func (q *Queries) DeploymentUpdateMarkBuilding(ctx context.Context, arg Deployme
 	)
 	return i, err
 }
+
+const domainListUnverified = `-- name: DomainListUnverified :many
+SELECT id, name, project_id, deployment_id, verified_at, organisation_id, created_at, updated_at, deleted_at
+FROM domains
+WHERE verified_at IS NULL AND deleted_at IS NULL
+`
+
+func (q *Queries) DomainListUnverified(ctx context.Context) ([]Domain, error) {
+	rows, err := q.db.Query(ctx, domainListUnverified)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Domain{}
+	for rows.Next() {
+		var i Domain
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.ProjectID,
+			&i.DeploymentID,
+			&i.VerifiedAt,
+			&i.OrganisationID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const domainMarkVerified = `-- name: DomainMarkVerified :exec
+UPDATE domains
+SET verified_at = NOW()
+WHERE id = $1
+`
+
+func (q *Queries) DomainMarkVerified(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, domainMarkVerified, id)
+	return err
+}
