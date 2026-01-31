@@ -8,7 +8,7 @@ package queries
 import (
 	"context"
 
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/google/uuid"
 )
 
 const githubInstallationFindByID = `-- name: GithubInstallationFindByID :one
@@ -18,7 +18,7 @@ WHERE id = $1
   AND deleted_at IS NULL
 `
 
-func (q *Queries) GithubInstallationFindByID(ctx context.Context, id pgtype.UUID) (GithubInstallation, error) {
+func (q *Queries) GithubInstallationFindByID(ctx context.Context, id uuid.UUID) (GithubInstallation, error) {
 	row := q.db.QueryRow(ctx, githubInstallationFindByID, id)
 	var i GithubInstallation
 	err := row.Scan(

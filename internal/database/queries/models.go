@@ -8,6 +8,7 @@ import (
 	"database/sql/driver"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -149,9 +150,9 @@ func (ns NullVmStatus) Value() (driver.Value, error) {
 }
 
 type Build struct {
-	ID             pgtype.UUID        `json:"id"`
+	ID             uuid.UUID          `json:"id"`
 	Status         BuildStatus        `json:"status"`
-	ProjectID      pgtype.UUID        `json:"project_id"`
+	ProjectID      uuid.UUID          `json:"project_id"`
 	GithubCommit   string             `json:"github_commit"`
 	GithubBranch   string             `json:"github_branch"`
 	ImageID        pgtype.UUID        `json:"image_id"`
@@ -160,18 +161,18 @@ type Build struct {
 	BuildingAt     pgtype.Timestamptz `json:"building_at"`
 	SuccessfulAt   pgtype.Timestamptz `json:"successful_at"`
 	FailedAt       pgtype.Timestamptz `json:"failed_at"`
-	OrganisationID pgtype.UUID        `json:"organisation_id"`
+	OrganisationID uuid.UUID          `json:"organisation_id"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
 }
 
 type BuildLog struct {
-	ID             pgtype.UUID        `json:"id"`
-	BuildID        pgtype.UUID        `json:"build_id"`
+	ID             uuid.UUID          `json:"id"`
+	BuildID        uuid.UUID          `json:"build_id"`
 	Message        string             `json:"message"`
 	Level          string             `json:"level"`
-	OrganisationID pgtype.UUID        `json:"organisation_id"`
+	OrganisationID uuid.UUID          `json:"organisation_id"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
@@ -187,64 +188,71 @@ type CertmagicLock struct {
 }
 
 type Deployment struct {
-	ID             pgtype.UUID        `json:"id"`
+	ID             uuid.UUID          `json:"id"`
 	Status         DeploymentStatus   `json:"status"`
 	GithubCommit   string             `json:"github_commit"`
-	ProjectID      pgtype.UUID        `json:"project_id"`
+	ProjectID      uuid.UUID          `json:"project_id"`
 	BuildID        pgtype.UUID        `json:"build_id"`
 	ImageID        pgtype.UUID        `json:"image_id"`
 	VmID           pgtype.UUID        `json:"vm_id"`
-	OrganisationID pgtype.UUID        `json:"organisation_id"`
+	OrganisationID uuid.UUID          `json:"organisation_id"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
+	PendingAt      pgtype.Timestamptz `json:"pending_at"`
+	BuildingAt     pgtype.Timestamptz `json:"building_at"`
+	StartingAt     pgtype.Timestamptz `json:"starting_at"`
+	RunningAt      pgtype.Timestamptz `json:"running_at"`
+	StoppingAt     pgtype.Timestamptz `json:"stopping_at"`
+	StoppedAt      pgtype.Timestamptz `json:"stopped_at"`
+	FailedAt       pgtype.Timestamptz `json:"failed_at"`
 }
 
 type DeploymentLog struct {
-	ID             pgtype.UUID        `json:"id"`
-	DeploymentID   pgtype.UUID        `json:"deployment_id"`
+	ID             uuid.UUID          `json:"id"`
+	DeploymentID   uuid.UUID          `json:"deployment_id"`
 	Message        string             `json:"message"`
 	Level          pgtype.Text        `json:"level"`
-	OrganisationID pgtype.UUID        `json:"organisation_id"`
+	OrganisationID uuid.UUID          `json:"organisation_id"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
 type Domain struct {
-	ID             pgtype.UUID        `json:"id"`
+	ID             uuid.UUID          `json:"id"`
 	Name           string             `json:"name"`
-	ProjectID      pgtype.UUID        `json:"project_id"`
+	ProjectID      uuid.UUID          `json:"project_id"`
 	DeploymentID   pgtype.UUID        `json:"deployment_id"`
 	VerifiedAt     pgtype.Timestamptz `json:"verified_at"`
-	OrganisationID pgtype.UUID        `json:"organisation_id"`
+	OrganisationID uuid.UUID          `json:"organisation_id"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
 }
 
 type EnvironmentVariable struct {
-	ID             pgtype.UUID        `json:"id"`
+	ID             uuid.UUID          `json:"id"`
 	Name           string             `json:"name"`
 	Value          string             `json:"value"`
-	ProjectID      pgtype.UUID        `json:"project_id"`
-	OrganisationID pgtype.UUID        `json:"organisation_id"`
+	ProjectID      uuid.UUID          `json:"project_id"`
+	OrganisationID uuid.UUID          `json:"organisation_id"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
 }
 
 type GithubInstallation struct {
-	ID                   pgtype.UUID        `json:"id"`
-	UserID               pgtype.UUID        `json:"user_id"`
+	ID                   uuid.UUID          `json:"id"`
+	UserID               uuid.UUID          `json:"user_id"`
 	GithubAccountID      int32              `json:"github_account_id"`
 	GithubInstallationID int32              `json:"github_installation_id"`
-	OrganisationID       pgtype.UUID        `json:"organisation_id"`
+	OrganisationID       uuid.UUID          `json:"organisation_id"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt            pgtype.Timestamptz `json:"deleted_at"`
 }
 
 type Image struct {
-	ID         pgtype.UUID        `json:"id"`
+	ID         uuid.UUID          `json:"id"`
 	Registry   string             `json:"registry"`
 	Repository string             `json:"repository"`
 	Tag        string             `json:"tag"`
@@ -255,7 +263,7 @@ type Image struct {
 }
 
 type Organisation struct {
-	ID        pgtype.UUID        `json:"id"`
+	ID        uuid.UUID          `json:"id"`
 	Name      string             `json:"name"`
 	Slug      string             `json:"slug"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
@@ -264,28 +272,28 @@ type Organisation struct {
 }
 
 type OrganisationMember struct {
-	ID             pgtype.UUID        `json:"id"`
-	UserID         pgtype.UUID        `json:"user_id"`
-	OrganisationID pgtype.UUID        `json:"organisation_id"`
+	ID             uuid.UUID          `json:"id"`
+	UserID         uuid.UUID          `json:"user_id"`
+	OrganisationID uuid.UUID          `json:"organisation_id"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
 }
 
 type Project struct {
-	ID                   pgtype.UUID        `json:"id"`
+	ID                   uuid.UUID          `json:"id"`
 	Name                 string             `json:"name"`
 	Slug                 string             `json:"slug"`
 	GithubRepository     string             `json:"github_repository"`
-	GithubInstallationID pgtype.UUID        `json:"github_installation_id"`
-	OrganisationID       pgtype.UUID        `json:"organisation_id"`
+	GithubInstallationID uuid.UUID          `json:"github_installation_id"`
+	OrganisationID       uuid.UUID          `json:"organisation_id"`
 	CreatedAt            pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt            pgtype.Timestamptz `json:"deleted_at"`
 }
 
 type User struct {
-	ID                pgtype.UUID        `json:"id"`
+	ID                uuid.UUID          `json:"id"`
 	Name              string             `json:"name"`
 	Email             string             `json:"email"`
 	Username          string             `json:"username"`
@@ -297,7 +305,7 @@ type User struct {
 }
 
 type Vm struct {
-	ID        pgtype.UUID        `json:"id"`
+	ID        uuid.UUID          `json:"id"`
 	Vcpus     int32              `json:"vcpus"`
 	Memory    int32              `json:"memory"`
 	Status    VmStatus           `json:"status"`

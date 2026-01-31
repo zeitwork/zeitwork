@@ -113,6 +113,15 @@ export const deployments = pgTable("deployments", {
   buildId: uuid().references(() => builds.id),
   imageId: uuid().references(() => images.id),
   vmId: uuid().references(() => vms.id),
+  //
+  pendingAt: timestamp({ withTimezone: true }),
+  buildingAt: timestamp({ withTimezone: true }),
+  startingAt: timestamp({ withTimezone: true }),
+  runningAt: timestamp({ withTimezone: true }),
+  stoppingAt: timestamp({ withTimezone: true }),
+  stoppedAt: timestamp({ withTimezone: true }),
+  failedAt: timestamp({ withTimezone: true }),
+  //
   ...organisationId,
   ...timestamps,
 });

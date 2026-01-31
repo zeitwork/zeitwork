@@ -8,6 +8,7 @@ package queries
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -43,7 +44,7 @@ ORDER BY d.name
 type RouteFindActiveRow struct {
 	DomainName string      `json:"domain_name"`
 	VmPort     pgtype.Int4 `json:"vm_port"`
-	VmID       pgtype.UUID `json:"vm_id"`
+	VmID       uuid.UUID   `json:"vm_id"`
 	VmIp       pgtype.Text `json:"vm_ip"`
 }
 

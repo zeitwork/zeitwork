@@ -11,7 +11,7 @@
     "drizzle-kit": "^0.31.4",
     "drizzle-orm": "^0.44.4",
     "postgres": "^3.4.7",
-    "uuidv7": "^1.0.2"
+    "uuidv7": "^1.1.0"
   },
   "devDependencies": {
     "@types/bun": "latest"
