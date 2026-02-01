@@ -93,22 +93,27 @@ func NewService(cfg Config, logger *slog.Logger) (*Service, error) {
 	certmagicConfig.OnDemand = &certmagic.OnDemandConfig{
 		// DecisionFunc checks if we should obtain a certificate for this domain
 		DecisionFunc: func(ctx context.Context, name string) error {
-			// Query database to check if domain is verified
-			logger := slog.With("domain", name)
+			domainLogger := logger.With("domain", name)
+
+			// Always allow edge.zeitwork.com - it's the edge proxy's own domain
+			if name == "edge.zeitwork.com" {
+				domainLogger.Info("allowing edge proxy root domain")
+				return nil
+			}
 
 			// Check if domain exists and is verified using sqlc
 			verifiedAt, err := db.DomainVerified(ctx, name)
 			if err != nil {
-				logger.Warn("domain not found or not verified", "error", err)
+				domainLogger.Warn("domain not found or not verified", "error", err)
 				return fmt.Errorf("domain not authorized: %s", name)
 			}
 
 			if !verifiedAt.Valid {
-				logger.Warn("domain not verified")
+				domainLogger.Warn("domain not verified")
 				return fmt.Errorf("domain not verified: %s", name)
 			}
 
-			logger.Info("domain authorized for certificate issuance")
+			domainLogger.Info("domain authorized for certificate issuance")
 			return nil
 		},
 	}
@@ -281,6 +286,14 @@ func (s *Service) serveHTTPS(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		// No port in host, use as-is
 		host = r.Host
+	}
+
+	// Handle edge.zeitwork.com with a simple message
+	if host == "edge.zeitwork.com" {
+		w.Header().Set("Content-Type", "text/plain")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte("Hello, this is the Zeitwork edge proxy.\n"))
+		return
 	}
 
 	// Look up route for this host

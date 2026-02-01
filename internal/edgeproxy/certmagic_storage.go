@@ -36,7 +36,7 @@ func (s *PostgreSQLStorage) Store(ctx context.Context, key string, value []byte)
 		slog.Info("storing certmagic JSON", "key", key, "size", len(value), "content", string(value))
 	}
 
-	err := s.db.Queries().StoreCertmagicData(ctx, queries.StoreCertmagicDataParams{
+	err := s.db.StoreCertmagicData(ctx, queries.StoreCertmagicDataParams{
 		Key:   key,
 		Value: encodedValue,
 		Modified: pgtype.Timestamptz{

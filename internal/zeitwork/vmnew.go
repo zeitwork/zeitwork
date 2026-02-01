@@ -70,10 +70,15 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 	}
 
 	// let's go
-	stdout, _ := os.OpenFile(fmt.Sprintf("/tmp/%s.out", vm.ID.String()), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
-	stderr, _ := os.OpenFile(fmt.Sprintf("/tmp/%s.err", vm.ID.String()), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
-	defer stderr.Close()
-	defer stdout.Close()
+	stdout, err := os.OpenFile(fmt.Sprintf("/tmp/%s.out", vm.ID.String()), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	if err != nil {
+		return fmt.Errorf("failed to open stdout file: %w", err)
+	}
+	stderr, err := os.OpenFile(fmt.Sprintf("/tmp/%s.err", vm.ID.String()), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	if err != nil {
+		stdout.Close()
+		return fmt.Errorf("failed to open stderr file: %w", err)
+	}
 
 	vmIp := vm.IpAddress
 	hostIp := netip.PrefixFrom(vm.IpAddress.Addr().Prev(), vmIp.Bits())
@@ -117,18 +122,27 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 
 	go func() {
 		err := cmd.Wait()
-		slog.Error("hypervisor exited! ", "vm", vm.ID.String(), "err", err)
+		stdout.Close()
+		stderr.Close()
 
 		if err != nil {
-			vm, err = s.db.VMUpdateStatus(context.Background(), queries.VMUpdateStatusParams{
+			slog.Error("hypervisor exited with error", "vm", vm.ID.String(), "err", err)
+			_, err = s.db.VMUpdateStatus(context.Background(), queries.VMUpdateStatusParams{
 				Status: queries.VmStatusFailed,
 				ID:     vm.ID,
 			})
+			if err != nil {
+				slog.Error("failed to update VM status to failed", "vm", vm.ID.String(), "err", err)
+			}
 		} else {
-			vm, err = s.db.VMUpdateStatus(context.Background(), queries.VMUpdateStatusParams{
+			slog.Info("hypervisor exited cleanly", "vm", vm.ID.String())
+			_, err = s.db.VMUpdateStatus(context.Background(), queries.VMUpdateStatusParams{
 				Status: queries.VmStatusStopped,
 				ID:     vm.ID,
 			})
+			if err != nil {
+				slog.Error("failed to update VM status to stopped", "vm", vm.ID.String(), "err", err)
+			}
 		}
 
 		delete(s.vmToCmd, vm.ID)
