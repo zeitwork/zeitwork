@@ -257,7 +257,6 @@ type Image struct {
 	Registry     string             `json:"registry"`
 	Repository   string             `json:"repository"`
 	Tag          string             `json:"tag"`
-	Digest       string             `json:"digest"`
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`

@@ -7,9 +7,62 @@ package queries
 
 import (
 	"context"
+	"net/netip"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 )
+
+const vMCreate = `-- name: VMCreate :one
+INSERT INTO vms (id, vcpus, memory, status, image_id, port, ip_address, metadata)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at, pending_at, starting_at, running_at, stopping_at, stopped_at, failed_at
+`
+
+type VMCreateParams struct {
+	ID        uuid.UUID    `json:"id"`
+	Vcpus     int32        `json:"vcpus"`
+	Memory    int32        `json:"memory"`
+	Status    VmStatus     `json:"status"`
+	ImageID   uuid.UUID    `json:"image_id"`
+	Port      pgtype.Int4  `json:"port"`
+	IpAddress netip.Prefix `json:"ip_address"`
+	Metadata  []byte       `json:"metadata"`
+}
+
+func (q *Queries) VMCreate(ctx context.Context, arg VMCreateParams) (Vm, error) {
+	row := q.db.QueryRow(ctx, vMCreate,
+		arg.ID,
+		arg.Vcpus,
+		arg.Memory,
+		arg.Status,
+		arg.ImageID,
+		arg.Port,
+		arg.IpAddress,
+		arg.Metadata,
+	)
+	var i Vm
+	err := row.Scan(
+		&i.ID,
+		&i.Vcpus,
+		&i.Memory,
+		&i.Status,
+		&i.ImageID,
+		&i.Port,
+		&i.IpAddress,
+		&i.Metadata,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.PendingAt,
+		&i.StartingAt,
+		&i.RunningAt,
+		&i.StoppingAt,
+		&i.StoppedAt,
+		&i.FailedAt,
+	)
+	return i, err
+}
 
 const vMFind = `-- name: VMFind :many
 SELECT id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at, pending_at, starting_at, running_at, stopping_at, stopped_at, failed_at
@@ -84,6 +137,28 @@ func (q *Queries) VMFirstByID(ctx context.Context, id uuid.UUID) (Vm, error) {
 		&i.FailedAt,
 	)
 	return i, err
+}
+
+const vMNextIPAddress = `-- name: VMNextIPAddress :one
+WITH lock AS (
+    SELECT pg_advisory_xact_lock(hashtext('vm_ip_allocation'))
+)
+SELECT COALESCE(
+               (SELECT set_masklen((ip_address + 1)::inet, 31)
+                FROM vms
+                WHERE deleted_at IS NULL
+                ORDER BY ip_address DESC
+                LIMIT 1),
+               '10.0.0.1/31'::inet  -- Also update the default to include /31
+       ) AS next_ip
+FROM lock
+`
+
+func (q *Queries) VMNextIPAddress(ctx context.Context) (interface{}, error) {
+	row := q.db.QueryRow(ctx, vMNextIPAddress)
+	var next_ip interface{}
+	err := row.Scan(&next_ip)
+	return next_ip, err
 }
 
 const vMUpdateStatus = `-- name: VMUpdateStatus :one

@@ -16,6 +16,7 @@ import (
 type ReconcileFunc func(ctx context.Context, objectID uuid.UUID) error
 
 type Scheduler struct {
+	name          string
 	mu            sync.RWMutex
 	wg            sync.WaitGroup
 	schedule      map[uuid.UUID]time.Time
@@ -23,8 +24,20 @@ type Scheduler struct {
 	reconcileFunc ReconcileFunc
 }
 
-func NewScheduler(reconcileFunc ReconcileFunc) *Scheduler {
+func New(reconcileFunc ReconcileFunc) *Scheduler {
 	return &Scheduler{
+		name:          "unknown",
+		mu:            sync.RWMutex{},
+		wg:            sync.WaitGroup{},
+		schedule:      make(map[uuid.UUID]time.Time),
+		dueRun:        make(chan uuid.UUID),
+		reconcileFunc: reconcileFunc,
+	}
+}
+
+func NewWithName(name string, reconcileFunc ReconcileFunc) *Scheduler {
+	return &Scheduler{
+		name:          name,
 		mu:            sync.RWMutex{},
 		wg:            sync.WaitGroup{},
 		schedule:      make(map[uuid.UUID]time.Time),
@@ -90,18 +103,20 @@ func (s *Scheduler) Start() {
 func (s *Scheduler) worker() {
 	defer s.wg.Done()
 
+	logger := slog.With("reconciler_name", s.name)
+
 	for {
 		id := <-s.dueRun
 
-		slog.Info("Running reconcile for", "id", id)
+		logger.Info("running reconcile for", "id", id)
 		err := s.reconcileFunc(context.Background(), id)
 		if err != nil {
-			slog.Error("Reconcile failed", "id", id, "err", err)
+			logger.Error("reconcile failed", "id", id, "err", err)
 			s.Schedule(id, time.Now().Add(5*time.Second))
 			continue
 		}
 
-		slog.Info("Reconcile done", "id", id)
+		logger.Info("reconcile done", "id", id)
 		s.Schedule(id, time.Now().Add(1*time.Hour))
 	}
 }

@@ -16,9 +16,10 @@ import (
 	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 )
 
-func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
+func (s *Service) reconcileVM2(ctx context.Context, objectID uuid.UUID) error {
 	vm, err := s.db.VMFirstByID(ctx, objectID)
 	if err != nil {
+		slog.Error("failed to find vm by id", "objectId", objectID)
 		return err
 	}
 
@@ -27,7 +28,7 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 	}
 
 	// if the vm is currently pending, advance to status starting
-	err = s.reconcileVMUpdateStatusIf(ctx, vm, queries.VmStatusStarting, queries.VmStatusPending)
+	vm, err = s.reconcileVMUpdateStatusIf(ctx, vm, queries.VmStatusStarting, queries.VmStatusPending)
 	if err != nil {
 		return err
 	}
@@ -73,8 +74,8 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 		"--cmdline", fmt.Sprintf(
 			"console=hvc0 config=%s",
 			base64.StdEncoding.EncodeToString(vmConfigBytes)),
-		"--cpus", "boot=4",
-		"--memory", "size=1024M",
+		"--cpus", fmt.Sprintf("boot=%d", vm.Vcpus),
+		"--memory", fmt.Sprintf("size=%dM", vm.Memory),
 		"--net", fmt.Sprintf("tap=tap%d,mac=,ip=%s,mask=255.255.255.254", s.nextTap.Add(1), hostIp.Addr())) // todo mask might not be /31 theoretically but who cares
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
@@ -179,26 +180,25 @@ func (s *Service) reconcileVmDelete(ctx context.Context, vm queries.Vm) error {
 func (s *Service) runCommand(name string, args ...string) error {
 	slog.Info("Running command ", "name", name, "args", args)
 	cmd := exec.Command(name, args...)
-	err := cmd.Run()
+	out, err := cmd.Output()
 	if err != nil {
 		slog.Error("Error while running command", "name", name, "err", err)
 		return err
 	}
 
+	slog.Info("output of command", "name", name, "args", args, "output", string(out))
+
 	return nil
 }
 
-func (s *Service) reconcileVMUpdateStatusIf(ctx context.Context, vm queries.Vm, statusAfter queries.VmStatus, statusBefore ...queries.VmStatus) error {
+func (s *Service) reconcileVMUpdateStatusIf(ctx context.Context, vm queries.Vm, statusAfter queries.VmStatus, statusBefore ...queries.VmStatus) (queries.Vm, error) {
 	if slices.Contains(statusBefore, vm.Status) {
-		_, err := s.db.VMUpdateStatus(ctx, queries.VMUpdateStatusParams{
+		return s.db.VMUpdateStatus(ctx, queries.VMUpdateStatusParams{
 			Status: statusAfter,
 			ID:     vm.ID,
 		})
-		if err != nil {
-			return err
-		}
 	}
-	return nil
+	return vm, nil
 }
 
 type VMConfig struct {

@@ -121,20 +121,20 @@ func (q *Queries) DeploymentFirstPending(ctx context.Context) (Deployment, error
 	return i, err
 }
 
-const deploymentUpdateMarkBuilding = `-- name: DeploymentUpdateMarkBuilding :one
+const deploymentMarkBuilding = `-- name: DeploymentMarkBuilding :one
 UPDATE deployments
-SET build_id = $2, status = 'building'
+SET build_id = $2, status = 'building', building_at = now()
 WHERE id = $1
 RETURNING id, status, github_commit, project_id, build_id, image_id, vm_id, pending_at, building_at, starting_at, running_at, stopping_at, stopped_at, failed_at, organisation_id, created_at, updated_at, deleted_at
 `
 
-type DeploymentUpdateMarkBuildingParams struct {
+type DeploymentMarkBuildingParams struct {
 	ID      uuid.UUID `json:"id"`
 	BuildID uuid.UUID `json:"build_id"`
 }
 
-func (q *Queries) DeploymentUpdateMarkBuilding(ctx context.Context, arg DeploymentUpdateMarkBuildingParams) (Deployment, error) {
-	row := q.db.QueryRow(ctx, deploymentUpdateMarkBuilding, arg.ID, arg.BuildID)
+func (q *Queries) DeploymentMarkBuilding(ctx context.Context, arg DeploymentMarkBuildingParams) (Deployment, error) {
+	row := q.db.QueryRow(ctx, deploymentMarkBuilding, arg.ID, arg.BuildID)
 	var i Deployment
 	err := row.Scan(
 		&i.ID,
@@ -157,4 +157,47 @@ func (q *Queries) DeploymentUpdateMarkBuilding(ctx context.Context, arg Deployme
 		&i.DeletedAt,
 	)
 	return i, err
+}
+
+const deploymentMarkRunning = `-- name: DeploymentMarkRunning :exec
+UPDATE deployments
+SET status = 'running', running_at = now()
+WHERE id = $1
+`
+
+func (q *Queries) DeploymentMarkRunning(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deploymentMarkRunning, id)
+	return err
+}
+
+const deploymentMarkStarting = `-- name: DeploymentMarkStarting :exec
+UPDATE deployments
+SET status = 'starting', starting_at = now(), image_id = $2
+WHERE id = $1
+`
+
+type DeploymentMarkStartingParams struct {
+	ID      uuid.UUID `json:"id"`
+	ImageID uuid.UUID `json:"image_id"`
+}
+
+func (q *Queries) DeploymentMarkStarting(ctx context.Context, arg DeploymentMarkStartingParams) error {
+	_, err := q.db.Exec(ctx, deploymentMarkStarting, arg.ID, arg.ImageID)
+	return err
+}
+
+const deploymentUpdateVMID = `-- name: DeploymentUpdateVMID :exec
+UPDATE deployments
+SET vm_id = $2
+WHERE id = $1
+`
+
+type DeploymentUpdateVMIDParams struct {
+	ID   uuid.UUID `json:"id"`
+	VmID uuid.UUID `json:"vm_id"`
+}
+
+func (q *Queries) DeploymentUpdateVMID(ctx context.Context, arg DeploymentUpdateVMIDParams) error {
+	_, err := q.db.Exec(ctx, deploymentUpdateVMID, arg.ID, arg.VmID)
+	return err
 }

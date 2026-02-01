@@ -14,8 +14,23 @@ FROM deployments WHERE status = 'pending'
 ORDER BY id DESC
 LIMIT 1;
 
--- name: DeploymentUpdateMarkBuilding :one
+-- name: DeploymentMarkBuilding :one
 UPDATE deployments
-SET build_id = $2, status = 'building'
+SET build_id = $2, status = 'building', building_at = now()
 WHERE id = $1
 RETURNING *;
+
+-- name: DeploymentMarkStarting :exec
+UPDATE deployments
+SET status = 'starting', starting_at = now(), image_id = $2
+WHERE id = $1;
+
+-- name: DeploymentUpdateVMID :exec
+UPDATE deployments
+SET vm_id = $2
+WHERE id = $1;
+
+-- name: DeploymentMarkRunning :exec
+UPDATE deployments
+SET status = 'running', running_at = now()
+WHERE id = $1;

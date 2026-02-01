@@ -8,11 +8,79 @@ package queries
 import (
 	"context"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 )
 
+const imageCreate = `-- name: ImageCreate :one
+insert into images (id, registry, repository, tag)
+VALUES ($1, $2, $3, $4)
+RETURNING id, registry, repository, tag, created_at, updated_at, deleted_at, disk_image_key
+`
+
+type ImageCreateParams struct {
+	ID         uuid.UUID `json:"id"`
+	Registry   string    `json:"registry"`
+	Repository string    `json:"repository"`
+	Tag        string    `json:"tag"`
+}
+
+func (q *Queries) ImageCreate(ctx context.Context, arg ImageCreateParams) (Image, error) {
+	row := q.db.QueryRow(ctx, imageCreate,
+		arg.ID,
+		arg.Registry,
+		arg.Repository,
+		arg.Tag,
+	)
+	var i Image
+	err := row.Scan(
+		&i.ID,
+		&i.Registry,
+		&i.Repository,
+		&i.Tag,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.DiskImageKey,
+	)
+	return i, err
+}
+
+const imageFind = `-- name: ImageFind :many
+select id, registry, repository, tag, created_at, updated_at, deleted_at, disk_image_key from images
+`
+
+func (q *Queries) ImageFind(ctx context.Context) ([]Image, error) {
+	rows, err := q.db.Query(ctx, imageFind)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Image{}
+	for rows.Next() {
+		var i Image
+		if err := rows.Scan(
+			&i.ID,
+			&i.Registry,
+			&i.Repository,
+			&i.Tag,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.DiskImageKey,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const imageFindByID = `-- name: ImageFindByID :one
-select id, registry, repository, tag, digest, created_at, updated_at, deleted_at, disk_image_key from images where id=$1
+select id, registry, repository, tag, created_at, updated_at, deleted_at, disk_image_key from images where id=$1
 `
 
 func (q *Queries) ImageFindByID(ctx context.Context, id uuid.UUID) (Image, error) {
@@ -23,11 +91,57 @@ func (q *Queries) ImageFindByID(ctx context.Context, id uuid.UUID) (Image, error
 		&i.Registry,
 		&i.Repository,
 		&i.Tag,
-		&i.Digest,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.DiskImageKey,
 	)
 	return i, err
+}
+
+const imageFindByRepositoryAndTag = `-- name: ImageFindByRepositoryAndTag :one
+select id, registry, repository, tag, created_at, updated_at, deleted_at, disk_image_key
+from images
+where registry = $1
+  and repository = $2
+  and tag = $3
+limit 1
+`
+
+type ImageFindByRepositoryAndTagParams struct {
+	Registry   string `json:"registry"`
+	Repository string `json:"repository"`
+	Tag        string `json:"tag"`
+}
+
+func (q *Queries) ImageFindByRepositoryAndTag(ctx context.Context, arg ImageFindByRepositoryAndTagParams) (Image, error) {
+	row := q.db.QueryRow(ctx, imageFindByRepositoryAndTag, arg.Registry, arg.Repository, arg.Tag)
+	var i Image
+	err := row.Scan(
+		&i.ID,
+		&i.Registry,
+		&i.Repository,
+		&i.Tag,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.DiskImageKey,
+	)
+	return i, err
+}
+
+const imageUpdateDiskImage = `-- name: ImageUpdateDiskImage :exec
+UPDATE images
+SET disk_image_key = $2
+WHERE id = $1
+`
+
+type ImageUpdateDiskImageParams struct {
+	ID           uuid.UUID   `json:"id"`
+	DiskImageKey pgtype.Text `json:"disk_image_key"`
+}
+
+func (q *Queries) ImageUpdateDiskImage(ctx context.Context, arg ImageUpdateDiskImageParams) error {
+	_, err := q.db.Exec(ctx, imageUpdateDiskImage, arg.ID, arg.DiskImageKey)
+	return err
 }

@@ -30,8 +30,7 @@ FROM builds WHERE status = 'pending'
 ORDER BY id DESC
 LIMIT 1;
 
--- name: BuildUpdateMarkBuilding :one
+-- name: BuildMarkBuilding :exec
 UPDATE builds
-SET status = 'building'
-WHERE id = $1
-RETURNING *;
+SET status = 'building', building_at = now(), vm_id = $2
+WHERE id = $1;

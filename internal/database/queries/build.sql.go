@@ -166,32 +166,18 @@ func (q *Queries) BuildFirstPending(ctx context.Context) (Build, error) {
 	return i, err
 }
 
-const buildUpdateMarkBuilding = `-- name: BuildUpdateMarkBuilding :one
+const buildMarkBuilding = `-- name: BuildMarkBuilding :exec
 UPDATE builds
-SET status = 'building'
+SET status = 'building', building_at = now(), vm_id = $2
 WHERE id = $1
-RETURNING id, status, project_id, github_commit, github_branch, image_id, vm_id, pending_at, building_at, successful_at, failed_at, organisation_id, created_at, updated_at, deleted_at
 `
 
-func (q *Queries) BuildUpdateMarkBuilding(ctx context.Context, id uuid.UUID) (Build, error) {
-	row := q.db.QueryRow(ctx, buildUpdateMarkBuilding, id)
-	var i Build
-	err := row.Scan(
-		&i.ID,
-		&i.Status,
-		&i.ProjectID,
-		&i.GithubCommit,
-		&i.GithubBranch,
-		&i.ImageID,
-		&i.VmID,
-		&i.PendingAt,
-		&i.BuildingAt,
-		&i.SuccessfulAt,
-		&i.FailedAt,
-		&i.OrganisationID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-	)
-	return i, err
+type BuildMarkBuildingParams struct {
+	ID   uuid.UUID `json:"id"`
+	VmID uuid.UUID `json:"vm_id"`
+}
+
+func (q *Queries) BuildMarkBuilding(ctx context.Context, arg BuildMarkBuildingParams) error {
+	_, err := q.db.Exec(ctx, buildMarkBuilding, arg.ID, arg.VmID)
+	return err
 }

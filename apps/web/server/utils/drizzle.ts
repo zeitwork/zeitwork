@@ -1,5 +1,5 @@
 export { sql, eq, and, or, asc, desc } from "@zeitwork/database/utils/drizzle";
-import { useClient } from "@zeitwork/database/utils/client";
+import { useClient } from "@zeitwork/database/client";
 
 const client = useClient({ dsn: process.env.NUXT_DSN! });
 

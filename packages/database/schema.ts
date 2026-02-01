@@ -19,7 +19,7 @@ export const timestamps = {
   deletedAt: timestamp({ withTimezone: true }),
 };
 
-const organisationId = {
+export const organisationId = {
   organisationId: uuid()
     .notNull()
     .references(() => organisations.id),
@@ -198,7 +198,7 @@ export const images = pgTable("images", {
   registry: text().notNull(), // e.g. docker.io
   repository: text().notNull(), // e.g. library/alpine
   tag: text().notNull(), // e.g. latest
-  digest: text().notNull(), // e.g. sha256:1234567890abcdef
+  // digest: text().notNull(), // e.g. sha256:1234567890abcdef
   // output
   diskImageKey: text(), // if this is null we haven't created the disk image yet
   //

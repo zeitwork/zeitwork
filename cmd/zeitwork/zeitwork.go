@@ -52,10 +52,12 @@ func main() {
 		panic(err)
 	}
 
-	err = service.Start(ctx)
-	if err != nil {
-		panic(err)
-	}
+	go func() {
+		err = service.Start(ctx)
+		if err != nil && err != context.Canceled {
+			slog.Error("service error", "err", err)
+		}
+	}()
 
 	// TODO: edge proxy
 
@@ -67,5 +69,4 @@ func main() {
 	logger.Info("shutdown signal", "signal", sig)
 
 	service.Stop()
-
 }
