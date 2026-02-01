@@ -26,7 +26,7 @@ const links = computed(() => [
         class="bg-neutral-subtle outline-neutral flex min-h-0 flex-1 flex-col rounded-lg outline"
       >
         <d-navbar :links="links" />
-        <div class="outline-neutral bg-surface flex-1 overflow-auto rounded-lg outline">
+        <div class="outline-neutral bg-surface flex-1 rounded-lg outline">
           <slot></slot>
         </div>
       </div>

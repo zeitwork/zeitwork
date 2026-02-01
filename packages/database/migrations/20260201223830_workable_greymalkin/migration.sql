@@ -1,0 +1,1 @@
+ALTER TABLE "images" ADD CONSTRAINT "images_registry_repository_tag_unique" UNIQUE("registry","repository","tag");

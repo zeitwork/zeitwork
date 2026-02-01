@@ -21,3 +21,17 @@ RETURNING *;
 UPDATE images
 SET disk_image_key = $2
 WHERE id = $1;
+
+-- name: ImageFindOrCreate :one
+WITH ins AS (
+    INSERT INTO images (id, registry, repository, tag)
+    VALUES ($1, $2, $3, $4)
+    ON CONFLICT (registry, repository, tag) DO NOTHING
+    RETURNING *
+)
+SELECT * FROM ins
+UNION ALL
+SELECT * FROM images
+WHERE registry = $2 AND repository = $3 AND tag = $4
+  AND NOT EXISTS (SELECT 1 FROM ins)
+LIMIT 1;

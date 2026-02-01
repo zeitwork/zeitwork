@@ -192,18 +192,22 @@ export const buildLogs = pgTable("build_logs", {
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });
 
-export const images = pgTable("images", {
-  id: uuid().primaryKey().$defaultFn(uuidv7),
-  // input
-  registry: text().notNull(), // e.g. docker.io
-  repository: text().notNull(), // e.g. library/alpine
-  tag: text().notNull(), // e.g. latest
-  // digest: text().notNull(), // e.g. sha256:1234567890abcdef
-  // output
-  diskImageKey: text(), // if this is null we haven't created the disk image yet
-  //
-  ...timestamps,
-});
+export const images = pgTable(
+  "images",
+  {
+    id: uuid().primaryKey().$defaultFn(uuidv7),
+    // input
+    registry: text().notNull(), // e.g. docker.io
+    repository: text().notNull(), // e.g. library/alpine
+    tag: text().notNull(), // e.g. latest
+    // digest: text().notNull(), // e.g. sha256:1234567890abcdef
+    // output
+    diskImageKey: text(), // if this is null we haven't created the disk image yet
+    //
+    ...timestamps,
+  },
+  (t) => [unique().on(t.registry, t.repository, t.tag)],
+);
 
 // Certificate storage for certmagic
 export const certmagicData = pgTable("certmagic_data", {

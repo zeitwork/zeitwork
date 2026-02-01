@@ -130,6 +130,60 @@ func (q *Queries) ImageFindByRepositoryAndTag(ctx context.Context, arg ImageFind
 	return i, err
 }
 
+const imageFindOrCreate = `-- name: ImageFindOrCreate :one
+WITH ins AS (
+    INSERT INTO images (id, registry, repository, tag)
+    VALUES ($1, $2, $3, $4)
+    ON CONFLICT (registry, repository, tag) DO NOTHING
+    RETURNING id, registry, repository, tag, created_at, updated_at, deleted_at, disk_image_key
+)
+SELECT id, registry, repository, tag, created_at, updated_at, deleted_at, disk_image_key FROM ins
+UNION ALL
+SELECT id, registry, repository, tag, created_at, updated_at, deleted_at, disk_image_key FROM images
+WHERE registry = $2 AND repository = $3 AND tag = $4
+  AND NOT EXISTS (SELECT 1 FROM ins)
+LIMIT 1
+`
+
+type ImageFindOrCreateParams struct {
+	ID         uuid.UUID `json:"id"`
+	Registry   string    `json:"registry"`
+	Repository string    `json:"repository"`
+	Tag        string    `json:"tag"`
+}
+
+type ImageFindOrCreateRow struct {
+	ID           uuid.UUID          `json:"id"`
+	Registry     string             `json:"registry"`
+	Repository   string             `json:"repository"`
+	Tag          string             `json:"tag"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
+	DiskImageKey pgtype.Text        `json:"disk_image_key"`
+}
+
+func (q *Queries) ImageFindOrCreate(ctx context.Context, arg ImageFindOrCreateParams) (ImageFindOrCreateRow, error) {
+	row := q.db.QueryRow(ctx, imageFindOrCreate,
+		arg.ID,
+		arg.Registry,
+		arg.Repository,
+		arg.Tag,
+	)
+	var i ImageFindOrCreateRow
+	err := row.Scan(
+		&i.ID,
+		&i.Registry,
+		&i.Repository,
+		&i.Tag,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.DiskImageKey,
+	)
+	return i, err
+}
+
 const imageUpdateDiskImage = `-- name: ImageUpdateDiskImage :exec
 UPDATE images
 SET disk_image_key = $2

@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -171,22 +172,45 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 }
 
 func (s *Service) VMCreate(ctx context.Context, params VMCreateParams) (*queries.Vm, error) {
-	ipAdress, err := s.nextIpAddress(ctx)
-	if err != nil {
-		return nil, err
-	}
-	vm, err := s.db.VMCreate(ctx, queries.VMCreateParams{
-		ID:        uuid.New(),
-		Vcpus:     params.VCPUs,
-		Memory:    params.Memory,
-		Status:    queries.VmStatusPending,
-		ImageID:   params.ImageID,
-		Port:      pgtype.Int4{Int32: params.Port, Valid: true},
-		IpAddress: ipAdress,
-		Metadata:  nil,
-	})
+	var lastErr error
+	for attempt := 0; attempt < 5; attempt++ {
+		if attempt > 0 {
+			slog.Warn("retrying VM IP allocation", "attempt", attempt+1)
+			time.Sleep(100 * time.Millisecond)
+		}
 
-	return &vm, err
+		ipAddress, err := s.nextIpAddress(ctx)
+		if err != nil {
+			return nil, err
+		}
+
+		vm, err := s.db.VMCreate(ctx, queries.VMCreateParams{
+			ID:        uuid.New(),
+			Vcpus:     params.VCPUs,
+			Memory:    params.Memory,
+			Status:    queries.VmStatusPending,
+			ImageID:   params.ImageID,
+			Port:      pgtype.Int4{Int32: params.Port, Valid: true},
+			IpAddress: ipAddress,
+			Metadata:  nil,
+		})
+		if err != nil {
+			if isIPConflictError(err) {
+				lastErr = err
+				continue
+			}
+			return nil, err
+		}
+
+		return &vm, nil
+	}
+	return nil, fmt.Errorf("failed to allocate IP after 5 attempts: %w", lastErr)
+}
+
+// isIPConflictError checks if the error is an exclusion constraint violation (SQLSTATE 23P01)
+func isIPConflictError(err error) bool {
+	return strings.Contains(err.Error(), "23P01") ||
+		strings.Contains(err.Error(), "exclude_overlapping_networks")
 }
 
 func (s *Service) nextIpAddress(ctx context.Context) (netip.Prefix, error) {

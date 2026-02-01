@@ -8,13 +8,13 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/docker/docker/api/types/container"
@@ -22,7 +22,6 @@ import (
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
-	"github.com/jackc/pgx/v5"
 	"github.com/zeitwork/zeitwork/internal/database/queries"
 	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 )
@@ -55,28 +54,13 @@ func (s *Service) reconcileBuild(ctx context.Context, objectID uuid.UUID) error 
 		s.activeBuildsMu.Unlock()
 	}()
 
-	// reconcile build image for build vm
-	buildImage, err := s.db.ImageFindByRepositoryAndTag(ctx, queries.ImageFindByRepositoryAndTagParams{
+	// reconcile build image for build vm (atomic find-or-create to avoid race conditions)
+	buildImage, err := s.db.ImageFindOrCreate(ctx, queries.ImageFindOrCreateParams{
+		ID:         uuid.New(),
 		Registry:   "ghcr.io",
 		Repository: "tomhaerter/dind",
 		Tag:        "latest",
 	})
-	if err == pgx.ErrNoRows {
-		slog.Info("build image not found, creating it")
-
-		// create build image
-		buildImage, err = s.db.ImageCreate(ctx, queries.ImageCreateParams{
-			ID:         uuid.New(),
-			Registry:   "ghcr.io",
-			Repository: "tomhaerter/dind",
-			Tag:        "latest",
-		})
-		if err != nil {
-			return err
-		}
-		slog.Info("created build image", "id", buildImage.ID)
-		return nil
-	}
 	if err != nil {
 		return err
 	}
@@ -121,8 +105,8 @@ func (s *Service) reconcileBuild(ctx context.Context, objectID uuid.UUID) error 
 
 	// VM not running yet, wait
 	if vm.Status != queries.VmStatusRunning {
-		slog.Debug("build VM not ready yet", "build_id", build.ID, "vm_id", vm.ID, "status", vm.Status)
-		return errors.New("vm not ready yet")
+		slog.Info("build VM not ready yet", "build_id", build.ID, "vm_id", vm.ID, "status", vm.Status)
+		return nil
 	}
 
 	// VM is running and we don't have an output image yet - execute the build
@@ -212,15 +196,15 @@ func (s *Service) executeBuild(ctx context.Context, build queries.Build, vm quer
 
 	slog.Info("docker build and push completed", "build_id", build.ID)
 
-	// 9. Create image record in DB
-	outputImage, err := s.db.ImageCreate(ctx, queries.ImageCreateParams{
+	// 9. Create image record in DB (use find-or-create to handle concurrent builds for same commit)
+	outputImage, err := s.db.ImageFindOrCreate(ctx, queries.ImageFindOrCreateParams{
 		ID:         uuid.New(),
 		Registry:   s.cfg.DockerRegistryURL,
 		Repository: fmt.Sprintf("%s/%s", s.cfg.DockerRegistryUsername, hex.EncodeToString(project.ID.Bytes[:])),
 		Tag:        build.GithubCommit,
 	})
 	if err != nil {
-		return fmt.Errorf("failed to create image record: %w", err)
+		return fmt.Errorf("failed to find or create image record: %w", err)
 	}
 
 	slog.Info("created output image record", "build_id", build.ID, "image_id", outputImage.ID)
@@ -416,6 +400,56 @@ func (s *Service) streamBuildLogs(ctx context.Context, build queries.Build, read
 	return scanner.Err()
 }
 
+// logWriter writes Docker log output line-by-line to the database in real-time
+type logWriter struct {
+	ctx   context.Context
+	s     *Service
+	build queries.Build
+	level string
+	buf   []byte
+}
+
+func (w *logWriter) Write(p []byte) (n int, err error) {
+	w.buf = append(w.buf, p...)
+
+	// Process complete lines
+	for {
+		idx := bytes.IndexByte(w.buf, '\n')
+		if idx < 0 {
+			break
+		}
+
+		line := string(w.buf[:idx])
+		w.buf = w.buf[idx+1:]
+
+		if line = strings.TrimSpace(line); line != "" {
+			w.s.db.BuildLogCreate(w.ctx, queries.BuildLogCreateParams{
+				ID:             uuid.New(),
+				BuildID:        w.build.ID,
+				Message:        line,
+				Level:          w.level,
+				OrganisationID: w.build.OrganisationID,
+			})
+		}
+	}
+
+	return len(p), nil
+}
+
+// Flush writes any remaining buffered content
+func (w *logWriter) Flush() {
+	if line := strings.TrimSpace(string(w.buf)); line != "" {
+		w.s.db.BuildLogCreate(w.ctx, queries.BuildLogCreateParams{
+			ID:             uuid.New(),
+			BuildID:        w.build.ID,
+			Message:        line,
+			Level:          w.level,
+			OrganisationID: w.build.OrganisationID,
+		})
+	}
+	w.buf = nil
+}
+
 // runBuildxBuild executes docker buildx build inside a container to build and push with OCI media types
 func (s *Service) runBuildxBuild(ctx context.Context, dockerClient *client.Client, build queries.Build, buildContext io.Reader, imageTag string) error {
 	// Read build context into memory (needed to copy to container)
@@ -512,7 +546,36 @@ func (s *Service) runBuildxBuild(ctx context.Context, dockerClient *client.Clien
 		return fmt.Errorf("failed to start builder container: %w", err)
 	}
 
-	slog.Info("container started, waiting for completion", "build_id", build.ID, "container_id", containerID)
+	slog.Info("container started, streaming logs in real-time", "build_id", build.ID, "container_id", containerID)
+
+	// Start streaming logs in real-time (Follow: true)
+	logReader, err := dockerClient.ContainerLogs(ctx, containerID, container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+		Follow:     true, // Stream logs as they're written
+	})
+	if err != nil {
+		slog.Error("failed to attach to container logs", "build_id", build.ID, "error", err)
+		return fmt.Errorf("failed to attach to container logs: %w", err)
+	}
+
+	// Create writers that insert logs to database in real-time
+	stdoutWriter := &logWriter{ctx: ctx, s: s, build: build, level: "info"}
+	stderrWriter := &logWriter{ctx: ctx, s: s, build: build, level: "error"}
+
+	// Stream logs in a goroutine
+	var wg sync.WaitGroup
+	var logErr error
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer logReader.Close()
+		// stdcopy.StdCopy demuxes docker's multiplexed stdout/stderr stream
+		_, logErr = stdcopy.StdCopy(stdoutWriter, stderrWriter, logReader)
+		// Flush any remaining partial lines
+		stdoutWriter.Flush()
+		stderrWriter.Flush()
+	}()
 
 	// Wait for container to finish
 	statusCh, errCh := dockerClient.ContainerWait(ctx, containerID, container.WaitConditionNotRunning)
@@ -529,50 +592,10 @@ func (s *Service) runBuildxBuild(ctx context.Context, dockerClient *client.Clien
 		slog.Info("container exited", "build_id", build.ID, "exit_code", exitCode)
 	}
 
-	// Always get container logs (for both success and failure)
-	logReader, err := dockerClient.ContainerLogs(ctx, containerID, container.LogsOptions{
-		ShowStdout: true,
-		ShowStderr: true,
-	})
-	if err != nil {
-		slog.Error("failed to get container logs", "build_id", build.ID, "error", err)
-	} else {
-		defer logReader.Close()
-		// Use stdcopy to properly demux docker logs
-		var stdout, stderr bytes.Buffer
-		stdcopy.StdCopy(&stdout, &stderr, logReader)
-
-		// Log stdout
-		if stdout.Len() > 0 {
-			slog.Info("buildx stdout", "build_id", build.ID, "output", stdout.String())
-			for _, line := range strings.Split(stdout.String(), "\n") {
-				if line != "" {
-					s.db.BuildLogCreate(ctx, queries.BuildLogCreateParams{
-						ID:             uuid.New(),
-						BuildID:        build.ID,
-						Message:        line,
-						Level:          "info",
-						OrganisationID: build.OrganisationID,
-					})
-				}
-			}
-		}
-
-		// Log stderr
-		if stderr.Len() > 0 {
-			slog.Warn("buildx stderr", "build_id", build.ID, "output", stderr.String())
-			for _, line := range strings.Split(stderr.String(), "\n") {
-				if line != "" {
-					s.db.BuildLogCreate(ctx, queries.BuildLogCreateParams{
-						ID:             uuid.New(),
-						BuildID:        build.ID,
-						Message:        line,
-						Level:          "error",
-						OrganisationID: build.OrganisationID,
-					})
-				}
-			}
-		}
+	// Wait for log streaming to complete
+	wg.Wait()
+	if logErr != nil {
+		slog.Warn("error streaming logs", "build_id", build.ID, "error", logErr)
 	}
 
 	if exitCode != 0 {
