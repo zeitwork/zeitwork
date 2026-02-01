@@ -67,6 +67,7 @@ func NewTokenService(cfg Config) (*Service, error) {
 	}
 
 	return &Service{
+		db:         cfg.DB,
 		appID:      id,
 		privateKey: privateKey,
 	}, nil

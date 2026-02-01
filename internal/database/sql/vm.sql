@@ -29,3 +29,8 @@ SELECT COALESCE(
                '10.0.0.1/31'::inet  -- Also update the default to include /31
        ) AS next_ip
 FROM lock;
+
+-- name: VMSoftDelete :exec
+UPDATE vms
+SET deleted_at = now()
+WHERE id = $1;

@@ -159,6 +159,17 @@ func (q *Queries) DeploymentMarkBuilding(ctx context.Context, arg DeploymentMark
 	return i, err
 }
 
+const deploymentMarkFailed = `-- name: DeploymentMarkFailed :exec
+UPDATE deployments
+SET status = 'failed', failed_at = now()
+WHERE id = $1
+`
+
+func (q *Queries) DeploymentMarkFailed(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deploymentMarkFailed, id)
+	return err
+}
+
 const deploymentMarkRunning = `-- name: DeploymentMarkRunning :exec
 UPDATE deployments
 SET status = 'running', running_at = now()

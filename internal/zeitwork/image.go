@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -53,48 +54,37 @@ func (s *Service) reconcileImage(ctx context.Context, objectID uuid.UUID) error 
 	}
 	defer os.RemoveAll(tmpdir)
 
-	//// if the image already exists, skip the download step
-	//_, err = os.Stat(fmt.Sprintf("/data/base/%s.qcow2", image.ID.String()))
-	//if err == nil {
-	//	slog.Warn("image already exists!", "id", image.ID)
-	//
-	//
-	//}
+	// Pull the image using skopeo (with authentication for GHCR)
+	imageRef := fmt.Sprintf("%s/%s:%s", image.Registry, image.Repository, image.Tag)
+	ociPath := filepath.Join(tmpdir, "oci")
+	slog.Info("pulling container image", "ref", imageRef)
 
-	// try to pull the image
-	err = s.runCommand("skopeo", "copy", fmt.Sprintf("docker://%s/%s:%s", image.Registry, image.Repository, image.Tag), fmt.Sprintf("oci:%s:latest", image.ID.String()))
+	srcCreds := fmt.Sprintf("%s:%s", s.cfg.DockerRegistryUsername, s.cfg.DockerRegistryPAT)
+	err = s.runCommand("skopeo", "copy", "--src-creds", srcCreds, fmt.Sprintf("docker://%s", imageRef), fmt.Sprintf("oci:%s:latest", ociPath))
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to pull image: %w", err)
 	}
 
-	rootfs := tmpdir + "/"
-	err = s.runCommand("umoci", "unpack", "--image", image.ID.String()+":latest", rootfs)
+	// Use umoci to unpack the OCI image to a runtime bundle (produces config.json + rootfs/)
+	bundlePath := filepath.Join(tmpdir, "bundle")
+	err = s.runCommand("umoci", "unpack", "--image", ociPath+":latest", bundlePath)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to unpack OCI image: %w", err)
 	}
+	slog.Info("unpacked OCI image to bundle", "path", bundlePath)
 
-	// pack the rootfs as qcow2
-	err = s.runCommand("virt-make-fs", "--format=qcow2", "--type=ext4", rootfs, "--size=+5G", fmt.Sprintf("/data/base/%s.qcow2", image.ID.String()))
+	// Remove any existing base image from previous failed attempts (virt-make-fs fails if file exists)
+	baseImagePath := fmt.Sprintf("/data/base/%s.qcow2", image.ID.String())
+	_ = os.Remove(baseImagePath)
+
+	// pack the bundle as qcow2 (contains /config.json and /rootfs/ that initagent expects)
+	err = s.runCommand("virt-make-fs", "--format=qcow2", "--type=ext4", bundlePath, "--size=+5G", baseImagePath)
 	if err != nil {
 		slog.Error("oh no! virt-make-fs crashed", "err", err)
 		return err
 	}
 
-	//// skip if the work disk already exists
-	//_, err = os.Stat(fmt.Sprintf("/data/work/%s.qcow2", image.ID.String()))
-	//if err == nil {
-	//	slog.Warn("work image already exists!", "id", image.ID)
-	//
-	//	err = os.Remove(fmt.Sprintf("/data/work/%s.qcow2", image.ID.String()))
-	//	if err != nil {
-	//		return err
-	//	}
-	//
-	//	s.imageScheduler.Schedule(objectID, time.Now())
-	//	return nil
-	//}
-
-	// remove existing
+	// remove existing work image
 	_ = os.Remove(diskImageKey)
 
 	err = s.runCommand("qemu-img", "create", "-f", "qcow2", "-b", fmt.Sprintf("/data/base/%s.qcow2", image.ID.String()), "-F", "qcow2", diskImageKey)

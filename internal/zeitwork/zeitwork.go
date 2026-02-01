@@ -3,6 +3,7 @@ package zeitwork
 import (
 	"context"
 	_ "embed"
+	"fmt"
 	"log/slog"
 	"os/exec"
 	"sync"
@@ -13,6 +14,7 @@ import (
 	"github.com/zeitwork/zeitwork/internal/database"
 	"github.com/zeitwork/zeitwork/internal/reconciler"
 	dnsresolver "github.com/zeitwork/zeitwork/internal/shared/dns"
+	"github.com/zeitwork/zeitwork/internal/shared/github"
 	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 )
 
@@ -21,9 +23,15 @@ type Config struct {
 
 	DB *database.DB
 
+	// Docker registry configuration
+	// For GHCR, URL is "ghcr.io" and Username is the org/user (e.g., "zeitwork")
 	DockerRegistryURL      string
 	DockerRegistryUsername string
-	DockerRegistryPassword string
+	DockerRegistryPAT      string // GitHub PAT with write:packages scope for pushing images
+
+	// GitHub App credentials for fetching source code
+	GitHubAppID         string
+	GitHubAppPrivateKey string // base64-encoded
 }
 
 type Service struct {
@@ -37,6 +45,9 @@ type Service struct {
 	// DNS resolution
 	dnsResolver dnsresolver.Resolver
 
+	// GitHub token service for fetching source code
+	githubTokenService *github.Service
+
 	// Schedulers
 	deploymentScheduler *reconciler.Scheduler
 	buildScheduler      *reconciler.Scheduler
@@ -48,17 +59,35 @@ type Service struct {
 	imageMu sync.Mutex
 	vmToCmd map[uuid.UUID]*exec.Cmd
 	nextTap atomic.Int32
+
+	// Build execution tracking (prevents concurrent execution of the same build)
+	activeBuildsMu sync.Mutex
+	activeBuilds   map[uuid.UUID]bool
 }
 
 // New creates a new reconciler service
 func New(cfg Config) (*Service, error) {
 	s := &Service{
-		cfg:         cfg,
-		db:          cfg.DB,
-		dnsResolver: dnsresolver.NewResolver(),
-		vmToCmd:     make(map[uuid.UUID]*exec.Cmd),
-		imageMu:     sync.Mutex{},
-		nextTap:     atomic.Int32{},
+		cfg:          cfg,
+		db:           cfg.DB,
+		dnsResolver:  dnsresolver.NewResolver(),
+		vmToCmd:      make(map[uuid.UUID]*exec.Cmd),
+		imageMu:      sync.Mutex{},
+		nextTap:      atomic.Int32{},
+		activeBuilds: make(map[uuid.UUID]bool),
+	}
+
+	// Initialize GitHub token service if credentials are provided
+	if cfg.GitHubAppID != "" && cfg.GitHubAppPrivateKey != "" {
+		githubSvc, err := github.NewTokenService(github.Config{
+			DB:              *cfg.DB,
+			AppID:           cfg.GitHubAppID,
+			PrivatKeyBase64: cfg.GitHubAppPrivateKey,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create github token service: %w", err)
+		}
+		s.githubTokenService = githubSvc
 	}
 
 	s.deploymentScheduler = reconciler.NewWithName("deployment", s.reconcileDeployment)

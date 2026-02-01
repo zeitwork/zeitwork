@@ -34,3 +34,17 @@ LIMIT 1;
 UPDATE builds
 SET status = 'building', building_at = now(), vm_id = $2
 WHERE id = $1;
+
+-- name: BuildMarkSuccessful :exec
+UPDATE builds
+SET status = 'succesful', successful_at = now(), image_id = $2
+WHERE id = $1;
+
+-- name: BuildMarkFailed :exec
+UPDATE builds
+SET status = 'failed', failed_at = now()
+WHERE id = $1;
+
+-- name: BuildLogCreate :exec
+INSERT INTO build_logs (id, build_id, message, level, organisation_id, created_at)
+VALUES ($1, $2, $3, $4, $5, NOW());

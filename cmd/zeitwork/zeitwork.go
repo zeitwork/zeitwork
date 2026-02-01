@@ -15,7 +15,12 @@ import (
 )
 
 type Config struct {
-	DatabaseURL string `env:"DATABASE_URL,required"`
+	DatabaseURL            string `env:"DATABASE_URL,required"`
+	DockerRegistryURL      string `env:"DOCKER_REGISTRY_URL,required"`
+	DockerRegistryUsername string `env:"DOCKER_REGISTRY_USERNAME,required"`
+	DockerRegistryPAT      string `env:"DOCKER_REGISTRY_PAT,required"` // GitHub PAT with write:packages scope
+	GitHubAppID            string `env:"GITHUB_APP_ID,required"`
+	GitHubAppPrivateKey    string `env:"GITHUB_APP_PRIVATE_KEY,required"` // base64-encoded
 }
 
 func main() {
@@ -33,7 +38,7 @@ func main() {
 	// Parse configuration from environment variables
 	cfg := Config{}
 	if err := env.Parse(&cfg); err != nil {
-		panic("failed to parse config")
+		panic("failed to parse config" + err.Error())
 	}
 
 	db, err := database.New(cfg.DatabaseURL)
@@ -44,9 +49,11 @@ func main() {
 	service, err := zeitwork.New(zeitwork.Config{
 		IPAdress:               "1.1.1.1", // TODO
 		DB:                     db,
-		DockerRegistryURL:      "",
-		DockerRegistryUsername: "",
-		DockerRegistryPassword: "",
+		DockerRegistryURL:      cfg.DockerRegistryURL,
+		DockerRegistryUsername: cfg.DockerRegistryUsername,
+		DockerRegistryPAT:      cfg.DockerRegistryPAT,
+		GitHubAppID:            cfg.GitHubAppID,
+		GitHubAppPrivateKey:    cfg.GitHubAppPrivateKey,
 	})
 	if err != nil {
 		panic(err)

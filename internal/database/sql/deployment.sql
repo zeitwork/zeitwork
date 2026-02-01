@@ -34,3 +34,8 @@ WHERE id = $1;
 UPDATE deployments
 SET status = 'running', running_at = now()
 WHERE id = $1;
+
+-- name: DeploymentMarkFailed :exec
+UPDATE deployments
+SET status = 'failed', failed_at = now()
+WHERE id = $1;

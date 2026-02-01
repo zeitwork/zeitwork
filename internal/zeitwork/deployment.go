@@ -14,6 +14,11 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 		return err
 	}
 
+	// Skip if deployment is already in a terminal state
+	if deployment.Status == queries.DeploymentStatusFailed || deployment.Status == queries.DeploymentStatusStopped {
+		return nil
+	}
+
 	// ** Deployments should have a build ** //
 	if !deployment.BuildID.Valid {
 		build, err := s.db.BuildCreate(ctx, queries.BuildCreateParams{
@@ -39,6 +44,12 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 		build, err := s.db.BuildFirstByID(ctx, deployment.BuildID)
 		if err != nil {
 			return err
+		}
+
+		// if build failed, mark deployment as failed
+		if build.Status == queries.BuildStatusFailed {
+			slog.Info("build failed, marking deployment as failed", "deployment_id", deployment.ID, "build_id", build.ID)
+			return s.db.DeploymentMarkFailed(ctx, deployment.ID)
 		}
 
 		// if build has an image then advance to starting

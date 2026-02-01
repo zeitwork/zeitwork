@@ -1,32 +1,71 @@
 package zeitwork
 
 import (
+	"archive/tar"
+	"bufio"
+	"bytes"
+	"compress/gzip"
 	"context"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"log/slog"
+	"net/http"
+	"path/filepath"
+	"strings"
+	"time"
 
+	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/image"
+	"github.com/docker/docker/api/types/mount"
+	"github.com/docker/docker/client"
+	"github.com/docker/docker/pkg/stdcopy"
 	"github.com/jackc/pgx/v5"
 	"github.com/zeitwork/zeitwork/internal/database/queries"
 	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 )
 
 func (s *Service) reconcileBuild(ctx context.Context, objectID uuid.UUID) error {
-	build, err := s.db.Queries.BuildFirstByID(ctx, objectID)
+	build, err := s.db.BuildFirstByID(ctx, objectID)
 	if err != nil {
 		return err
 	}
 
+	// Skip if already completed
+	if build.Status == queries.BuildStatusSuccesful || build.Status == queries.BuildStatusFailed {
+		return nil
+	}
+
+	// Check if this build is already being executed (prevent concurrent execution)
+	s.activeBuildsMu.Lock()
+	if s.activeBuilds[build.ID] {
+		s.activeBuildsMu.Unlock()
+		slog.Debug("build already being executed, skipping", "build_id", build.ID)
+		return nil
+	}
+	s.activeBuilds[build.ID] = true
+	s.activeBuildsMu.Unlock()
+
+	// Ensure we remove from active builds when done
+	defer func() {
+		s.activeBuildsMu.Lock()
+		delete(s.activeBuilds, build.ID)
+		s.activeBuildsMu.Unlock()
+	}()
+
 	// reconcile build image for build vm
-	image, err := s.db.ImageFindByRepositoryAndTag(ctx, queries.ImageFindByRepositoryAndTagParams{
+	buildImage, err := s.db.ImageFindByRepositoryAndTag(ctx, queries.ImageFindByRepositoryAndTagParams{
 		Registry:   "ghcr.io",
 		Repository: "tomhaerter/dind",
 		Tag:        "latest",
 	})
 	if err == pgx.ErrNoRows {
-		slog.Error("build image not found")
+		slog.Info("build image not found, creating it")
 
 		// create build image
-		image, err := s.db.ImageCreate(ctx, queries.ImageCreateParams{
+		buildImage, err = s.db.ImageCreate(ctx, queries.ImageCreateParams{
 			ID:         uuid.New(),
 			Registry:   "ghcr.io",
 			Repository: "tomhaerter/dind",
@@ -35,88 +74,521 @@ func (s *Service) reconcileBuild(ctx context.Context, objectID uuid.UUID) error 
 		if err != nil {
 			return err
 		}
-		slog.Info("created image", "id", image.ID)
+		slog.Info("created build image", "id", buildImage.ID)
 		return nil
 	}
 	if err != nil {
 		return err
 	}
 
-	if !image.DiskImageKey.Valid {
-		slog.Error("disk image of build image not ready")
+	if !buildImage.DiskImageKey.Valid {
+		slog.Debug("disk image of build image not ready yet", "build_id", build.ID)
 		return nil
 	}
 
-	slog.Info("disk image found", "id", image.ID)
+	slog.Debug("disk image found", "id", buildImage.ID)
 
 	// if we dont have a vm create one
 	if !build.VmID.Valid {
 		vm, err := s.VMCreate(ctx, VMCreateParams{
 			VCPUs:   2,
 			Memory:  4 * 1024,
-			ImageID: image.ID,
+			ImageID: buildImage.ID,
 			Port:    2375,
 		})
 		if err != nil {
 			return err
 		}
+		slog.Info("created build VM", "build_id", build.ID, "vm_id", vm.ID)
 		return s.db.BuildMarkBuilding(ctx, queries.BuildMarkBuildingParams{
 			ID:   build.ID,
 			VmID: vm.ID,
 		})
 	}
 
-	if build.VmID.Valid {
-		// check if the vm is ready
-		vm, err := s.db.VMFirstByID(ctx, build.VmID)
+	// We have a VM, check if it's ready
+	vm, err := s.db.VMFirstByID(ctx, build.VmID)
+	if err != nil {
+		return err
+	}
+
+	// If VM failed, fail the build
+	if vm.Status == queries.VmStatusFailed {
+		slog.Error("build VM failed", "build_id", build.ID, "vm_id", vm.ID)
+		s.db.BuildMarkFailed(ctx, build.ID)
+		return nil
+	}
+
+	// VM not running yet, wait
+	if vm.Status != queries.VmStatusRunning {
+		slog.Debug("build VM not ready yet", "build_id", build.ID, "vm_id", vm.ID, "status", vm.Status)
+		return errors.New("vm not ready yet")
+	}
+
+	// VM is running and we don't have an output image yet - execute the build
+	if !build.ImageID.Valid {
+		slog.Info("starting build execution", "build_id", build.ID, "vm_id", vm.ID)
+		err = s.executeBuild(ctx, build, vm)
 		if err != nil {
-			return err
-		}
-
-		// TODO: this ain't properly working as desired.
-		// 	vm might be stopped as we are already done with the build.
-		// 	need to adjust controlflow
-		if vm.Status != queries.VmStatusRunning {
-			return errors.New("vm not ready yet")
-		}
-
-		// TODO: we should do this at the entry of this reconcile func
-		// now that we have a running vm we can check if we have an image
-		if !build.ImageID.Valid {
-			// if we dont have an image, we now can use the docker in docker vm to create a build
-			//
-			// what needs to happen
-			// 1. download the source code of the user
-			// 2. check if we have a Dockerfile
-			// 		-> IF NOT then mark build as failed
-			// 3. build the repo with the Dockerfile on the remote vm's docker host
-			// 4. upload the image to our registry as
-			// 		repository = `zeitwork/<base58(project.id)>`
-			// 		tag		   = `<deployment.githubCommit>`
-			// 5. mark build as successful
-			//
-			// also we ideally want to stream the docker build logs to the table `build_logs`
+			slog.Error("build execution failed", "build_id", build.ID, "error", err)
+			s.db.BuildMarkFailed(ctx, build.ID)
+			s.cleanupBuildVM(ctx, build.VmID)
+			return nil // Don't return error - we've handled it by marking failed
 		}
 	}
 
-	// switch build.Status {
-	// case queries.BuildStatusPending:
-	// 	panic("unimplemented")
-	// 	// -> create a `vm` with status `pending` with the `zeitwork-build` image and update build to status `building`
-	// case queries.BuildStatusBuilding:
-	// 	panic("unimplemented")
-	// 	// -> if build status is `building` for more than 30 minutes mark it as failed
-	// 	// -> if vm status `pending`, `starting`, `running` or `stopping` for more than 10 minutes then set build status to `failed`
-	// 	// -> if vm status `failed` then set build status to `failed`
-	// 	// -> if vm status `stopped` then check build image
-	// 	// |-> if it exists then mark build as `successful`
-	// 	// |-> if it does not exist then mark build as `failed`
-	// case queries.BuildStatusSuccesful:
-	// 	panic("unimplemented")
-	// case queries.BuildStatusFailed:
-	// 	panic("unimplemented")
+	return nil
+}
 
-	// }
+// executeBuild performs the actual build process inside the VM
+func (s *Service) executeBuild(ctx context.Context, build queries.Build, vm queries.Vm) error {
+	// 1. Get project info
+	project, err := s.db.ProjectFirstByID(ctx, build.ProjectID)
+	if err != nil {
+		return fmt.Errorf("failed to get project: %w", err)
+	}
+
+	// 2. Check if GitHub token service is available
+	if s.githubTokenService == nil {
+		return fmt.Errorf("github token service not configured")
+	}
+
+	// 3. Get GitHub installation token
+	token, err := s.githubTokenService.GetInstallationToken(ctx, project.GithubInstallationID)
+	if err != nil {
+		return fmt.Errorf("failed to get github token: %w", err)
+	}
+
+	slog.Info("got github token", "build_id", build.ID, "repo", project.GithubRepository)
+
+	// 4. Download source tarball from GitHub
+	tarballReader, err := s.downloadSourceTarball(ctx, token, project.GithubRepository, build.GithubCommit)
+	if err != nil {
+		return fmt.Errorf("failed to download source: %w", err)
+	}
+	defer tarballReader.Close()
+
+	slog.Info("downloaded source tarball", "build_id", build.ID)
+
+	// 5. Connect to Docker daemon in VM
+	dockerHost := fmt.Sprintf("tcp://%s:2375", vm.IpAddress.Addr())
+	dockerClient, err := client.NewClientWithOpts(
+		client.WithHost(dockerHost),
+		client.WithAPIVersionNegotiation(),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to connect to docker: %w", err)
+	}
+	defer dockerClient.Close()
+
+	// Wait for Docker daemon to be ready
+	if err := s.waitForDockerReady(ctx, dockerClient); err != nil {
+		return fmt.Errorf("docker daemon not ready: %w", err)
+	}
+
+	slog.Info("connected to docker daemon", "build_id", build.ID, "host", dockerHost)
+
+	// 6. Prepare build context from tarball (convert gzip tarball to Docker-compatible tar)
+	buildContext, err := s.prepareBuildContext(tarballReader)
+	if err != nil {
+		return fmt.Errorf("failed to prepare build context: %w", err)
+	}
+
+	// 7. Build the image
+	imageTag := fmt.Sprintf("%s/%s/%s:%s",
+		s.cfg.DockerRegistryURL,                 // e.g., "ghcr.io"
+		s.cfg.DockerRegistryUsername,            // e.g., "zeitwork"
+		hex.EncodeToString(project.ID.Bytes[:]), // unique project identifier (lowercase hex)
+		build.GithubCommit,                      // commit sha as tag
+	)
+
+	slog.Info("building docker image with buildx", "build_id", build.ID, "tag", imageTag)
+
+	// Build and push using docker buildx with OCI media types
+	// We run a container with the docker CLI to execute buildx build
+	if err := s.runBuildxBuild(ctx, dockerClient, build, buildContext, imageTag); err != nil {
+		return fmt.Errorf("buildx build failed: %w", err)
+	}
+
+	slog.Info("docker build and push completed", "build_id", build.ID)
+
+	// 9. Create image record in DB
+	outputImage, err := s.db.ImageCreate(ctx, queries.ImageCreateParams{
+		ID:         uuid.New(),
+		Registry:   s.cfg.DockerRegistryURL,
+		Repository: fmt.Sprintf("%s/%s", s.cfg.DockerRegistryUsername, hex.EncodeToString(project.ID.Bytes[:])),
+		Tag:        build.GithubCommit,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create image record: %w", err)
+	}
+
+	slog.Info("created output image record", "build_id", build.ID, "image_id", outputImage.ID)
+
+	// 10. Mark build as successful
+	err = s.db.BuildMarkSuccessful(ctx, queries.BuildMarkSuccessfulParams{
+		ID:      build.ID,
+		ImageID: outputImage.ID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to mark build successful: %w", err)
+	}
+
+	slog.Info("build completed successfully", "build_id", build.ID)
+
+	// 11. Cleanup VM
+	s.cleanupBuildVM(ctx, build.VmID)
 
 	return nil
+}
+
+// downloadSourceTarball downloads the source code as a tarball from GitHub
+func (s *Service) downloadSourceTarball(ctx context.Context, token, repo, commit string) (io.ReadCloser, error) {
+	// GitHub tarball URL format: https://api.github.com/repos/{owner}/{repo}/tarball/{ref}
+	url := fmt.Sprintf("https://api.github.com/repos/%s/tarball/%s", repo, commit)
+
+	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Accept", "application/vnd.github+json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		return nil, fmt.Errorf("github returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	return resp.Body, nil
+}
+
+// prepareBuildContext converts a GitHub gzip tarball to a Docker build context
+// GitHub tarballs have a top-level directory like "owner-repo-sha/" that we need to strip
+func (s *Service) prepareBuildContext(gzipReader io.Reader) (io.Reader, error) {
+	// Create a pipe for streaming the output
+	pr, pw := io.Pipe()
+
+	go func() {
+		defer pw.Close()
+
+		// Decompress gzip
+		gzr, err := gzip.NewReader(gzipReader)
+		if err != nil {
+			pw.CloseWithError(fmt.Errorf("failed to create gzip reader: %w", err))
+			return
+		}
+		defer gzr.Close()
+
+		// Read input tar
+		tr := tar.NewReader(gzr)
+
+		// Write output tar
+		tw := tar.NewWriter(pw)
+		defer tw.Close()
+
+		var prefix string
+		foundDockerfile := false
+
+		for {
+			header, err := tr.Next()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				pw.CloseWithError(fmt.Errorf("failed to read tar: %w", err))
+				return
+			}
+
+			// Determine the prefix from the first entry (e.g., "owner-repo-sha/")
+			if prefix == "" {
+				parts := strings.SplitN(header.Name, "/", 2)
+				if len(parts) > 1 {
+					prefix = parts[0] + "/"
+				}
+			}
+
+			// Strip the prefix
+			newName := strings.TrimPrefix(header.Name, prefix)
+			if newName == "" {
+				continue // Skip the root directory itself
+			}
+
+			// Check if we found a Dockerfile
+			if filepath.Base(newName) == "Dockerfile" && !strings.Contains(newName, "/") {
+				foundDockerfile = true
+			}
+
+			// Create new header with stripped name
+			newHeader := *header
+			newHeader.Name = newName
+
+			if err := tw.WriteHeader(&newHeader); err != nil {
+				pw.CloseWithError(fmt.Errorf("failed to write tar header: %w", err))
+				return
+			}
+
+			if header.Typeflag == tar.TypeReg {
+				if _, err := io.Copy(tw, tr); err != nil {
+					pw.CloseWithError(fmt.Errorf("failed to copy tar content: %w", err))
+					return
+				}
+			}
+		}
+
+		if !foundDockerfile {
+			pw.CloseWithError(fmt.Errorf("no Dockerfile found in repository root"))
+			return
+		}
+	}()
+
+	return pr, nil
+}
+
+// waitForDockerReady waits for the Docker daemon to be ready
+func (s *Service) waitForDockerReady(ctx context.Context, dockerClient *client.Client) error {
+	for i := 0; i < 30; i++ { // Wait up to 30 seconds
+		_, err := dockerClient.Ping(ctx)
+		if err == nil {
+			return nil
+		}
+		slog.Debug("waiting for docker daemon", "attempt", i+1, "error", err)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(1 * time.Second):
+		}
+	}
+	return fmt.Errorf("docker daemon did not become ready")
+}
+
+// streamBuildLogs reads and logs the Docker build output, checking for errors
+func (s *Service) streamBuildLogs(ctx context.Context, build queries.Build, reader io.Reader) error {
+	scanner := bufio.NewScanner(reader)
+	// Docker build output can have very long lines
+	buf := make([]byte, 0, 64*1024)
+	scanner.Buffer(buf, 1024*1024)
+
+	for scanner.Scan() {
+		line := scanner.Text()
+
+		// Parse Docker build output (JSON format)
+		var msg struct {
+			Stream      string `json:"stream"`
+			Error       string `json:"error"`
+			ErrorDetail struct {
+				Message string `json:"message"`
+			} `json:"errorDetail"`
+		}
+
+		if err := json.Unmarshal([]byte(line), &msg); err != nil {
+			// Not JSON, log as-is
+			slog.Debug("build output", "build_id", build.ID, "line", line)
+			continue
+		}
+
+		if msg.Error != "" {
+			return fmt.Errorf("build error: %s", msg.Error)
+		}
+
+		if msg.Stream != "" {
+			streamLine := strings.TrimSuffix(msg.Stream, "\n")
+			if streamLine != "" {
+				slog.Debug("build output", "build_id", build.ID, "stream", streamLine)
+
+				// Store log in database
+				s.db.BuildLogCreate(ctx, queries.BuildLogCreateParams{
+					ID:             uuid.New(),
+					BuildID:        build.ID,
+					Message:        streamLine,
+					Level:          "info",
+					OrganisationID: build.OrganisationID,
+				})
+			}
+		}
+	}
+
+	return scanner.Err()
+}
+
+// runBuildxBuild executes docker buildx build inside a container to build and push with OCI media types
+func (s *Service) runBuildxBuild(ctx context.Context, dockerClient *client.Client, build queries.Build, buildContext io.Reader, imageTag string) error {
+	// Read build context into memory (needed to copy to container)
+	buildContextBytes, err := io.ReadAll(buildContext)
+	if err != nil {
+		return fmt.Errorf("failed to read build context: %w", err)
+	}
+
+	// Create a container with docker CLI to run buildx
+	// Using docker:cli image which has docker and buildx
+	containerConfig := &container.Config{
+		Image:      "docker:cli",
+		WorkingDir: "/build",
+		Env: []string{
+			"DOCKER_HOST=unix:///var/run/docker.sock",
+		},
+		Cmd: []string{
+			"docker", "buildx", "build",
+			"--push",
+			"--output", "type=image,oci-mediatypes=true",
+			"-t", imageTag,
+			"-f", "Dockerfile",
+			".",
+		},
+	}
+
+	hostConfig := &container.HostConfig{
+		Mounts: []mount.Mount{
+			{
+				Type:   mount.TypeBind,
+				Source: "/var/run/docker.sock",
+				Target: "/var/run/docker.sock",
+			},
+		},
+	}
+
+	// Pull the docker:cli image first (in case it's not present)
+	slog.Info("pulling docker:cli image", "build_id", build.ID)
+	pullResp, err := dockerClient.ImagePull(ctx, "docker:cli", image.PullOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to pull docker:cli image: %w", err)
+	}
+	io.Copy(io.Discard, pullResp)
+	pullResp.Close()
+
+	// Create the container
+	slog.Info("creating builder container", "build_id", build.ID)
+	createResp, err := dockerClient.ContainerCreate(ctx, containerConfig, hostConfig, nil, nil, "")
+	if err != nil {
+		return fmt.Errorf("failed to create builder container: %w", err)
+	}
+	containerID := createResp.ID
+
+	// Ensure cleanup
+	defer func() {
+		dockerClient.ContainerRemove(ctx, containerID, container.RemoveOptions{Force: true})
+	}()
+
+	// Copy build context into container at /build
+	slog.Info("copying build context to container", "build_id", build.ID, "size", len(buildContextBytes))
+	err = dockerClient.CopyToContainer(ctx, containerID, "/build", bytes.NewReader(buildContextBytes), container.CopyToContainerOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to copy build context: %w", err)
+	}
+
+	// Configure registry auth for buildx by creating docker config
+	dockerConfigJSON := fmt.Sprintf(`{"auths":{"%s":{"username":"%s","password":"%s"}}}`,
+		s.cfg.DockerRegistryURL,
+		s.cfg.DockerRegistryUsername,
+		s.cfg.DockerRegistryPAT,
+	)
+
+	// Create a tar archive with the docker config (include .docker directory in path)
+	var configTar bytes.Buffer
+	tw := tar.NewWriter(&configTar)
+	configBytes := []byte(dockerConfigJSON)
+	tw.WriteHeader(&tar.Header{
+		Name: ".docker/config.json",
+		Mode: 0600,
+		Size: int64(len(configBytes)),
+	})
+	tw.Write(configBytes)
+	tw.Close()
+
+	// Copy docker config to /root (tar will create .docker/ subdirectory)
+	err = dockerClient.CopyToContainer(ctx, containerID, "/root", &configTar, container.CopyToContainerOptions{})
+	if err != nil {
+		return fmt.Errorf("failed to copy docker config: %w", err)
+	}
+
+	// Start the container
+	slog.Info("starting buildx build", "build_id", build.ID, "tag", imageTag, "container_id", containerID)
+	if err := dockerClient.ContainerStart(ctx, containerID, container.StartOptions{}); err != nil {
+		return fmt.Errorf("failed to start builder container: %w", err)
+	}
+
+	slog.Info("container started, waiting for completion", "build_id", build.ID, "container_id", containerID)
+
+	// Wait for container to finish
+	statusCh, errCh := dockerClient.ContainerWait(ctx, containerID, container.WaitConditionNotRunning)
+
+	var exitCode int64
+	select {
+	case err := <-errCh:
+		if err != nil {
+			slog.Error("error waiting for container", "build_id", build.ID, "error", err)
+			return fmt.Errorf("error waiting for container: %w", err)
+		}
+	case status := <-statusCh:
+		exitCode = status.StatusCode
+		slog.Info("container exited", "build_id", build.ID, "exit_code", exitCode)
+	}
+
+	// Always get container logs (for both success and failure)
+	logReader, err := dockerClient.ContainerLogs(ctx, containerID, container.LogsOptions{
+		ShowStdout: true,
+		ShowStderr: true,
+	})
+	if err != nil {
+		slog.Error("failed to get container logs", "build_id", build.ID, "error", err)
+	} else {
+		defer logReader.Close()
+		// Use stdcopy to properly demux docker logs
+		var stdout, stderr bytes.Buffer
+		stdcopy.StdCopy(&stdout, &stderr, logReader)
+
+		// Log stdout
+		if stdout.Len() > 0 {
+			slog.Info("buildx stdout", "build_id", build.ID, "output", stdout.String())
+			for _, line := range strings.Split(stdout.String(), "\n") {
+				if line != "" {
+					s.db.BuildLogCreate(ctx, queries.BuildLogCreateParams{
+						ID:             uuid.New(),
+						BuildID:        build.ID,
+						Message:        line,
+						Level:          "info",
+						OrganisationID: build.OrganisationID,
+					})
+				}
+			}
+		}
+
+		// Log stderr
+		if stderr.Len() > 0 {
+			slog.Warn("buildx stderr", "build_id", build.ID, "output", stderr.String())
+			for _, line := range strings.Split(stderr.String(), "\n") {
+				if line != "" {
+					s.db.BuildLogCreate(ctx, queries.BuildLogCreateParams{
+						ID:             uuid.New(),
+						BuildID:        build.ID,
+						Message:        line,
+						Level:          "error",
+						OrganisationID: build.OrganisationID,
+					})
+				}
+			}
+		}
+	}
+
+	if exitCode != 0 {
+		return fmt.Errorf("buildx build failed with exit code %d", exitCode)
+	}
+
+	slog.Info("buildx build completed successfully", "build_id", build.ID)
+	return nil
+}
+
+// cleanupBuildVM marks the build VM for deletion
+func (s *Service) cleanupBuildVM(ctx context.Context, vmID uuid.UUID) {
+	slog.Info("cleaning up build VM", "vm_id", vmID)
+
+	// Soft delete the VM - the VM reconciler will handle actual cleanup
+	if err := s.db.VMSoftDelete(ctx, vmID); err != nil {
+		slog.Error("failed to soft delete build VM", "vm_id", vmID, "error", err)
+	}
 }

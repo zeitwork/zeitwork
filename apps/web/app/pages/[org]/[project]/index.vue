@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useIntervalFn } from "@vueuse/core";
+
 definePageMeta({
   layout: "project",
 });
@@ -11,19 +13,9 @@ const { data: deployments, refresh: refreshDeployments } = await useFetch(
   `/api/projects/${projectSlug}/deployments`,
 );
 
-// const { isPending, start, stop } = useTimeoutFn(() => {
-//   refreshDeployments();
-// }, 1000);
-
-// start();
-
-// watch(isPending, (newVal) => {
-//   if (newVal) {
-//     start();
-//   } else {
-//     start();
-//   }
-// });
+useIntervalFn(() => {
+  refreshDeployments();
+}, 1000);
 
 const isCreatingDeployment = ref(false);
 
@@ -57,6 +49,8 @@ function deploymentStatusColor(status: string) {
       return "text-yellow-500";
     case "building":
       return "text-blue-500";
+    case "starting":
+      return "text-blue-500";
     case "ready":
       return "text-green-500";
     case "failed":
@@ -73,6 +67,8 @@ function deploymentStatusBgColor(status: string) {
     case "pending":
       return "bg-yellow-100";
     case "building":
+      return "bg-blue-100";
+    case "starting":
       return "bg-blue-100";
     case "ready":
       return "bg-green-100";

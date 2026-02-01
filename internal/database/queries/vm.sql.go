@@ -161,6 +161,17 @@ func (q *Queries) VMNextIPAddress(ctx context.Context) (interface{}, error) {
 	return next_ip, err
 }
 
+const vMSoftDelete = `-- name: VMSoftDelete :exec
+UPDATE vms
+SET deleted_at = now()
+WHERE id = $1
+`
+
+func (q *Queries) VMSoftDelete(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, vMSoftDelete, id)
+	return err
+}
+
 const vMUpdateStatus = `-- name: VMUpdateStatus :one
 update vms set status = $1 where id=$2 returning id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at, pending_at, starting_at, running_at, stopping_at, stopped_at, failed_at
 `

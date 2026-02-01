@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { useIntervalFn } from "@vueuse/core";
 import { DotIcon } from "lucide-vue-next";
+
 definePageMeta({
   layout: "project",
 });
@@ -10,12 +12,20 @@ const deploymentId = route.params.id as string;
 
 const formattedId = computed(() => uuidToB58(deploymentId));
 
-const { data: logs } = await useFetch(`/api/logs`, {
+const { data: logs, refresh } = await useFetch(`/api/logs`, {
   query: {
     projectSlug,
     deploymentId,
   },
 });
+
+useIntervalFn(() => {
+  refresh();
+}, 1000);
+
+const parsedLogs = computed(() =>
+  logs.value?.map((log) => parseAnsi(log.message)) ?? []
+);
 </script>
 
 <template>
@@ -33,8 +43,19 @@ const { data: logs } = await useFetch(`/api/logs`, {
 
     <!-- Logs Terminal -->
     <div class="flex-1 overflow-auto bg-black p-4 font-mono text-sm">
-      <div class="text-xs text-neutral-500">No logs available yet...</div>
-      <pre class="text-xs text-neutral-500">{{ logs }}</pre>
+      <pre v-if="logs?.length === 0" class="text-xs text-neutral-500">No build logs available yet</pre>
+      <pre
+        v-for="(segments, index) in parsedLogs"
+        :key="index"
+        class="text-xs text-neutral-400"
+      ><span
+          v-for="(segment, i) in segments"
+          :key="i"
+          :style="{
+            color: segment.color ?? undefined,
+            fontWeight: segment.bold ? 'bold' : undefined,
+          }"
+        >{{ segment.text }}</span></pre>
     </div>
   </div>
 </template>

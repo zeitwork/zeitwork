@@ -166,6 +166,30 @@ func (q *Queries) BuildFirstPending(ctx context.Context) (Build, error) {
 	return i, err
 }
 
+const buildLogCreate = `-- name: BuildLogCreate :exec
+INSERT INTO build_logs (id, build_id, message, level, organisation_id, created_at)
+VALUES ($1, $2, $3, $4, $5, NOW())
+`
+
+type BuildLogCreateParams struct {
+	ID             uuid.UUID `json:"id"`
+	BuildID        uuid.UUID `json:"build_id"`
+	Message        string    `json:"message"`
+	Level          string    `json:"level"`
+	OrganisationID uuid.UUID `json:"organisation_id"`
+}
+
+func (q *Queries) BuildLogCreate(ctx context.Context, arg BuildLogCreateParams) error {
+	_, err := q.db.Exec(ctx, buildLogCreate,
+		arg.ID,
+		arg.BuildID,
+		arg.Message,
+		arg.Level,
+		arg.OrganisationID,
+	)
+	return err
+}
+
 const buildMarkBuilding = `-- name: BuildMarkBuilding :exec
 UPDATE builds
 SET status = 'building', building_at = now(), vm_id = $2
@@ -179,5 +203,32 @@ type BuildMarkBuildingParams struct {
 
 func (q *Queries) BuildMarkBuilding(ctx context.Context, arg BuildMarkBuildingParams) error {
 	_, err := q.db.Exec(ctx, buildMarkBuilding, arg.ID, arg.VmID)
+	return err
+}
+
+const buildMarkFailed = `-- name: BuildMarkFailed :exec
+UPDATE builds
+SET status = 'failed', failed_at = now()
+WHERE id = $1
+`
+
+func (q *Queries) BuildMarkFailed(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, buildMarkFailed, id)
+	return err
+}
+
+const buildMarkSuccessful = `-- name: BuildMarkSuccessful :exec
+UPDATE builds
+SET status = 'succesful', successful_at = now(), image_id = $2
+WHERE id = $1
+`
+
+type BuildMarkSuccessfulParams struct {
+	ID      uuid.UUID `json:"id"`
+	ImageID uuid.UUID `json:"image_id"`
+}
+
+func (q *Queries) BuildMarkSuccessful(ctx context.Context, arg BuildMarkSuccessfulParams) error {
+	_, err := q.db.Exec(ctx, buildMarkSuccessful, arg.ID, arg.ImageID)
 	return err
 }

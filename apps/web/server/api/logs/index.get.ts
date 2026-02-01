@@ -52,7 +52,7 @@ export default defineEventHandler(async (event) => {
         eq(buildLogs.organisationId, secure.organisationId),
       ),
     )
-    .orderBy(desc(buildLogs.id));
+    .orderBy(asc(buildLogs.id));
 
   return buildLogList;
 });

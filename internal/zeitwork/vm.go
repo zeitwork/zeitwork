@@ -180,9 +180,9 @@ func (s *Service) reconcileVmDelete(ctx context.Context, vm queries.Vm) error {
 func (s *Service) runCommand(name string, args ...string) error {
 	slog.Info("Running command ", "name", name, "args", args)
 	cmd := exec.Command(name, args...)
-	out, err := cmd.Output()
+	out, err := cmd.CombinedOutput() // Capture both stdout AND stderr
 	if err != nil {
-		slog.Error("Error while running command", "name", name, "err", err)
+		slog.Error("Error while running command", "name", name, "err", err, "output", string(out))
 		return err
 	}
 
