@@ -14,8 +14,11 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 		return err
 	}
 
+	slog.Info("reconciling deployment", "deployment_id", deployment.ID, "status", deployment.Status)
+
 	// Skip if deployment is already in a terminal state
 	if deployment.Status == queries.DeploymentStatusFailed || deployment.Status == queries.DeploymentStatusStopped {
+		slog.Info("deployment in terminal state, skipping", "deployment_id", deployment.ID, "status", deployment.Status)
 		return nil
 	}
 
@@ -36,7 +39,11 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 			ID:      deployment.ID,
 			BuildID: build.ID,
 		})
-		return err
+		if err != nil {
+			return err
+		}
+		slog.Info("marked deployment as building", "deployment_id", deployment.ID, "build_id", build.ID)
+		return nil
 	}
 
 	// ** Ensure build has completed ** //
@@ -52,13 +59,19 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 			return s.db.DeploymentMarkFailed(ctx, deployment.ID)
 		}
 
-		// if build has an image then advance to starting
+		// if build has an image then advance to starting (if not already)
 		if build.ImageID.Valid {
-			err = s.db.DeploymentMarkStarting(ctx, queries.DeploymentMarkStartingParams{
-				ID:      deployment.ID,
-				ImageID: build.ImageID,
-			})
-			return err
+			if deployment.Status == queries.DeploymentStatusBuilding {
+				err = s.db.DeploymentMarkStarting(ctx, queries.DeploymentMarkStartingParams{
+					ID:      deployment.ID,
+					ImageID: build.ImageID,
+				})
+				if err != nil {
+					return err
+				}
+				slog.Info("marked deployment as starting", "deployment_id", deployment.ID, "image_id", build.ImageID)
+			}
+			// Fall through to VM creation
 		} else {
 			return nil
 		}
@@ -66,13 +79,13 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 
 	// ** Ensure we have a VM ** //
 	if !deployment.VmID.Valid {
-		slog.Info("creating vm")
+		slog.Info("creating vm for deployment", "deployment_id", deployment.ID, "image_id", deployment.ImageID)
 		// create a build vm for this deployment
 		vm, err := s.VMCreate(ctx, VMCreateParams{
-			VCPUs:  1,
-			Memory: 2 * 1024,
-			// ImageID: deployment.ImageID,
-			Port: 8080,
+			VCPUs:   1,
+			Memory:  2 * 1024,
+			ImageID: deployment.ImageID,
+			Port:    8080,
 		})
 		if err != nil {
 			return err
@@ -81,7 +94,11 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 			ID:   deployment.ID,
 			VmID: vm.ID,
 		})
-		return err
+		if err != nil {
+			return err
+		}
+		slog.Info("linked vm to deployment", "deployment_id", deployment.ID, "vm_id", vm.ID)
+		return nil
 	}
 
 	if deployment.VmID.Valid {
@@ -95,7 +112,11 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 			// mark the deployment as running if it isn't already
 			if deployment.Status != queries.DeploymentStatusRunning {
 				err = s.db.DeploymentMarkRunning(ctx, deployment.ID)
-				return err
+				if err != nil {
+					return err
+				}
+				slog.Info("marked deployment as running", "deployment_id", deployment.ID, "vm_id", deployment.VmID)
+				return nil
 			}
 		}
 	}
