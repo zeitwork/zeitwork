@@ -6,11 +6,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgxlisten"
+	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 )
 
 type ReconcileFunc func(ctx context.Context, objectID uuid.UUID) error

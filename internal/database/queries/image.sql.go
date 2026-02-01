@@ -8,11 +8,11 @@ package queries
 import (
 	"context"
 
-	"github.com/google/uuid"
+	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 )
 
 const imageFindByID = `-- name: ImageFindByID :one
-select id, registry, repository, tag, digest, created_at, updated_at, deleted_at from images where id=$1
+select id, registry, repository, tag, digest, created_at, updated_at, deleted_at, disk_image_key from images where id=$1
 `
 
 func (q *Queries) ImageFindByID(ctx context.Context, id uuid.UUID) (Image, error) {
@@ -27,6 +27,7 @@ func (q *Queries) ImageFindByID(ctx context.Context, id uuid.UUID) (Image, error
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.DiskImageKey,
 	)
 	return i, err
 }

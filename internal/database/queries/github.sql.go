@@ -8,7 +8,7 @@ package queries
 import (
 	"context"
 
-	"github.com/google/uuid"
+	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 )
 
 const githubInstallationFindByID = `-- name: GithubInstallationFindByID :one

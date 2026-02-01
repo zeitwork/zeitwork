@@ -13,9 +13,9 @@ import (
 
 	"github.com/golang-jwt/jwt/v4"
 	"github.com/google/go-github/v67/github"
-	"github.com/google/uuid"
 
 	"github.com/zeitwork/zeitwork/internal/database"
+	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 )
 
 type Config struct {
@@ -75,7 +75,7 @@ func NewTokenService(cfg Config) (*Service, error) {
 // GetInstallationToken generates a short-lived access token for the given GitHub installation
 func (s *Service) GetInstallationToken(ctx context.Context, installationID uuid.UUID) (string, error) {
 	// Look up the GitHub installation ID from our database
-	installation, err := s.db.Queries().GithubInstallationFindByID(ctx, installationID)
+	installation, err := s.db.GithubInstallationFindByID(ctx, installationID)
 	if err != nil {
 		return "", fmt.Errorf("failed to get GitHub installation: %w", err)
 	}

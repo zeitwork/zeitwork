@@ -9,8 +9,8 @@ import (
 	"fmt"
 	"net/netip"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 )
 
 type BuildStatus string
@@ -156,8 +156,8 @@ type Build struct {
 	ProjectID      uuid.UUID          `json:"project_id"`
 	GithubCommit   string             `json:"github_commit"`
 	GithubBranch   string             `json:"github_branch"`
-	ImageID        pgtype.UUID        `json:"image_id"`
-	VmID           pgtype.UUID        `json:"vm_id"`
+	ImageID        uuid.UUID          `json:"image_id"`
+	VmID           uuid.UUID          `json:"vm_id"`
 	PendingAt      pgtype.Timestamptz `json:"pending_at"`
 	BuildingAt     pgtype.Timestamptz `json:"building_at"`
 	SuccessfulAt   pgtype.Timestamptz `json:"successful_at"`
@@ -193,9 +193,9 @@ type Deployment struct {
 	Status         DeploymentStatus   `json:"status"`
 	GithubCommit   string             `json:"github_commit"`
 	ProjectID      uuid.UUID          `json:"project_id"`
-	BuildID        pgtype.UUID        `json:"build_id"`
-	ImageID        pgtype.UUID        `json:"image_id"`
-	VmID           pgtype.UUID        `json:"vm_id"`
+	BuildID        uuid.UUID          `json:"build_id"`
+	ImageID        uuid.UUID          `json:"image_id"`
+	VmID           uuid.UUID          `json:"vm_id"`
 	PendingAt      pgtype.Timestamptz `json:"pending_at"`
 	BuildingAt     pgtype.Timestamptz `json:"building_at"`
 	StartingAt     pgtype.Timestamptz `json:"starting_at"`
@@ -222,7 +222,7 @@ type Domain struct {
 	ID             uuid.UUID          `json:"id"`
 	Name           string             `json:"name"`
 	ProjectID      uuid.UUID          `json:"project_id"`
-	DeploymentID   pgtype.UUID        `json:"deployment_id"`
+	DeploymentID   uuid.UUID          `json:"deployment_id"`
 	VerifiedAt     pgtype.Timestamptz `json:"verified_at"`
 	OrganisationID uuid.UUID          `json:"organisation_id"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
@@ -253,14 +253,15 @@ type GithubInstallation struct {
 }
 
 type Image struct {
-	ID         uuid.UUID          `json:"id"`
-	Registry   string             `json:"registry"`
-	Repository string             `json:"repository"`
-	Tag        string             `json:"tag"`
-	Digest     string             `json:"digest"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt  pgtype.Timestamptz `json:"deleted_at"`
+	ID           uuid.UUID          `json:"id"`
+	Registry     string             `json:"registry"`
+	Repository   string             `json:"repository"`
+	Tag          string             `json:"tag"`
+	Digest       string             `json:"digest"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
+	DiskImageKey pgtype.Text        `json:"disk_image_key"`
 }
 
 type Organisation struct {
@@ -306,15 +307,21 @@ type User struct {
 }
 
 type Vm struct {
-	ID        uuid.UUID          `json:"id"`
-	Vcpus     int32              `json:"vcpus"`
-	Memory    int32              `json:"memory"`
-	Status    VmStatus           `json:"status"`
-	ImageID   uuid.UUID          `json:"image_id"`
-	Port      pgtype.Int4        `json:"port"`
-	IpAddress netip.Prefix       `json:"ip_address"`
-	Metadata  []byte             `json:"metadata"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt pgtype.Timestamptz `json:"deleted_at"`
+	ID         uuid.UUID          `json:"id"`
+	Vcpus      int32              `json:"vcpus"`
+	Memory     int32              `json:"memory"`
+	Status     VmStatus           `json:"status"`
+	ImageID    uuid.UUID          `json:"image_id"`
+	Port       pgtype.Int4        `json:"port"`
+	IpAddress  netip.Prefix       `json:"ip_address"`
+	Metadata   []byte             `json:"metadata"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt  pgtype.Timestamptz `json:"deleted_at"`
+	PendingAt  pgtype.Timestamptz `json:"pending_at"`
+	StartingAt pgtype.Timestamptz `json:"starting_at"`
+	RunningAt  pgtype.Timestamptz `json:"running_at"`
+	StoppingAt pgtype.Timestamptz `json:"stopping_at"`
+	StoppedAt  pgtype.Timestamptz `json:"stopped_at"`
+	FailedAt   pgtype.Timestamptz `json:"failed_at"`
 }

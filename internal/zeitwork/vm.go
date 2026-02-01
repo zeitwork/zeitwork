@@ -12,54 +12,9 @@ import (
 	"slices"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/zeitwork/zeitwork/internal/database/queries"
+	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 )
-
-func (s *Service) reconcileVMDownloadImage(ctx context.Context, vm queries.Vm) error {
-	image, err := s.db.ImageFindByID(ctx, vm.ImageID)
-	if err != nil {
-		return err
-	}
-
-	// if the image already exists, skip
-	_, err = os.Stat(fmt.Sprintf("/data/base/%s.qcow2", image.ID.String()))
-	if err == nil {
-		slog.Info("Image already exists!", "id", image.ID)
-		return nil
-	}
-
-	// pull max one image at a time
-	s.imageMu.Lock()
-	defer s.imageMu.Unlock()
-
-	// try to pull the image
-	err = s.runCommand("skopeo", "copy", fmt.Sprintf("docker://%s/%s:%s", image.Registry, image.Repository, image.Tag), fmt.Sprintf("oci:%s:latest", image.ID.String()))
-	if err != nil {
-		return err
-	}
-
-	// extract the rootfs
-	tmpdir, err := os.MkdirTemp("", "image")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(tmpdir)
-
-	rootfs := tmpdir + "/"
-	err = s.runCommand("umoci", "unpack", "--image", image.ID.String()+":latest", rootfs)
-	if err != nil {
-		return err
-	}
-
-	// pack the rootfs as qcow2
-	err = s.runCommand("virt-make-fs", "--format=qcow2", "--type=ext4", rootfs, "--size=+5G", fmt.Sprintf("/data/base/%s.qcow2", image.ID.String()))
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
 
 func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 	vm, err := s.db.VMFirstByID(ctx, objectID)
@@ -136,6 +91,51 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 		delete(s.vmToCmd, vm.ID)
 		s.vmScheduler.Schedule(vm.ID, time.Now().Add(5*time.Second))
 	}()
+
+	return nil
+}
+
+func (s *Service) reconcileVMDownloadImage(ctx context.Context, vm queries.Vm) error {
+	image, err := s.db.ImageFindByID(ctx, vm.ImageID)
+	if err != nil {
+		return err
+	}
+
+	// if the image already exists, skip
+	_, err = os.Stat(fmt.Sprintf("/data/base/%s.qcow2", image.ID.String()))
+	if err == nil {
+		slog.Info("Image already exists!", "id", image.ID)
+		return nil
+	}
+
+	// pull max one image at a time
+	s.imageMu.Lock()
+	defer s.imageMu.Unlock()
+
+	// try to pull the image
+	err = s.runCommand("skopeo", "copy", fmt.Sprintf("docker://%s/%s:%s", image.Registry, image.Repository, image.Tag), fmt.Sprintf("oci:%s:latest", image.ID.String()))
+	if err != nil {
+		return err
+	}
+
+	// extract the rootfs
+	tmpdir, err := os.MkdirTemp("", "image")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmpdir)
+
+	rootfs := tmpdir + "/"
+	err = s.runCommand("umoci", "unpack", "--image", image.ID.String()+":latest", rootfs)
+	if err != nil {
+		return err
+	}
+
+	// pack the rootfs as qcow2
+	err = s.runCommand("virt-make-fs", "--format=qcow2", "--type=ext4", rootfs, "--size=+5G", fmt.Sprintf("/data/base/%s.qcow2", image.ID.String()))
+	if err != nil {
+		return err
+	}
 
 	return nil
 }

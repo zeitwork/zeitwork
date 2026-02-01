@@ -97,7 +97,7 @@ func NewService(cfg Config, logger *slog.Logger) (*Service, error) {
 			logger := slog.With("domain", name)
 
 			// Check if domain exists and is verified using sqlc
-			verifiedAt, err := db.Queries().DomainVerified(ctx, name)
+			verifiedAt, err := db.DomainVerified(ctx, name)
 			if err != nil {
 				logger.Warn("domain not found or not verified", "error", err)
 				return fmt.Errorf("domain not authorized: %s", name)
@@ -198,7 +198,7 @@ func (s *Service) Stop(ctx context.Context) error {
 }
 
 func (s *Service) loadRoutes(ctx context.Context) error {
-	rows, err := s.db.Queries().RouteFindActive(ctx)
+	rows, err := s.db.RouteFindActive(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get active routes: %w", err)
 	}
@@ -206,12 +206,12 @@ func (s *Service) loadRoutes(ctx context.Context) error {
 	newRoutes := make(map[string]Route)
 	for _, row := range rows {
 		// Skip routes where VM doesn't have a public IP yet
-		if !row.VmIp.Valid {
+		if !row.VmIp.IsValid() {
 			continue
 		}
 
 		newRoutes[row.DomainName] = Route{
-			IP:   row.VmIp.String,
+			IP:   row.VmIp.Addr().String(),
 			Port: row.VmPort.Int32,
 		}
 	}

@@ -9,8 +9,8 @@ import (
 	"context"
 	"net/netip"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 )
 
 const domainVerified = `-- name: DomainVerified :one

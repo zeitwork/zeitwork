@@ -9,7 +9,6 @@
   },
   "dependencies": {
     "@heroicons/vue": "^2.2.0",
-    "@kubernetes/client-node": "^1.3.0",
     "@nuxt/fonts": "^0.12.1",
     "@nuxt/icon": "^2.1.0",
     "@nuxt/kit": "^4.2.1",

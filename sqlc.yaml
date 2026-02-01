@@ -1,7 +1,7 @@
 version: "2"
 sql:
   - engine: "postgresql"
-    schema: "packages/database/migrations/*.sql"
+    schema: "packages/database/migrations/*/migration.sql"
     queries: "internal/database/sql/*.sql"
     gen:
       go:
@@ -14,8 +14,14 @@ sql:
         overrides:
           - db_type: "uuid"
             go_type:
-              import: "github.com/google/uuid"
+              import: "github.com/zeitwork/zeitwork/internal/shared/uuid"
               type: "UUID"
+            nullable: false
+          - db_type: "uuid"
+            go_type:
+              import: "github.com/zeitwork/zeitwork/internal/shared/uuid"
+              type: "UUID"
+            nullable: true
           - db_type: "timestamptz"
             go_type:
               import: "time"

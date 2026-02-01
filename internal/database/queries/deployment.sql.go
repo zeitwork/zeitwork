@@ -8,8 +8,7 @@ package queries
 import (
 	"context"
 
-	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 )
 
 const deploymentFind = `-- name: DeploymentFind :many
@@ -130,8 +129,8 @@ RETURNING id, status, github_commit, project_id, build_id, image_id, vm_id, pend
 `
 
 type DeploymentUpdateMarkBuildingParams struct {
-	ID      uuid.UUID   `json:"id"`
-	BuildID pgtype.UUID `json:"build_id"`
+	ID      uuid.UUID `json:"id"`
+	BuildID uuid.UUID `json:"build_id"`
 }
 
 func (q *Queries) DeploymentUpdateMarkBuilding(ctx context.Context, arg DeploymentUpdateMarkBuildingParams) (Deployment, error) {

@@ -3,19 +3,18 @@ package zeitwork
 import (
 	"context"
 	_ "embed"
+	"errors"
 	"log/slog"
 	"os/exec"
-	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/docker/docker/client"
-	"github.com/google/uuid"
 	"github.com/zeitwork/zeitwork/internal/database"
-	"github.com/zeitwork/zeitwork/internal/database/queries"
 	"github.com/zeitwork/zeitwork/internal/reconciler"
 	dnsresolver "github.com/zeitwork/zeitwork/internal/shared/dns"
+	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 )
 
 type Config struct {
@@ -38,7 +37,13 @@ type Service struct {
 
 	// DNS resolution
 	dnsResolver dnsresolver.Resolver
-	vmScheduler *reconciler.Scheduler
+
+	// Schedulers
+	deploymentScheduler *reconciler.Scheduler
+	buildScheduler      *reconciler.Scheduler
+	imageScheduler      *reconciler.Scheduler
+	vmScheduler         *reconciler.Scheduler
+	domainScheduler     *reconciler.Scheduler
 
 	// VM Stuff
 	imageMu sync.Mutex
@@ -57,10 +62,11 @@ func New(cfg Config) (*Service, error) {
 		nextTap:     atomic.Int32{},
 	}
 
+	s.deploymentScheduler = reconciler.NewScheduler(s.reconcileDeployment)
+	s.buildScheduler = reconciler.NewScheduler(s.reconcileBuild)
+	s.imageScheduler = reconciler.NewScheduler(s.reconcileImage)
 	s.vmScheduler = reconciler.NewScheduler(s.reconcileVM)
-	// s.deploymentScheduler
-	// s.buildScheduler
-	// s.buildScheduler
+	s.domainScheduler = reconciler.NewScheduler(s.reconcileDomain)
 
 	return s, nil
 }
@@ -69,32 +75,32 @@ func New(cfg Config) (*Service, error) {
 func (s *Service) Start(ctx context.Context) error {
 	slog.Info("Starting Zeitwork Reconciler")
 
-	//// Deployments
-	//deployments, err := s.db.Queries().DeploymentFind(ctx)
-	//if err != nil {
-	//	panic(err)
-	//}
-	//for _, deployment := range deployments {
-	//	s.reconcileDeployment(ctx, deployment.ID)
-	//}
-	//
-	//// Builds
-	//builds, err := s.db.Queries().BuildFind(ctx)
-	//if err != nil {
-	//	panic(err)
-	//}
-	//for _, build := range builds {
-	//	s.reconcileBuild(ctx, build.ID)
-	//}
+	// // Deployments
+	// deployments, err := s.db.Queries().DeploymentFind(ctx)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// for _, deployment := range deployments {
+	// 	s.reconcileDeployment(ctx, deployment.ID)
+	// }
 
-	//// Domains
-	//domains, err := s.db.Queries().DomainFind(ctx)
-	//if err != nil {
-	//	panic(err)
-	//}
-	//for _, domain := range domains {
-	//	s.reconcileDomain(ctx, domain.ID)
-	//}
+	// // Builds
+	// builds, err := s.db.Queries().BuildFind(ctx)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// for _, build := range builds {
+	// 	s.reconcileBuild(ctx, build.ID)
+	// }
+
+	// // Domains
+	// domains, err := s.db.Queries().DomainFind(ctx)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// for _, domain := range domains {
+	// 	s.reconcileDomain(ctx, domain.ID)
+	// }
 
 	// VMs
 	s.vmScheduler.SetupPGXListener(ctx, s.db.Pool, "vms")
@@ -116,103 +122,5 @@ func (s *Service) Start(ctx context.Context) error {
 func (s *Service) Stop() error {
 	slog.Info("stopping reconciler")
 
-	panic("not implemented")
-
-	return nil
-}
-
-const domainResolveTimeout = 10 * time.Second
-
-func matchesAllowedIP(resolution *dnsresolver.Resolution, allowedIP string) bool {
-	return slices.Contains(resolution.IPv4, allowedIP)
-}
-
-func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) error {
-	deployment, err := s.db.Queries.DeploymentFirstByID(ctx, objectID)
-	if err != nil {
-		return err
-	}
-
-	switch deployment.Status {
-	case queries.DeploymentStatusPending:
-		panic("unimplemented")
-		// TODO: create build with `pending` status AND deployment => `building`
-	case queries.DeploymentStatusBuilding:
-		panic("unimplemented")
-		// -> if build status `pending` or `building` for more than 10 minutes then set deployment status to `failed`
-		// -> if build status `failed` then mark deployment `failed`
-		// -> if build status `succesful` then create vm with `pending` status and update deployment to `starting`
-	case queries.DeploymentStatusStarting:
-		panic("unimplemented")
-		// -> if vm status `pending` or `starting` for more than 10 minutes set deployment status to `failed`
-	case queries.DeploymentStatusRunning:
-		panic("unimplemented")
-		// -> if there is a newer deployment with status `running` then mark this one as `stopping`
-	case queries.DeploymentStatusStopping:
-		panic("unimplemented")
-	case queries.DeploymentStatusStopped:
-		panic("unimplemented")
-		// -> if vm status is `running` then mark it as stopping
-		// -> if vm status is `stopped` then mark the deployment as `stopped`
-	case queries.DeploymentStatusFailed:
-		panic("unimplemented")
-	}
-
-	return nil
-}
-
-func (s *Service) reconcileBuild(ctx context.Context, objectID uuid.UUID) error {
-	build, err := s.db.Queries.BuildFirstByID(ctx, objectID)
-	if err != nil {
-		return err
-	}
-
-	switch build.Status {
-	case queries.BuildStatusPending:
-		panic("unimplemented")
-		// -> create a `vm` with status `pending` with the `zeitwork-build` image and update build to status `building`
-	case queries.BuildStatusBuilding:
-		panic("unimplemented")
-		// -> if build status is `building` for more than 30 minutes mark it as failed
-		// -> if vm status `pending`, `starting`, `running` or `stopping` for more than 10 minutes then set build status to `failed`
-		// -> if vm status `failed` then set build status to `failed`
-		// -> if vm status `stopped` then check build image
-		// |-> if it exists then mark build as `successful`
-		// |-> if it does not exist then mark build as `failed`
-	case queries.BuildStatusSuccesful:
-		panic("unimplemented")
-	case queries.BuildStatusFailed:
-		panic("unimplemented")
-
-	}
-
-	return nil
-}
-
-func (s *Service) reconcileDomain(ctx context.Context, objectID uuid.UUID) error {
-	domain, err := s.db.DomainFirstByID(ctx, objectID)
-	if err != nil {
-		return err
-	}
-
-	domainName := domain.Name
-
-	resolveCtx, cancel := context.WithTimeout(ctx, domainResolveTimeout)
-	resolution, err := s.dnsResolver.Resolve(resolveCtx, domainName)
-	cancel()
-	if err != nil {
-		// domain resolution failed
-		return nil
-	}
-
-	matchedIP := matchesAllowedIP(resolution, s.cfg.IPAdress)
-
-	if !matchedIP {
-		// domain does not point to allowed targets
-		return nil
-	}
-
-	s.db.DomainMarkVerified(ctx, domain.ID)
-
-	return nil
+	return errors.New("unimplemented")
 }

@@ -8,11 +8,11 @@ package queries
 import (
 	"context"
 
-	"github.com/google/uuid"
+	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 )
 
 const vMFind = `-- name: VMFind :many
-SELECT id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at
+SELECT id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at, pending_at, starting_at, running_at, stopping_at, stopped_at, failed_at
 FROM vms
 `
 
@@ -37,6 +37,12 @@ func (q *Queries) VMFind(ctx context.Context) ([]Vm, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.PendingAt,
+			&i.StartingAt,
+			&i.RunningAt,
+			&i.StoppingAt,
+			&i.StoppedAt,
+			&i.FailedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -49,7 +55,7 @@ func (q *Queries) VMFind(ctx context.Context) ([]Vm, error) {
 }
 
 const vMFirstByID = `-- name: VMFirstByID :one
-SELECT id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at
+SELECT id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at, pending_at, starting_at, running_at, stopping_at, stopped_at, failed_at
 FROM vms
 WHERE id = $1
 LIMIT 1
@@ -70,12 +76,18 @@ func (q *Queries) VMFirstByID(ctx context.Context, id uuid.UUID) (Vm, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.PendingAt,
+		&i.StartingAt,
+		&i.RunningAt,
+		&i.StoppingAt,
+		&i.StoppedAt,
+		&i.FailedAt,
 	)
 	return i, err
 }
 
 const vMUpdateStatus = `-- name: VMUpdateStatus :one
-update vms set status = $1 where id=$2 returning id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at
+update vms set status = $1 where id=$2 returning id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at, pending_at, starting_at, running_at, stopping_at, stopped_at, failed_at
 `
 
 type VMUpdateStatusParams struct {
@@ -98,6 +110,12 @@ func (q *Queries) VMUpdateStatus(ctx context.Context, arg VMUpdateStatusParams) 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.PendingAt,
+		&i.StartingAt,
+		&i.RunningAt,
+		&i.StoppingAt,
+		&i.StoppedAt,
+		&i.FailedAt,
 	)
 	return i, err
 }
