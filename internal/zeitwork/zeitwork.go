@@ -58,6 +58,9 @@ func New(cfg Config) (*Service, error) {
 	}
 
 	s.vmScheduler = reconciler.NewScheduler(s.reconcileVM)
+	// s.deploymentScheduler
+	// s.buildScheduler
+	// s.buildScheduler
 
 	return s, nil
 }

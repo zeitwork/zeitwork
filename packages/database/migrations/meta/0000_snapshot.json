@@ -147,12 +147,8 @@
           "name": "vms_image_id_images_id_fk",
           "tableFrom": "vms",
           "tableTo": "images",
-          "columnsFrom": [
-            "image_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["image_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -211,12 +207,8 @@
           "name": "build_logs_build_id_builds_id_fk",
           "tableFrom": "build_logs",
           "tableTo": "builds",
-          "columnsFrom": [
-            "build_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["build_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -224,12 +216,8 @@
           "name": "build_logs_organisation_id_organisations_id_fk",
           "tableFrom": "build_logs",
           "tableTo": "organisations",
-          "columnsFrom": [
-            "organisation_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["organisation_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -345,12 +333,8 @@
           "name": "builds_project_id_projects_id_fk",
           "tableFrom": "builds",
           "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["project_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -358,12 +342,8 @@
           "name": "builds_image_id_images_id_fk",
           "tableFrom": "builds",
           "tableTo": "images",
-          "columnsFrom": [
-            "image_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["image_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -371,12 +351,8 @@
           "name": "builds_vm_id_vms_id_fk",
           "tableFrom": "builds",
           "tableTo": "vms",
-          "columnsFrom": [
-            "vm_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["vm_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -384,12 +360,8 @@
           "name": "builds_organisation_id_organisations_id_fk",
           "tableFrom": "builds",
           "tableTo": "organisations",
-          "columnsFrom": [
-            "organisation_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["organisation_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -506,12 +478,8 @@
           "name": "deployment_logs_deployment_id_deployments_id_fk",
           "tableFrom": "deployment_logs",
           "tableTo": "deployments",
-          "columnsFrom": [
-            "deployment_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["deployment_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -519,12 +487,8 @@
           "name": "deployment_logs_organisation_id_organisations_id_fk",
           "tableFrom": "deployment_logs",
           "tableTo": "organisations",
-          "columnsFrom": [
-            "organisation_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["organisation_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -658,12 +622,8 @@
           "name": "deployments_project_id_projects_id_fk",
           "tableFrom": "deployments",
           "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["project_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -671,12 +631,8 @@
           "name": "deployments_build_id_builds_id_fk",
           "tableFrom": "deployments",
           "tableTo": "builds",
-          "columnsFrom": [
-            "build_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["build_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -684,12 +640,8 @@
           "name": "deployments_image_id_images_id_fk",
           "tableFrom": "deployments",
           "tableTo": "images",
-          "columnsFrom": [
-            "image_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["image_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -697,12 +649,8 @@
           "name": "deployments_vm_id_vms_id_fk",
           "tableFrom": "deployments",
           "tableTo": "vms",
-          "columnsFrom": [
-            "vm_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["vm_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -710,12 +658,8 @@
           "name": "deployments_organisation_id_organisations_id_fk",
           "tableFrom": "deployments",
           "tableTo": "organisations",
-          "columnsFrom": [
-            "organisation_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["organisation_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -793,12 +737,8 @@
           "name": "domains_project_id_projects_id_fk",
           "tableFrom": "domains",
           "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["project_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -806,12 +746,8 @@
           "name": "domains_deployment_id_deployments_id_fk",
           "tableFrom": "domains",
           "tableTo": "deployments",
-          "columnsFrom": [
-            "deployment_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["deployment_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -819,12 +755,8 @@
           "name": "domains_organisation_id_organisations_id_fk",
           "tableFrom": "domains",
           "tableTo": "organisations",
-          "columnsFrom": [
-            "organisation_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["organisation_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -834,10 +766,7 @@
         "domains_name_projectId_unique": {
           "name": "domains_name_projectId_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "name",
-            "project_id"
-          ]
+          "columns": ["name", "project_id"]
         }
       },
       "policies": {},
@@ -905,12 +834,8 @@
           "name": "environment_variables_project_id_projects_id_fk",
           "tableFrom": "environment_variables",
           "tableTo": "projects",
-          "columnsFrom": [
-            "project_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["project_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -918,12 +843,8 @@
           "name": "environment_variables_organisation_id_organisations_id_fk",
           "tableFrom": "environment_variables",
           "tableTo": "organisations",
-          "columnsFrom": [
-            "organisation_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["organisation_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -933,10 +854,7 @@
         "environment_variables_name_projectId_unique": {
           "name": "environment_variables_name_projectId_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "name",
-            "project_id"
-          ]
+          "columns": ["name", "project_id"]
         }
       },
       "policies": {},
@@ -1004,12 +922,8 @@
           "name": "github_installations_user_id_users_id_fk",
           "tableFrom": "github_installations",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1017,12 +931,8 @@
           "name": "github_installations_organisation_id_organisations_id_fk",
           "tableFrom": "github_installations",
           "tableTo": "organisations",
-          "columnsFrom": [
-            "organisation_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["organisation_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1032,9 +942,7 @@
         "github_installations_githubInstallationId_unique": {
           "name": "github_installations_githubInstallationId_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "github_installation_id"
-          ]
+          "columns": ["github_installation_id"]
         }
       },
       "policies": {},
@@ -1090,12 +998,8 @@
           "name": "organisation_members_user_id_users_id_fk",
           "tableFrom": "organisation_members",
           "tableTo": "users",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1103,12 +1007,8 @@
           "name": "organisation_members_organisation_id_organisations_id_fk",
           "tableFrom": "organisation_members",
           "tableTo": "organisations",
-          "columnsFrom": [
-            "organisation_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["organisation_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1169,9 +1069,7 @@
         "organisations_slug_unique": {
           "name": "organisations_slug_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "slug"
-          ]
+          "columns": ["slug"]
         }
       },
       "policies": {},
@@ -1245,12 +1143,8 @@
           "name": "projects_github_installation_id_github_installations_id_fk",
           "tableFrom": "projects",
           "tableTo": "github_installations",
-          "columnsFrom": [
-            "github_installation_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["github_installation_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         },
@@ -1258,12 +1152,8 @@
           "name": "projects_organisation_id_organisations_id_fk",
           "tableFrom": "projects",
           "tableTo": "organisations",
-          "columnsFrom": [
-            "organisation_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["organisation_id"],
+          "columnsTo": ["id"],
           "onDelete": "no action",
           "onUpdate": "no action"
         }
@@ -1273,10 +1163,7 @@
         "projects_slug_organisationId_unique": {
           "name": "projects_slug_organisationId_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "slug",
-            "organisation_id"
-          ]
+          "columns": ["slug", "organisation_id"]
         }
       },
       "policies": {},
@@ -1351,16 +1238,12 @@
         "users_email_unique": {
           "name": "users_email_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "email"
-          ]
+          "columns": ["email"]
         },
         "users_username_unique": {
           "name": "users_username_unique",
           "nullsNotDistinct": false,
-          "columns": [
-            "username"
-          ]
+          "columns": ["username"]
         }
       },
       "policies": {},
@@ -1372,37 +1255,17 @@
     "public.vm_status": {
       "name": "vm_status",
       "schema": "public",
-      "values": [
-        "pending",
-        "starting",
-        "running",
-        "stopping",
-        "stopped",
-        "failed"
-      ]
+      "values": ["pending", "starting", "running", "stopping", "stopped", "failed"]
     },
     "public.build_status": {
       "name": "build_status",
       "schema": "public",
-      "values": [
-        "pending",
-        "building",
-        "succesful",
-        "failed"
-      ]
+      "values": ["pending", "building", "succesful", "failed"]
     },
     "public.deployment_status": {
       "name": "deployment_status",
       "schema": "public",
-      "values": [
-        "pending",
-        "building",
-        "starting",
-        "running",
-        "stopping",
-        "stopped",
-        "failed"
-      ]
+      "values": ["pending", "building", "starting", "running", "stopping", "stopped", "failed"]
     }
   },
   "schemas": {},

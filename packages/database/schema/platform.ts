@@ -1,5 +1,15 @@
-import {integer, pgEnum, pgTable, text, uuid, jsonb, cidr, unique, inet} from "drizzle-orm/pg-core";
-import {sql} from "drizzle-orm";
+import {
+  integer,
+  pgEnum,
+  pgTable,
+  text,
+  uuid,
+  jsonb,
+  cidr,
+  unique,
+  inet,
+} from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import { timestamps } from "../utils/timestamps";
 import { uuidv7 } from "uuidv7";
 
@@ -12,22 +22,26 @@ export const vmStatusEnum = pgEnum("vm_status", [
   "failed",
 ]);
 
-export const vms = pgTable("vms", {
-  id: uuid().primaryKey().$defaultFn(uuidv7),
-  vcpus: integer().notNull(),
-  memory: integer().notNull(),
-  status: vmStatusEnum().notNull(),
-  imageId: uuid().references(() => images.id).notNull(),
-  port: integer(),
-  ipAddress: inet().notNull(),
-  metadata: jsonb(), // { pid: 1234 }
-  ...timestamps,
-},
-    (t) => [
-        {
-            excludeOverlap: sql`CONSTRAINT exclude_overlapping_networks EXCLUDE USING gist (${t.ipAddress} WITH &&)`
-        }
-    ],
+export const vms = pgTable(
+  "vms",
+  {
+    id: uuid().primaryKey().$defaultFn(uuidv7),
+    vcpus: integer().notNull(),
+    memory: integer().notNull(),
+    status: vmStatusEnum().notNull(),
+    imageId: uuid()
+      .references(() => images.id)
+      .notNull(),
+    port: integer(),
+    ipAddress: inet().notNull(),
+    metadata: jsonb(), // { pid: 1234 }
+    ...timestamps,
+  },
+  (t) => [
+    {
+      excludeOverlap: sql`CONSTRAINT exclude_overlapping_networks EXCLUDE USING gist (${t.ipAddress} WITH &&)`,
+    },
+  ],
 );
 
 export const images = pgTable("images", {
