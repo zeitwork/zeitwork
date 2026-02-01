@@ -34,8 +34,8 @@ SELECT
     v.id as vm_id,
     v.ip_address as vm_ip
 FROM domains d
-INNER JOIN deployments dep ON d.deployment_id = dep.id
-INNER JOIN vms v ON dep.vm_id = v.id
+         INNER JOIN deployments dep ON d.deployment_id = dep.id
+         INNER JOIN vms v ON dep.vm_id = v.id
 WHERE d.verified_at IS NOT NULL
   AND dep.status = 'running'
   AND v.status = 'running'

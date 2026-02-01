@@ -85,7 +85,7 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 			VCPUs:   1,
 			Memory:  2 * 1024,
 			ImageID: deployment.ImageID,
-			Port:    8080,
+			Port:    3000,
 		})
 		if err != nil {
 			return err

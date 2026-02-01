@@ -115,7 +115,16 @@ function deploymentLink(deployment: any) {
         </div>
         <div class="font-mono">{{ deployment.githubCommit.slice(0, 7) }}</div>
         <div>
-          <span>domains</span>
+          <a
+            v-if="deployment.domain"
+            :href="`https://${deployment.domain}`"
+            target="_blank"
+            class="text-blue-500 hover:underline"
+            @click.stop
+          >
+            {{ deployment.domain }}
+          </a>
+          <span v-else class="text-neutral-subtle">—</span>
         </div>
         <div class="text-right">{{ renderDate(deployment.createdAt) }}</div>
       </nuxt-link>

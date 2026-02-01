@@ -27,7 +27,7 @@
         "lexorank": "^1.0.5",
         "lucide-vue-next": "^0.553.0",
         "motion-v": "^1.7.4",
-        "nanoid": "^5.1.5",
+        "nanoid": "^5.1.6",
         "nuxt": "^4.2.1",
         "nuxt-auth-utils": "0.5.25",
         "octokit": "^5.0.5",

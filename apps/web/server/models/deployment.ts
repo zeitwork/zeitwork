@@ -6,6 +6,7 @@ import {
   githubInstallations,
 } from "@zeitwork/database/schema";
 import { eq } from "../utils/drizzle";
+import { nanoid } from "nanoid";
 
 type ModelResponse<T> =
   | {
@@ -85,7 +86,6 @@ export function useDeploymentModel() {
       // Create internal domain for the deployment
       const internalDomainName = generateInternalDomain(
         project.slug,
-        deployment.id,
         organisation.slug,
       );
 
@@ -93,7 +93,9 @@ export function useDeploymentModel() {
         await useDrizzle().insert(domains).values({
           name: internalDomainName,
           projectId: project.id,
+          deploymentId: deployment.id,
           organisationId: params.organisationId,
+          verifiedAt: new Date(),
         });
       } catch (domainError) {
         // Log the error but don't fail the deployment creation
@@ -113,16 +115,9 @@ export function useDeploymentModel() {
 
 /**
  * Generates an internal domain name for a deployment
- * Pattern: <project-slug>-<deployment-id>-<org-slug>.zeitwork.app (production)
- * Pattern: <project-slug>-<deployment-id>-<org-slug>.zeitwork.localhost (development)
+ * Pattern: <project-slug>-<nanoid>-<org-slug>.zeitwork.app
  */
-function generateInternalDomain(
-  projectSlug: string,
-  deploymentId: string,
-  orgSlug: string,
-): string {
-  const isDevelopment =
-    process.env.NODE_ENV === "development" || process.env.ENVIRONMENT === "development";
-  const baseDomain = isDevelopment ? "zeitwork.localhost" : "zeitwork.app";
-  return `${projectSlug}-${uuidToBase58(deploymentId)}-${orgSlug}.${baseDomain}`;
+function generateInternalDomain(projectSlug: string, orgSlug: string): string {
+  const id = nanoid(6);
+  return `${projectSlug}-${id}-${orgSlug}.zeitwork.app`.toLowerCase();
 }

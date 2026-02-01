@@ -24,7 +24,7 @@ func (s *Service) reconcileImage(ctx context.Context, objectID uuid.UUID) error 
 		return err
 	}
 
-	diskImageKey := fmt.Sprintf("/data/work/%s.qcow2", image.ID.String())
+	diskImageKey := fmt.Sprintf("/data/base/%s.qcow2", image.ID.String())
 
 	// if the image is not valid then we reschedule
 	if image.DiskImageKey.Valid {
@@ -81,14 +81,6 @@ func (s *Service) reconcileImage(ctx context.Context, objectID uuid.UUID) error 
 	err = s.runCommand("virt-make-fs", "--format=qcow2", "--type=ext4", bundlePath, "--size=+5G", baseImagePath)
 	if err != nil {
 		slog.Error("oh no! virt-make-fs crashed", "err", err)
-		return err
-	}
-
-	// remove existing work image
-	_ = os.Remove(diskImageKey)
-
-	err = s.runCommand("qemu-img", "create", "-f", "qcow2", "-b", fmt.Sprintf("/data/base/%s.qcow2", image.ID.String()), "-F", "qcow2", diskImageKey)
-	if err != nil {
 		return err
 	}
 

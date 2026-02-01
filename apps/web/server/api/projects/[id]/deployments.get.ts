@@ -1,4 +1,4 @@
-import { deployments, projects } from "@zeitwork/database/schema";
+import { deployments, projects, domains } from "@zeitwork/database/schema";
 import { eq, and } from "@zeitwork/database/utils/drizzle";
 import { z } from "zod";
 
@@ -25,8 +25,18 @@ export default defineEventHandler(async (event) => {
   }
 
   const deploymentList = await useDrizzle()
-    .select()
+    .select({
+      id: deployments.id,
+      status: deployments.status,
+      projectId: deployments.projectId,
+      githubCommit: deployments.githubCommit,
+      organisationId: deployments.organisationId,
+      createdAt: deployments.createdAt,
+      updatedAt: deployments.updatedAt,
+      domain: domains.name,
+    })
     .from(deployments)
+    .leftJoin(domains, eq(domains.deploymentId, deployments.id))
     .where(
       and(
         eq(deployments.projectId, project.id),
