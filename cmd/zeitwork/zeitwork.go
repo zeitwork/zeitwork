@@ -9,6 +9,7 @@ import (
 
 	"github.com/caarlos0/env/v11"
 	_ "github.com/joho/godotenv/autoload"
+	"github.com/lmittmann/tint"
 	"github.com/zeitwork/zeitwork/internal/database"
 	"github.com/zeitwork/zeitwork/internal/zeitwork"
 )
@@ -18,6 +19,9 @@ type Config struct {
 }
 
 func main() {
+	logger := slog.New(tint.NewHandler(os.Stdout, nil))
+	slog.SetDefault(logger)
+
 	// Setup signal handling for graceful shutdown
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
@@ -37,22 +41,21 @@ func main() {
 		panic("no db")
 	}
 
-	logger := slog.Default()
-
 	service, err := zeitwork.New(zeitwork.Config{
 		IPAdress:               "1.1.1.1", // TODO
 		DB:                     db,
 		DockerRegistryURL:      "",
 		DockerRegistryUsername: "",
 		DockerRegistryPassword: "",
-	}, logger)
+	})
 	if err != nil {
 		panic(err)
 	}
 
-	go func() {
-		service.Start(ctx)
-	}()
+	err = service.Start(ctx)
+	if err != nil {
+		panic(err)
+	}
 
 	// TODO: edge proxy
 

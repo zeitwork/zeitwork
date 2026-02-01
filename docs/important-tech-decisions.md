@@ -1,1 +1,0 @@
-- always use sqlc for queries

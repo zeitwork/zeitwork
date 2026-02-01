@@ -7,3 +7,6 @@ SELECT *
 FROM vms
 WHERE id = $1
 LIMIT 1;
+
+-- name: VMUpdateStatus :one
+update vms set status = $1 where id=$2 returning *;

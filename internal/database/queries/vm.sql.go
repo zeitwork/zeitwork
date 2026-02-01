@@ -73,3 +73,31 @@ func (q *Queries) VMFirstByID(ctx context.Context, id uuid.UUID) (Vm, error) {
 	)
 	return i, err
 }
+
+const vMUpdateStatus = `-- name: VMUpdateStatus :one
+update vms set status = $1 where id=$2 returning id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at
+`
+
+type VMUpdateStatusParams struct {
+	Status VmStatus  `json:"status"`
+	ID     uuid.UUID `json:"id"`
+}
+
+func (q *Queries) VMUpdateStatus(ctx context.Context, arg VMUpdateStatusParams) (Vm, error) {
+	row := q.db.QueryRow(ctx, vMUpdateStatus, arg.Status, arg.ID)
+	var i Vm
+	err := row.Scan(
+		&i.ID,
+		&i.Vcpus,
+		&i.Memory,
+		&i.Status,
+		&i.ImageID,
+		&i.Port,
+		&i.IpAddress,
+		&i.Metadata,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}

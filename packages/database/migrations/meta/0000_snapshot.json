@@ -1,5 +1,5 @@
 {
-  "id": "74436439-c5c4-462a-b769-5cb2d6d62e9c",
+  "id": "a79fff95-9ec2-4727-8afd-0e7ad624e17b",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -100,7 +100,7 @@
           "name": "image_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "port": {
           "name": "port",
@@ -110,9 +110,9 @@
         },
         "ip_address": {
           "name": "ip_address",
-          "type": "text",
+          "type": "inet",
           "primaryKey": false,
-          "notNull": false
+          "notNull": true
         },
         "metadata": {
           "name": "metadata",
@@ -580,6 +580,48 @@
         "vm_id": {
           "name": "vm_id",
           "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "pending_at": {
+          "name": "pending_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "building_at": {
+          "name": "building_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "starting_at": {
+          "name": "starting_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "running_at": {
+          "name": "running_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "stopping_at": {
+          "name": "stopping_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "stopped_at": {
+          "name": "stopped_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "failed_at": {
+          "name": "failed_at",
+          "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
         },

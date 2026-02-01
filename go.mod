@@ -11,7 +11,15 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/hetznercloud/hcloud-go/v2 v2.27.0
 	github.com/jackc/pgx/v5 v5.7.2
-	golang.org/x/crypto v0.42.0
+	github.com/jackc/pgxlisten v0.0.0-20250802141604-12b92425684c
+	github.com/lmittmann/tint v1.1.2
+	github.com/samber/lo v1.52.0
+	github.com/vishvananda/netlink v1.3.1
+)
+
+require (
+	github.com/vishvananda/netns v0.0.5 // indirect
+	golang.org/x/crypto v0.42.0 // indirect
 )
 
 require (

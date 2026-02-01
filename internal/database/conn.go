@@ -9,8 +9,8 @@ import (
 )
 
 type DB struct {
-	*pgxpool.Pool
-	q *queries.Queries
+	*queries.Queries
+	Pool *pgxpool.Pool
 }
 
 // NewDB creates a new database connection pool
@@ -27,19 +27,14 @@ func New(connString string) (*DB, error) {
 	}
 
 	return &DB{
-		Pool: pool,
-		q:    queries.New(pool),
+		Pool:    pool,
+		Queries: queries.New(pool),
 	}, nil
 }
 
 // Close closes the database connection pool
 func (db *DB) Close() {
 	db.Pool.Close()
-}
-
-// Queries returns the queries interface
-func (db *DB) Queries() *queries.Queries {
-	return db.q
 }
 
 // WithTx wraps a function in a database transaction
@@ -50,7 +45,7 @@ func (db *DB) WithTx(ctx context.Context, fn func(*queries.Queries) error) error
 	}
 	defer tx.Rollback(ctx)
 
-	q := db.Queries().WithTx(tx)
+	q := db.Queries.WithTx(tx)
 	if err := fn(q); err != nil {
 		return err
 	}

@@ -7,6 +7,7 @@ package queries
 import (
 	"database/sql/driver"
 	"fmt"
+	"net/netip"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -195,10 +196,6 @@ type Deployment struct {
 	BuildID        pgtype.UUID        `json:"build_id"`
 	ImageID        pgtype.UUID        `json:"image_id"`
 	VmID           pgtype.UUID        `json:"vm_id"`
-	OrganisationID uuid.UUID          `json:"organisation_id"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
 	PendingAt      pgtype.Timestamptz `json:"pending_at"`
 	BuildingAt     pgtype.Timestamptz `json:"building_at"`
 	StartingAt     pgtype.Timestamptz `json:"starting_at"`
@@ -206,6 +203,10 @@ type Deployment struct {
 	StoppingAt     pgtype.Timestamptz `json:"stopping_at"`
 	StoppedAt      pgtype.Timestamptz `json:"stopped_at"`
 	FailedAt       pgtype.Timestamptz `json:"failed_at"`
+	OrganisationID uuid.UUID          `json:"organisation_id"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
 }
 
 type DeploymentLog struct {
@@ -309,9 +310,9 @@ type Vm struct {
 	Vcpus     int32              `json:"vcpus"`
 	Memory    int32              `json:"memory"`
 	Status    VmStatus           `json:"status"`
-	ImageID   pgtype.UUID        `json:"image_id"`
+	ImageID   uuid.UUID          `json:"image_id"`
 	Port      pgtype.Int4        `json:"port"`
-	IpAddress pgtype.Text        `json:"ip_address"`
+	IpAddress netip.Prefix       `json:"ip_address"`
 	Metadata  []byte             `json:"metadata"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`

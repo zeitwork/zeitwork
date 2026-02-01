@@ -13,7 +13,7 @@ import (
 )
 
 const deploymentFind = `-- name: DeploymentFind :many
-SELECT id, status, github_commit, project_id, build_id, image_id, vm_id, organisation_id, created_at, updated_at, deleted_at, pending_at, building_at, starting_at, running_at, stopping_at, stopped_at, failed_at
+SELECT id, status, github_commit, project_id, build_id, image_id, vm_id, pending_at, building_at, starting_at, running_at, stopping_at, stopped_at, failed_at, organisation_id, created_at, updated_at, deleted_at
 FROM deployments
 `
 
@@ -34,10 +34,6 @@ func (q *Queries) DeploymentFind(ctx context.Context) ([]Deployment, error) {
 			&i.BuildID,
 			&i.ImageID,
 			&i.VmID,
-			&i.OrganisationID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
 			&i.PendingAt,
 			&i.BuildingAt,
 			&i.StartingAt,
@@ -45,6 +41,10 @@ func (q *Queries) DeploymentFind(ctx context.Context) ([]Deployment, error) {
 			&i.StoppingAt,
 			&i.StoppedAt,
 			&i.FailedAt,
+			&i.OrganisationID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -57,7 +57,7 @@ func (q *Queries) DeploymentFind(ctx context.Context) ([]Deployment, error) {
 }
 
 const deploymentFirstByID = `-- name: DeploymentFirstByID :one
-SELECT id, status, github_commit, project_id, build_id, image_id, vm_id, organisation_id, created_at, updated_at, deleted_at, pending_at, building_at, starting_at, running_at, stopping_at, stopped_at, failed_at
+SELECT id, status, github_commit, project_id, build_id, image_id, vm_id, pending_at, building_at, starting_at, running_at, stopping_at, stopped_at, failed_at, organisation_id, created_at, updated_at, deleted_at
 FROM deployments
 WHERE id = $1
 LIMIT 1
@@ -74,10 +74,6 @@ func (q *Queries) DeploymentFirstByID(ctx context.Context, id uuid.UUID) (Deploy
 		&i.BuildID,
 		&i.ImageID,
 		&i.VmID,
-		&i.OrganisationID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
 		&i.PendingAt,
 		&i.BuildingAt,
 		&i.StartingAt,
@@ -85,12 +81,16 @@ func (q *Queries) DeploymentFirstByID(ctx context.Context, id uuid.UUID) (Deploy
 		&i.StoppingAt,
 		&i.StoppedAt,
 		&i.FailedAt,
+		&i.OrganisationID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
 
 const deploymentFirstPending = `-- name: DeploymentFirstPending :one
-SELECT id, status, github_commit, project_id, build_id, image_id, vm_id, organisation_id, created_at, updated_at, deleted_at, pending_at, building_at, starting_at, running_at, stopping_at, stopped_at, failed_at
+SELECT id, status, github_commit, project_id, build_id, image_id, vm_id, pending_at, building_at, starting_at, running_at, stopping_at, stopped_at, failed_at, organisation_id, created_at, updated_at, deleted_at
 FROM deployments WHERE status = 'pending'
 ORDER BY id DESC
 LIMIT 1
@@ -107,10 +107,6 @@ func (q *Queries) DeploymentFirstPending(ctx context.Context) (Deployment, error
 		&i.BuildID,
 		&i.ImageID,
 		&i.VmID,
-		&i.OrganisationID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
 		&i.PendingAt,
 		&i.BuildingAt,
 		&i.StartingAt,
@@ -118,6 +114,10 @@ func (q *Queries) DeploymentFirstPending(ctx context.Context) (Deployment, error
 		&i.StoppingAt,
 		&i.StoppedAt,
 		&i.FailedAt,
+		&i.OrganisationID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }
@@ -126,7 +126,7 @@ const deploymentUpdateMarkBuilding = `-- name: DeploymentUpdateMarkBuilding :one
 UPDATE deployments
 SET build_id = $2, status = 'building'
 WHERE id = $1
-RETURNING id, status, github_commit, project_id, build_id, image_id, vm_id, organisation_id, created_at, updated_at, deleted_at, pending_at, building_at, starting_at, running_at, stopping_at, stopped_at, failed_at
+RETURNING id, status, github_commit, project_id, build_id, image_id, vm_id, pending_at, building_at, starting_at, running_at, stopping_at, stopped_at, failed_at, organisation_id, created_at, updated_at, deleted_at
 `
 
 type DeploymentUpdateMarkBuildingParams struct {
@@ -145,10 +145,6 @@ func (q *Queries) DeploymentUpdateMarkBuilding(ctx context.Context, arg Deployme
 		&i.BuildID,
 		&i.ImageID,
 		&i.VmID,
-		&i.OrganisationID,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
 		&i.PendingAt,
 		&i.BuildingAt,
 		&i.StartingAt,
@@ -156,6 +152,10 @@ func (q *Queries) DeploymentUpdateMarkBuilding(ctx context.Context, arg Deployme
 		&i.StoppingAt,
 		&i.StoppedAt,
 		&i.FailedAt,
+		&i.OrganisationID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
 	)
 	return i, err
 }

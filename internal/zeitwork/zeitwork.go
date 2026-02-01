@@ -4,13 +4,17 @@ import (
 	"context"
 	_ "embed"
 	"log/slog"
+	"os/exec"
 	"slices"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/docker/docker/client"
 	"github.com/google/uuid"
 	"github.com/zeitwork/zeitwork/internal/database"
 	"github.com/zeitwork/zeitwork/internal/database/queries"
+	"github.com/zeitwork/zeitwork/internal/reconciler"
 	dnsresolver "github.com/zeitwork/zeitwork/internal/shared/dns"
 )
 
@@ -27,98 +31,89 @@ type Config struct {
 type Service struct {
 	cfg Config
 
-	db     *database.DB
-	logger *slog.Logger
-	cancel context.CancelFunc
+	db *database.DB
 
 	// Docker client
 	dockerClient *client.Client
 
 	// DNS resolution
 	dnsResolver dnsresolver.Resolver
+	vmScheduler *reconciler.Scheduler
+
+	// VM Stuff
+	imageMu sync.Mutex
+	vmToCmd map[uuid.UUID]*exec.Cmd
+	nextTap atomic.Int32
 }
 
-// NewService creates a new reconciler service
-func New(cfg Config, logger *slog.Logger) (*Service, error) {
+// New creates a new reconciler service
+func New(cfg Config) (*Service, error) {
 	s := &Service{
 		cfg:         cfg,
 		db:          cfg.DB,
-		logger:      logger,
 		dnsResolver: dnsresolver.NewResolver(),
+		vmToCmd:     make(map[uuid.UUID]*exec.Cmd),
+		imageMu:     sync.Mutex{},
+		nextTap:     atomic.Int32{},
 	}
+
+	s.vmScheduler = reconciler.NewScheduler(s.reconcileVM)
 
 	return s, nil
 }
 
 // Start starts the reconciler service
 func (s *Service) Start(ctx context.Context) error {
-	ctx, cancel := context.WithCancel(ctx)
-	s.cancel = cancel
+	slog.Info("Starting Zeitwork Reconciler")
 
-	ticker := time.NewTicker(1 * time.Second)
-	defer ticker.Stop()
+	//// Deployments
+	//deployments, err := s.db.Queries().DeploymentFind(ctx)
+	//if err != nil {
+	//	panic(err)
+	//}
+	//for _, deployment := range deployments {
+	//	s.reconcileDeployment(ctx, deployment.ID)
+	//}
+	//
+	//// Builds
+	//builds, err := s.db.Queries().BuildFind(ctx)
+	//if err != nil {
+	//	panic(err)
+	//}
+	//for _, build := range builds {
+	//	s.reconcileBuild(ctx, build.ID)
+	//}
 
-	for {
-		select {
-		case <-ctx.Done():
-			s.logger.Debug("reconciler stopped")
-			return nil
-		case <-ticker.C:
-			start := time.Now()
-			s.logger.Info("starting reconciliation cycle")
+	//// Domains
+	//domains, err := s.db.Queries().DomainFind(ctx)
+	//if err != nil {
+	//	panic(err)
+	//}
+	//for _, domain := range domains {
+	//	s.reconcileDomain(ctx, domain.ID)
+	//}
 
-			// Deployments
-			deployments, err := s.db.Queries().DeploymentFind(ctx)
-			if err != nil {
-				panic(err)
-			}
-			for _, deployment := range deployments {
-				s.reconcileDeployment(ctx, deployment.ID)
-			}
-
-			// Builds
-			builds, err := s.db.Queries().BuildFind(ctx)
-			if err != nil {
-				panic(err)
-			}
-			for _, build := range builds {
-				s.reconcileBuild(ctx, build.ID)
-			}
-
-			// VMs
-			vms, err := s.db.Queries().VMFind(ctx)
-			if err != nil {
-				panic(err)
-			}
-			for _, vm := range vms {
-				s.reconcileVM(ctx, vm.ID)
-			}
-
-			// Domains
-			domains, err := s.db.Queries().DomainFind(ctx)
-			if err != nil {
-				panic(err)
-			}
-			for _, domain := range domains {
-				s.reconcileDomain(ctx, domain.ID)
-			}
-
-			s.logger.Debug("reconciliation cycle completed", "duration", time.Since(start))
-		}
+	// VMs
+	s.vmScheduler.SetupPGXListener(ctx, s.db.Pool, "vms")
+	vms, err := s.db.Queries.VMFind(ctx)
+	if err != nil {
+		return err
 	}
+
+	for _, vm := range vms {
+		s.vmScheduler.Schedule(vm.ID, time.Now())
+	}
+
+	s.vmScheduler.Start()
+
+	return nil
 }
 
 // Stop gracefully stops the reconciler service
 func (s *Service) Stop() error {
-	s.logger.Info("stopping reconciler")
+	slog.Info("stopping reconciler")
 
-	if s.cancel != nil {
-		s.cancel()
-	}
-
-	if s.db != nil {
-		s.db.Close()
-	}
+	panic("not implemented")
 
 	return nil
 }
@@ -130,7 +125,7 @@ func matchesAllowedIP(resolution *dnsresolver.Resolution, allowedIP string) bool
 }
 
 func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) error {
-	deployment, err := s.db.Queries().DeploymentFirstByID(ctx, objectID)
+	deployment, err := s.db.Queries.DeploymentFirstByID(ctx, objectID)
 	if err != nil {
 		return err
 	}
@@ -164,7 +159,7 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 }
 
 func (s *Service) reconcileBuild(ctx context.Context, objectID uuid.UUID) error {
-	build, err := s.db.Queries().BuildFirstByID(ctx, objectID)
+	build, err := s.db.Queries.BuildFirstByID(ctx, objectID)
 	if err != nil {
 		return err
 	}
@@ -191,36 +186,8 @@ func (s *Service) reconcileBuild(ctx context.Context, objectID uuid.UUID) error 
 	return nil
 }
 
-func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
-	vm, err := s.db.Queries().VMFirstByID(ctx, objectID)
-	if err != nil {
-		return err
-	}
-
-	switch vm.Status {
-	case queries.VmStatusPending:
-		panic("unimplemented")
-		// TODO: mark vm as starting
-	case queries.VmStatusStarting:
-		panic("unimplemented")
-		// TODO: start the vm with cloud hypervisor and either mark it as `running` or `failed`
-	case queries.VmStatusRunning:
-		panic("unimplemented")
-		// TODO: check status and ensure the vm is running
-	case queries.VmStatusStopping:
-		panic("unimplemented")
-		// TODO: stop the vm
-	case queries.VmStatusStopped:
-		panic("unimplemented")
-	case queries.VmStatusFailed:
-		panic("unimplemented")
-	}
-
-	return nil
-}
-
 func (s *Service) reconcileDomain(ctx context.Context, objectID uuid.UUID) error {
-	domain, err := s.db.Queries().DomainFirstByID(ctx, objectID)
+	domain, err := s.db.DomainFirstByID(ctx, objectID)
 	if err != nil {
 		return err
 	}
@@ -242,7 +209,7 @@ func (s *Service) reconcileDomain(ctx context.Context, objectID uuid.UUID) error
 		return nil
 	}
 
-	s.db.Queries().DomainMarkVerified(ctx, domain.ID)
+	s.db.DomainMarkVerified(ctx, domain.ID)
 
 	return nil
 }

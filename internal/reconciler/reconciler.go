@@ -7,6 +7,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgxlisten"
 )
 
 type ReconcileFunc func(ctx context.Context, objectID uuid.UUID) error
@@ -33,6 +37,31 @@ func (s *Scheduler) Schedule(objectID uuid.UUID, nextRun time.Time) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.schedule[objectID] = nextRun
+}
+
+func (s *Scheduler) SetupPGXListener(ctx context.Context, db *pgxpool.Pool, tableName string) {
+	listener := &pgxlisten.Listener{
+		Connect: func(ctx context.Context) (*pgx.Conn, error) {
+			con, err := db.Acquire(ctx)
+			if err != nil {
+				return nil, err
+			}
+			return con.Conn(), err
+		},
+	}
+
+	listener.Handle(tableName, pgxlisten.HandlerFunc(func(ctx context.Context, notification *pgconn.Notification, conn *pgx.Conn) error {
+		// payload must be an uuid
+		id, err := uuid.Parse(notification.Payload)
+		if err != nil {
+			return err
+		}
+
+		s.Schedule(id, time.Now())
+		return nil
+	}))
+
+	go listener.Listen(ctx)
 }
 
 func (s *Scheduler) Start() {

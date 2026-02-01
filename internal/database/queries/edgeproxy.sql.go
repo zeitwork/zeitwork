@@ -7,6 +7,7 @@ package queries
 
 import (
 	"context"
+	"net/netip"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -42,10 +43,10 @@ ORDER BY d.name
 `
 
 type RouteFindActiveRow struct {
-	DomainName string      `json:"domain_name"`
-	VmPort     pgtype.Int4 `json:"vm_port"`
-	VmID       uuid.UUID   `json:"vm_id"`
-	VmIp       pgtype.Text `json:"vm_ip"`
+	DomainName string       `json:"domain_name"`
+	VmPort     pgtype.Int4  `json:"vm_port"`
+	VmID       uuid.UUID    `json:"vm_id"`
+	VmIp       netip.Prefix `json:"vm_ip"`
 }
 
 // Domains -> Deployment -> VM

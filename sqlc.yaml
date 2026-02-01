@@ -23,3 +23,5 @@ sql:
               pointer: true
           - db_type: "jsonb"
             go_type: "encoding/json.RawMessage"
+          - db_type: "inet"
+            go_type: "net/netip.Prefix"
