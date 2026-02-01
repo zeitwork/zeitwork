@@ -102,12 +102,16 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 	cmd.Stderr = stderr
 	err = cmd.Start()
 	if err != nil {
+		slog.Error("failed to start hypervisor", "vm_id", vm.ID, "err", err)
 		return err
 	}
+	slog.Info("about to update to running", "vm_id", vm.ID, "vm_status", vm.Status)
 	vm, err = s.reconcileVMUpdateStatusIf(ctx, vm, queries.VmStatusRunning, queries.VmStatusStarting)
 	if err != nil {
+		slog.Error("failed to update to running", "vm_id", vm.ID, "err", err)
 		return err
 	}
+	slog.Info("updated to running", "vm_id", vm.ID, "vm_status", vm.Status)
 
 	s.vmToCmd[vm.ID] = cmd
 

@@ -16,7 +16,7 @@ import (
 	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 )
 
-func (s *Service) reconcileVM2(ctx context.Context, objectID uuid.UUID) error {
+func (s *Service) reconcileVM_OLD_DO_NOT_USE(ctx context.Context, objectID uuid.UUID) error {
 	vm, err := s.db.VMFirstByID(ctx, objectID)
 	if err != nil {
 		slog.Error("failed to find vm by id", "objectId", objectID)

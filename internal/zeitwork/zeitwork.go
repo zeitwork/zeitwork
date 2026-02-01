@@ -64,7 +64,7 @@ func New(cfg Config) (*Service, error) {
 	s.deploymentScheduler = reconciler.NewWithName("deployment", s.reconcileDeployment)
 	s.buildScheduler = reconciler.NewWithName("build", s.reconcileBuild)
 	s.imageScheduler = reconciler.NewWithName("image", s.reconcileImage)
-	s.vmScheduler = reconciler.NewWithName("vm", s.reconcileVM2)
+	s.vmScheduler = reconciler.NewWithName("vm", s.reconcileVM)
 	s.domainScheduler = reconciler.NewWithName("domain", s.reconcileDomain)
 
 	return s, nil
