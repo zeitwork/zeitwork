@@ -44,6 +44,10 @@
     "vue-router": "^4.6.3",
     "zod": "^4.1.12"
   },
+  "devDependencies": {
+    "oxfmt": "^0.23.0",
+    "oxlint": "^1.39.0"
+  },
   "trustedDependencies": [
     "@tailwindcss/vite",
     "@tailwindcss/oxide",

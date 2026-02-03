@@ -115,7 +115,7 @@ function addGitHubAccount() {
             </DInput>
           </div>
           <div class="flex flex-col gap-1">
-            <DHover v-for="project in filteredProjects" class="group">
+            <DHover v-for="project in filteredProjects" class="w-full group">
               <NuxtLink
                 class="flex h-10 w-full items-center justify-between p-2 pr-[6px]"
                 :to="`/${org}/new/setup`"

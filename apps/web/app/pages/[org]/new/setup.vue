@@ -41,7 +41,7 @@ const frameworks = [
   },
 ];
 
-const projectName = ref<string | undefined>("");
+const projectName = ref<string | undefined>(repo?.split("/")[1] || "");
 const rootDirectory = ref<string | undefined>("");
 
 const org = route.params.org;

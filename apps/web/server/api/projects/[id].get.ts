@@ -1,5 +1,5 @@
 import { projects } from "@zeitwork/database/schema";
-import { eq, and } from "@zeitwork/database/utils/drizzle";
+import { and, eq } from "@zeitwork/database/utils/drizzle";
 import { z } from "zod";
 
 const paramsSchema = z.object({
@@ -12,11 +12,10 @@ export default defineEventHandler(async (event) => {
 
   const { id } = await getValidatedRouterParams(event, paramsSchema.parse);
 
-  const result = await useDrizzle()
+  const [result] = await useDrizzle()
     .select()
     .from(projects)
-    .where(and(eq(projects.slug, id), eq(projects.organisationId, secure.organisationId)))
-    .orderBy(desc(projects.id));
+    .where(and(eq(projects.slug, id), eq(projects.organisationId, secure.organisationId)));
 
   return result;
 });

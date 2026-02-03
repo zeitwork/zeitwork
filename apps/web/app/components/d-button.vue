@@ -41,8 +41,8 @@ const variantClasses: { [key: string]: string } = {
 
 const paddingClasses: { [key: string]: string } = {
   xs: "px-2",
-  sm: "px-3",
-  md: "px-3",
+  sm: "px-2",
+  md: "px-2",
 };
 
 const heightClasses: { [key: string]: string } = {

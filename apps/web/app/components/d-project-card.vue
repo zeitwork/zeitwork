@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { GitMergeIcon, GithubIcon } from "lucide-vue-next";
+import { GitMergeIcon } from "lucide-vue-next";
 
 const route = useRoute();
 
@@ -66,20 +66,16 @@ const formattedDate = computed(() => {
         <p class="text-neutral-subtle text-copy-sm">Port {{ project.latestDeploymentId }}</p>
       </div>
     </div>
-    <div
-      class="bg-neutral-subtle text-copy-sm inline-flex items-center gap-1 rounded-full py-1 pr-3 pl-2"
+    <a
+      :href="githubUrl"
+      target="_blank"
+      rel="noopener noreferrer"
+      class="bg-neutral-subtle text-copy-sm inline-flex items-center gap-1 rounded-full py-1 pr-3 pl-2 hover:underline"
+      @click.stop
     >
-      <GithubIcon class="size-4" />
-      <a
-        :href="githubUrl"
-        target="_blank"
-        rel="noopener noreferrer"
-        class="hover:underline"
-        @click.stop
-      >
-        {{ githubOwner }}/{{ githubRepo }}
-      </a>
-    </div>
+      <img src="/icons/github-mark.svg" class="size-4" />
+      <span>{{ githubOwner }}/{{ githubRepo }}</span>
+    </a>
     <p class="text-neutral-subtle line-clamp-1 text-sm">{{ placeholderData.commitMessage }}</p>
     <div class="text-neutral-subtle text-copy-sm flex items-center gap-1">
       <p>{{ formattedDate }}</p>

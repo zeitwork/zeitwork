@@ -13,6 +13,10 @@
     "db:check": "bun --cwd ./packages/database drizzle-kit check",
     "web:dev": "bun --cwd ./apps/web dev",
     "web:build": "bun --cwd ./apps/web build",
+    "web:format": "oxfmt",
+    "web:format:check": "oxfmt --check",
+    "web:lint": "oxlint",
+    "web:lint:fix": "oxlint --fix",
     "api:start": "bun --cwd ./apps/api start"
   }
 }

@@ -25,27 +25,28 @@ async function createDomain() {
 
 <template>
   <div class="flex flex-col">
-    <div class="border-neutral-subtle flex items-center justify-between border-b p-4">
-      <div class="text-neutral-strong text-sm">Domains</div>
-      <DDialog>
-        <template #trigger>
-          <d-button>Create Domain</d-button>
-        </template>
-        <template #title>Create Domain</template>
-        <template #description>Create a new domain</template>
-        <template #content>
-          <div class="flex flex-col gap-2">
-            <DInput v-model="domainName" placeholder="Name of your domain" />
-          </div>
-        </template>
-        <template #cancel>
-          <d-button>Close</d-button>
-        </template>
-        <template #submit>
-          <d-button @click="createDomain">Create</d-button>
-        </template>
-      </DDialog>
-    </div>
+    <DHeader title="Domains">
+      <template #trailing>
+        <DDialog>
+          <template #trigger>
+            <DButton>Create Domain</DButton>
+          </template>
+          <template #title>Create Domain</template>
+          <template #description>Create a new domain</template>
+          <template #content>
+            <div class="flex flex-col gap-2">
+              <DInput v-model="domainName" placeholder="Name of your domain" />
+            </div>
+          </template>
+          <template #cancel>
+            <DButton>Close</DButton>
+          </template>
+          <template #submit>
+            <DButton @click="createDomain">Create</DButton>
+          </template>
+        </DDialog>
+      </template>
+    </DHeader>
     <div class="flex-1 overflow-auto">
       <div
         v-for="domain in domains"

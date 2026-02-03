@@ -6,30 +6,46 @@ type Props = {
   hoverScale?: string;
   activeScale?: string;
   inactiveScale?: string;
-  ring?: boolean;
+  focus?: boolean;
+  interactive?: boolean;
+  innerClass?: string;
+  disabled?: boolean;
+  fullWidth?: boolean;
 };
 
 const {
   active = false,
   background = "bg-neutral-subtle",
-  borderRadius = "rounded-[10px]",
-  hoverScale = "group-hover:inset-0",
+  borderRadius = "rounded-md",
+  hoverScale = "group-hover/h:inset-0",
   activeScale = "inset-0",
   inactiveScale = "inset-1",
-  ring = true,
+  focus = true,
+  interactive = true,
+  innerClass = "",
+  disabled = false,
+  fullWidth = false,
 } = defineProps<Props>();
 </script>
 
 <template>
-  <div class="text-neutral text-copy group relative flex items-center">
+  <div
+    class="text-neutral text-copy group/h relative flex items-center"
+    :class="[fullWidth ? 'w-full' : 'w-fit']"
+  >
     <div
-      class="absolute inset-0 transition-all group-hover:opacity-100"
+      class="absolute inset-0 transition-all"
       :class="[
         background,
         borderRadius,
-        hoverScale,
+        disabled ? '' : hoverScale,
+        disabled ? '' : 'group-hover/h:opacity-100',
+        interactive && !disabled ? `group-active/h:inset-0.5` : ``,
         active ? `opacity-100 ${activeScale}` : `opacity-0 ${inactiveScale}`,
-        ring ? 'group-active:inset-[-2px]' : '',
+        focus && !disabled
+          ? `group-has-focus-visible/h:inset-0 group-has-focus-visible/h:opacity-100 group-has-focus-visible/h:ring-neutral-strong/10 group-has-focus-visible/h:ring-2`
+          : '',
+        innerClass,
       ]"
     ></div>
     <div class="relative z-2 flex w-full items-center gap-2">
