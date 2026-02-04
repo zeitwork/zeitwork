@@ -37,6 +37,15 @@ func (s *Service) reconcileBuild(ctx context.Context, objectID uuid.UUID) error 
 		return nil
 	}
 
+	// Check for stuck builds - if building for more than 15 minutes, mark as failed
+	if build.Status == queries.BuildStatusBuilding && build.BuildingAt.Valid {
+		buildingDuration := time.Since(build.BuildingAt.Time)
+		if buildingDuration > 15*time.Minute {
+			slog.Warn("build stuck, marking as failed", "build_id", build.ID, "building_for", buildingDuration)
+			return s.db.BuildMarkFailed(ctx, build.ID)
+		}
+	}
+
 	// Check if this build is already being executed (prevent concurrent execution)
 	s.activeBuildsMu.Lock()
 	if s.activeBuilds[build.ID] {

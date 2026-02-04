@@ -76,9 +76,11 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 					return err
 				}
 				slog.Info("marked deployment as starting", "deployment_id", deployment.ID, "image_id", build.ImageID)
-				return nil // Let next reconcile handle VM creation with fresh deployment data
+				// Update local state to continue with VM creation
+				deployment.ImageID = build.ImageID
+				deployment.Status = queries.DeploymentStatusStarting
 			}
-			// Only fall through to VM creation if we're already in 'starting' status
+			// Fall through to VM creation below
 		} else {
 			return nil
 		}
