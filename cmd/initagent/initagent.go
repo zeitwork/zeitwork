@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"strings"
 	"syscall"
 
 	"github.com/samber/lo"
@@ -83,6 +84,14 @@ func main() {
 	checkErr(syscall.Setuid(int(config.Process.User.UID)))
 
 	env := append(config.Process.Env, vmConfig.Env...)
+
+	// Set environment variables so exec.LookPath uses the container's PATH
+	for _, e := range env {
+		parts := strings.SplitN(e, "=", 2)
+		if len(parts) == 2 {
+			os.Setenv(parts[0], parts[1])
+		}
+	}
 
 	// exec (replace and nuke us, becoming init and pid 1)
 	checkErr(os.MkdirAll("/mnt/rootfs/sys/fs/cgroup", 0555))
