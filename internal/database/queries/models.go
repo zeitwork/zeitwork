@@ -306,21 +306,22 @@ type User struct {
 }
 
 type Vm struct {
-	ID         uuid.UUID          `json:"id"`
-	Vcpus      int32              `json:"vcpus"`
-	Memory     int32              `json:"memory"`
-	Status     VmStatus           `json:"status"`
-	ImageID    uuid.UUID          `json:"image_id"`
-	Port       pgtype.Int4        `json:"port"`
-	IpAddress  netip.Prefix       `json:"ip_address"`
-	Metadata   []byte             `json:"metadata"`
-	CreatedAt  pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt  pgtype.Timestamptz `json:"deleted_at"`
-	PendingAt  pgtype.Timestamptz `json:"pending_at"`
-	StartingAt pgtype.Timestamptz `json:"starting_at"`
-	RunningAt  pgtype.Timestamptz `json:"running_at"`
-	StoppingAt pgtype.Timestamptz `json:"stopping_at"`
-	StoppedAt  pgtype.Timestamptz `json:"stopped_at"`
-	FailedAt   pgtype.Timestamptz `json:"failed_at"`
+	ID           uuid.UUID          `json:"id"`
+	Vcpus        int32              `json:"vcpus"`
+	Memory       int32              `json:"memory"`
+	Status       VmStatus           `json:"status"`
+	ImageID      uuid.UUID          `json:"image_id"`
+	Port         pgtype.Int4        `json:"port"`
+	IpAddress    netip.Prefix       `json:"ip_address"`
+	Metadata     []byte             `json:"metadata"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
+	PendingAt    pgtype.Timestamptz `json:"pending_at"`
+	StartingAt   pgtype.Timestamptz `json:"starting_at"`
+	RunningAt    pgtype.Timestamptz `json:"running_at"`
+	StoppingAt   pgtype.Timestamptz `json:"stopping_at"`
+	StoppedAt    pgtype.Timestamptz `json:"stopped_at"`
+	FailedAt     pgtype.Timestamptz `json:"failed_at"`
+	EnvVariables pgtype.Text        `json:"env_variables"`
 }

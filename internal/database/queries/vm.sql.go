@@ -14,20 +14,21 @@ import (
 )
 
 const vMCreate = `-- name: VMCreate :one
-INSERT INTO vms (id, vcpus, memory, status, image_id, port, ip_address, metadata)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-RETURNING id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at, pending_at, starting_at, running_at, stopping_at, stopped_at, failed_at
+INSERT INTO vms (id, vcpus, memory, status, image_id, port, ip_address, env_variables, metadata)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+RETURNING id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at, pending_at, starting_at, running_at, stopping_at, stopped_at, failed_at, env_variables
 `
 
 type VMCreateParams struct {
-	ID        uuid.UUID    `json:"id"`
-	Vcpus     int32        `json:"vcpus"`
-	Memory    int32        `json:"memory"`
-	Status    VmStatus     `json:"status"`
-	ImageID   uuid.UUID    `json:"image_id"`
-	Port      pgtype.Int4  `json:"port"`
-	IpAddress netip.Prefix `json:"ip_address"`
-	Metadata  []byte       `json:"metadata"`
+	ID           uuid.UUID    `json:"id"`
+	Vcpus        int32        `json:"vcpus"`
+	Memory       int32        `json:"memory"`
+	Status       VmStatus     `json:"status"`
+	ImageID      uuid.UUID    `json:"image_id"`
+	Port         pgtype.Int4  `json:"port"`
+	IpAddress    netip.Prefix `json:"ip_address"`
+	EnvVariables pgtype.Text  `json:"env_variables"`
+	Metadata     []byte       `json:"metadata"`
 }
 
 func (q *Queries) VMCreate(ctx context.Context, arg VMCreateParams) (Vm, error) {
@@ -39,6 +40,7 @@ func (q *Queries) VMCreate(ctx context.Context, arg VMCreateParams) (Vm, error) 
 		arg.ImageID,
 		arg.Port,
 		arg.IpAddress,
+		arg.EnvVariables,
 		arg.Metadata,
 	)
 	var i Vm
@@ -60,12 +62,13 @@ func (q *Queries) VMCreate(ctx context.Context, arg VMCreateParams) (Vm, error) 
 		&i.StoppingAt,
 		&i.StoppedAt,
 		&i.FailedAt,
+		&i.EnvVariables,
 	)
 	return i, err
 }
 
 const vMFind = `-- name: VMFind :many
-SELECT id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at, pending_at, starting_at, running_at, stopping_at, stopped_at, failed_at
+SELECT id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at, pending_at, starting_at, running_at, stopping_at, stopped_at, failed_at, env_variables
 FROM vms
 `
 
@@ -96,6 +99,7 @@ func (q *Queries) VMFind(ctx context.Context) ([]Vm, error) {
 			&i.StoppingAt,
 			&i.StoppedAt,
 			&i.FailedAt,
+			&i.EnvVariables,
 		); err != nil {
 			return nil, err
 		}
@@ -108,7 +112,7 @@ func (q *Queries) VMFind(ctx context.Context) ([]Vm, error) {
 }
 
 const vMFindByImageID = `-- name: VMFindByImageID :many
-SELECT id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at, pending_at, starting_at, running_at, stopping_at, stopped_at, failed_at FROM vms WHERE image_id = $1
+SELECT id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at, pending_at, starting_at, running_at, stopping_at, stopped_at, failed_at, env_variables FROM vms WHERE image_id = $1
 `
 
 func (q *Queries) VMFindByImageID(ctx context.Context, imageID uuid.UUID) ([]Vm, error) {
@@ -138,6 +142,7 @@ func (q *Queries) VMFindByImageID(ctx context.Context, imageID uuid.UUID) ([]Vm,
 			&i.StoppingAt,
 			&i.StoppedAt,
 			&i.FailedAt,
+			&i.EnvVariables,
 		); err != nil {
 			return nil, err
 		}
@@ -150,7 +155,7 @@ func (q *Queries) VMFindByImageID(ctx context.Context, imageID uuid.UUID) ([]Vm,
 }
 
 const vMFirstByID = `-- name: VMFirstByID :one
-SELECT id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at, pending_at, starting_at, running_at, stopping_at, stopped_at, failed_at
+SELECT id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at, pending_at, starting_at, running_at, stopping_at, stopped_at, failed_at, env_variables
 FROM vms
 WHERE id = $1
 LIMIT 1
@@ -177,6 +182,7 @@ func (q *Queries) VMFirstByID(ctx context.Context, id uuid.UUID) (Vm, error) {
 		&i.StoppingAt,
 		&i.StoppedAt,
 		&i.FailedAt,
+		&i.EnvVariables,
 	)
 	return i, err
 }
@@ -219,7 +225,7 @@ func (q *Queries) VMSoftDelete(ctx context.Context, id uuid.UUID) error {
 }
 
 const vMUpdateStatus = `-- name: VMUpdateStatus :one
-update vms set status = $1 where id=$2 returning id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at, pending_at, starting_at, running_at, stopping_at, stopped_at, failed_at
+update vms set status = $1 where id=$2 returning id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at, pending_at, starting_at, running_at, stopping_at, stopped_at, failed_at, env_variables
 `
 
 type VMUpdateStatusParams struct {
@@ -248,6 +254,7 @@ func (q *Queries) VMUpdateStatus(ctx context.Context, arg VMUpdateStatusParams) 
 		&i.StoppingAt,
 		&i.StoppedAt,
 		&i.FailedAt,
+		&i.EnvVariables,
 	)
 	return i, err
 }

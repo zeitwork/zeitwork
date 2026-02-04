@@ -2,9 +2,12 @@ package zeitwork
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log/slog"
 
 	"github.com/zeitwork/zeitwork/internal/database/queries"
+	"github.com/zeitwork/zeitwork/internal/shared/crypto"
 	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 )
 
@@ -84,12 +87,20 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 	// ** Ensure we have a VM ** //
 	if !deployment.VmID.Valid {
 		slog.Info("creating vm for deployment", "deployment_id", deployment.ID, "image_id", deployment.ImageID)
+
+		// Fetch and prepare environment variables for the VM
+		encryptedEnvVars, err := s.prepareEnvVariablesForVM(ctx, deployment.ProjectID)
+		if err != nil {
+			return fmt.Errorf("failed to prepare environment variables: %w", err)
+		}
+
 		// create a build vm for this deployment
 		vm, err := s.VMCreate(ctx, VMCreateParams{
-			VCPUs:   1,
-			Memory:  2 * 1024,
-			ImageID: deployment.ImageID,
-			Port:    3000,
+			VCPUs:        1,
+			Memory:       2 * 1024,
+			ImageID:      deployment.ImageID,
+			Port:         3000,
+			EnvVariables: encryptedEnvVars,
 		})
 		if err != nil {
 			return err
@@ -155,4 +166,40 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 	// }
 
 	return nil
+}
+
+// prepareEnvVariablesForVM fetches environment variables for a project,
+// decrypts them, formats as "KEY=value" strings, and re-encrypts as JSON.
+// Returns an encrypted JSON array string suitable for storing in vms.env_variables.
+func (s *Service) prepareEnvVariablesForVM(ctx context.Context, projectID uuid.UUID) (string, error) {
+	// Fetch environment variables for the project
+	envVars, err := s.db.EnvironmentVariableFindByProjectID(ctx, projectID)
+	if err != nil {
+		return "", fmt.Errorf("failed to fetch environment variables: %w", err)
+	}
+
+	// Decrypt each value and format as "KEY=value"
+	envStrings := make([]string, 0, len(envVars))
+	for _, ev := range envVars {
+		decryptedValue, err := crypto.Decrypt(ev.Value)
+		if err != nil {
+			return "", fmt.Errorf("failed to decrypt environment variable %s: %w", ev.Name, err)
+		}
+		envStrings = append(envStrings, fmt.Sprintf("%s=%s", ev.Name, decryptedValue))
+	}
+
+	// Marshal to JSON
+	envJSON, err := json.Marshal(envStrings)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal environment variables: %w", err)
+	}
+
+	// Re-encrypt the JSON array
+	encryptedEnvVars, err := crypto.Encrypt(string(envJSON))
+	if err != nil {
+		return "", fmt.Errorf("failed to encrypt environment variables: %w", err)
+	}
+
+	slog.Info("prepared environment variables for VM", "projectID", projectID, "count", len(envStrings))
+	return encryptedEnvVars, nil
 }

@@ -17,14 +17,16 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/zeitwork/zeitwork/internal/database/queries"
+	"github.com/zeitwork/zeitwork/internal/shared/crypto"
 	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 )
 
 type VMCreateParams struct {
-	VCPUs   int32
-	Memory  int32
-	ImageID uuid.UUID
-	Port    int32
+	VCPUs        int32
+	Memory       int32
+	ImageID      uuid.UUID
+	Port         int32
+	EnvVariables string // Encrypted JSON array of "KEY=value" strings
 }
 
 func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
@@ -102,11 +104,24 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 	vmIp := vm.IpAddress
 	hostIp := netip.PrefixFrom(vm.IpAddress.Addr().Prev(), vmIp.Bits())
 
-	slog.Info("STARTING DA VM", "id", vm.ID, "hostIp", hostIp, "vmIp", vmIp)
+	// Decrypt environment variables if present
+	var envVars []string
+	if vm.EnvVariables.Valid && vm.EnvVariables.String != "" {
+		decryptedEnvJSON, err := crypto.Decrypt(vm.EnvVariables.String)
+		if err != nil {
+			return fmt.Errorf("failed to decrypt environment variables: %w", err)
+		}
+		if err := json.Unmarshal([]byte(decryptedEnvJSON), &envVars); err != nil {
+			return fmt.Errorf("failed to unmarshal environment variables: %w", err)
+		}
+	}
+
+	slog.Info("STARTING DA VM", "id", vm.ID, "hostIp", hostIp, "vmIp", vmIp, "envVarsCount", len(envVars))
 	vmConfig := VMConfig{
 		AppID:  vm.ID.String(),
 		IPAddr: vmIp.String(),
 		IPGw:   hostIp.Addr().String(),
+		Env:    envVars,
 	}
 	vmConfigBytes, err := json.Marshal(vmConfig)
 	if err != nil {
@@ -200,14 +215,15 @@ func (s *Service) VMCreate(ctx context.Context, params VMCreateParams) (*queries
 		}
 
 		vm, err := s.db.VMCreate(ctx, queries.VMCreateParams{
-			ID:        uuid.New(),
-			Vcpus:     params.VCPUs,
-			Memory:    params.Memory,
-			Status:    queries.VmStatusPending,
-			ImageID:   params.ImageID,
-			Port:      pgtype.Int4{Int32: params.Port, Valid: true},
-			IpAddress: ipAddress,
-			Metadata:  nil,
+			ID:           uuid.New(),
+			Vcpus:        params.VCPUs,
+			Memory:       params.Memory,
+			Status:       queries.VmStatusPending,
+			ImageID:      params.ImageID,
+			Port:         pgtype.Int4{Int32: params.Port, Valid: true},
+			IpAddress:    ipAddress,
+			EnvVariables: pgtype.Text{String: params.EnvVariables, Valid: true},
+			Metadata:     nil,
 		})
 		if err != nil {
 			if isIPConflictError(err) {

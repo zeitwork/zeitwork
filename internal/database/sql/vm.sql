@@ -12,8 +12,8 @@ LIMIT 1;
 update vms set status = $1 where id=$2 returning *;
 
 -- name: VMCreate :one
-INSERT INTO vms (id, vcpus, memory, status, image_id, port, ip_address, metadata)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO vms (id, vcpus, memory, status, image_id, port, ip_address, env_variables, metadata)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 RETURNING *;
 
 -- name: VMNextIPAddress :one

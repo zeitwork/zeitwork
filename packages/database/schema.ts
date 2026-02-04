@@ -242,6 +242,7 @@ export const vms = pgTable("vms", {
     .notNull(),
   port: integer(),
   ipAddress: inet().notNull(),
+  envVariables: text(),
   metadata: jsonb(), // { pid: 1234 }
   //
   pendingAt: timestamp({ withTimezone: true }),
