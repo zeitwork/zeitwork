@@ -119,22 +119,81 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 
 	// Create WAL listener with callbacks to schedulers
+	// Following K8s pattern: when an entity changes, schedule self + notify parents via reverse lookups
 	walListener := listener.New(listener.Config{
 		DatabaseURL: s.cfg.DatabaseURL,
-		OnDeployment: func(id uuid.UUID) {
+
+		OnDeployment: func(ctx context.Context, id uuid.UUID) {
 			s.deploymentScheduler.Schedule(id, time.Now())
+			// Nothing depends on deployments
 		},
-		OnBuild: func(id uuid.UUID) {
+
+		OnBuild: func(ctx context.Context, id uuid.UUID) {
 			s.buildScheduler.Schedule(id, time.Now())
+
+			// Notify deployments that reference this build
+			if deployments, err := s.db.DeploymentFindByBuildID(ctx, id); err != nil {
+				slog.Error("failed to find deployments by build_id", "build_id", id, "error", err)
+			} else {
+				for _, d := range deployments {
+					slog.Debug("notifying deployment of build change", "deployment_id", d.ID, "build_id", id)
+					s.deploymentScheduler.Schedule(d.ID, time.Now())
+				}
+			}
 		},
-		OnImage: func(id uuid.UUID) {
+
+		OnImage: func(ctx context.Context, id uuid.UUID) {
 			s.imageScheduler.Schedule(id, time.Now())
+
+			// Notify VMs that use this image
+			if vms, err := s.db.VMFindByImageID(ctx, id); err != nil {
+				slog.Error("failed to find VMs by image_id", "image_id", id, "error", err)
+			} else {
+				for _, vm := range vms {
+					slog.Debug("notifying VM of image change", "vm_id", vm.ID, "image_id", id)
+					s.vmScheduler.Schedule(vm.ID, time.Now())
+				}
+			}
+
+			// Notify builds waiting for build image (dind case)
+			// When any image becomes ready, check if pending/building builds can proceed
+			if builds, err := s.db.BuildFindWaitingForBuildImage(ctx); err != nil {
+				slog.Error("failed to find builds waiting for build image", "error", err)
+			} else {
+				for _, b := range builds {
+					slog.Debug("notifying build of image change", "build_id", b.ID, "image_id", id)
+					s.buildScheduler.Schedule(b.ID, time.Now())
+				}
+			}
 		},
-		OnVM: func(id uuid.UUID) {
+
+		OnVM: func(ctx context.Context, id uuid.UUID) {
 			s.vmScheduler.Schedule(id, time.Now())
+
+			// Notify builds that use this VM
+			if builds, err := s.db.BuildFindByVMID(ctx, id); err != nil {
+				slog.Error("failed to find builds by vm_id", "vm_id", id, "error", err)
+			} else {
+				for _, b := range builds {
+					slog.Debug("notifying build of VM change", "build_id", b.ID, "vm_id", id)
+					s.buildScheduler.Schedule(b.ID, time.Now())
+				}
+			}
+
+			// Notify deployments that use this VM
+			if deployments, err := s.db.DeploymentFindByVMID(ctx, id); err != nil {
+				slog.Error("failed to find deployments by vm_id", "vm_id", id, "error", err)
+			} else {
+				for _, d := range deployments {
+					slog.Debug("notifying deployment of VM change", "deployment_id", d.ID, "vm_id", id)
+					s.deploymentScheduler.Schedule(d.ID, time.Now())
+				}
+			}
 		},
-		OnDomain: func(id uuid.UUID) {
+
+		OnDomain: func(ctx context.Context, id uuid.UUID) {
 			s.domainScheduler.Schedule(id, time.Now())
+			// Nothing depends on domains
 		},
 	})
 

@@ -16,7 +16,7 @@ import (
 )
 
 // Handler is called when a table change is detected
-type Handler func(id uuid.UUID)
+type Handler func(ctx context.Context, id uuid.UUID)
 
 // Config holds the configuration for the listener
 type Config struct {
@@ -370,23 +370,23 @@ func (l *Listener) handleChange(ctx context.Context, relationID uint32, tuple *p
 	switch relation.RelationName {
 	case "deployments":
 		if l.config.OnDeployment != nil {
-			l.config.OnDeployment(id)
+			l.config.OnDeployment(ctx, id)
 		}
 	case "builds":
 		if l.config.OnBuild != nil {
-			l.config.OnBuild(id)
+			l.config.OnBuild(ctx, id)
 		}
 	case "images":
 		if l.config.OnImage != nil {
-			l.config.OnImage(id)
+			l.config.OnImage(ctx, id)
 		}
 	case "vms":
 		if l.config.OnVM != nil {
-			l.config.OnVM(id)
+			l.config.OnVM(ctx, id)
 		}
 	case "domains":
 		if l.config.OnDomain != nil {
-			l.config.OnDomain(id)
+			l.config.OnDomain(ctx, id)
 		}
 	default:
 		slog.Debug("ignoring change for unhandled table", "table", relation.RelationName)

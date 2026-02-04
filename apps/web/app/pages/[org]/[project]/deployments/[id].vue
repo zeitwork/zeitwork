@@ -27,9 +27,9 @@ const parsedBuildLogs = computed(() => buildLogs.value?.map((log) => parseAnsi(l
 </script>
 
 <template>
-  <div class="flex h-full flex-col max-h-screen">
+  <div class="h-full flex flex-1">
     <!-- Header -->
-    <div class="border-neutral-subtle flex h-16 items-center justify-between border-b p-4">
+    <!-- <div class="border-neutral-subtle flex h-16 items-center justify-between border-b p-4">
       <div class="flex items-center gap-4">
         <div class="flex items-center gap-1 text-sm">
           <span class="text-neutral-strong">Deployment details</span>
@@ -37,11 +37,16 @@ const parsedBuildLogs = computed(() => buildLogs.value?.map((log) => parseAnsi(l
           <span class="text-neutral-subtle"> {{ formattedId }}</span>
         </div>
       </div>
-    </div>
+    </div> -->
 
-    <div class="flex-1 overflow-auto">
+    <div class="flex-1 bg-black overflow-auto">
+      <div class="overflow-auto p-4">
+        <div v-for="i in 50" class="font-mono text-sm">
+          Lorem, ipsum dolor sit amet consectetur adipisicing elit. Asper
+        </div>
+      </div>
       <!-- Build Logs Section -->
-      <div class="border-neutral-subtle border-b">
+      <!-- <div class="border-neutral-subtle border-b">
         <div
           class="border-neutral-subtle flex items-center gap-2 border-b bg-neutral-950 px-4 py-2"
         >
@@ -65,10 +70,10 @@ No build logs available yet...</pre
               }"
             >{{ segment.text }}</span></pre>
         </div>
-      </div>
+      </div> -->
 
       <!-- Runtime Logs Section -->
-      <div>
+      <!-- <div>
         <div
           class="border-neutral-subtle flex items-center gap-2 border-b bg-neutral-950 px-4 py-2"
         >
@@ -78,7 +83,7 @@ No build logs available yet...</pre
         <div class="bg-black p-4 font-mono text-sm">
           <pre class="text-xs text-neutral-500">Runtime logs not available yet. Coming soon...</pre>
         </div>
-      </div>
+      </div> -->
     </div>
   </div>
 </template>

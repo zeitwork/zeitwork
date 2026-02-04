@@ -32,6 +32,11 @@ func (s *Service) reconcileDomain(ctx context.Context, objectID uuid.UUID) error
 		return nil
 	}
 
+	// Skip if already verified (avoid unnecessary DB update)
+	if domain.VerifiedAt.Valid {
+		return nil
+	}
+
 	s.db.DomainMarkVerified(ctx, domain.ID)
 
 	return nil
