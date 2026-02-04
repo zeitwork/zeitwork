@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
-	"strings"
 	"syscall"
 
 	"github.com/samber/lo"
@@ -85,13 +84,6 @@ func main() {
 
 	env := append(config.Process.Env, vmConfig.Env...)
 
-	for _, e := range env {
-		parts := strings.SplitN(e, "=", 2)
-		if len(parts) == 2 {
-			checkErr(os.Setenv(parts[0], parts[1]))
-		}
-	}
-
 	// exec (replace and nuke us, becoming init and pid 1)
 	checkErr(os.MkdirAll("/mnt/rootfs/sys/fs/cgroup", 0555))
 	checkErr(os.MkdirAll("/mnt/rootfs/dev", 0555))
@@ -116,7 +108,7 @@ func main() {
 	binPath, err := exec.LookPath(config.Process.Args[0])
 	checkErr(err)
 
-	err = syscall.Exec(binPath, config.Process.Args, config.Process.Env)
+	err = syscall.Exec(binPath, config.Process.Args, env)
 	checkErr(err)
 
 	fmt.Printf("Wait, why am I still breathing? I just told the kernel to nuke my entire soul with syscall.Exec,"+
