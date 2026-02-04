@@ -86,6 +86,12 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 
 	// ** Ensure we have a VM ** //
 	if !deployment.VmID.Valid {
+		// Guard: can't create VM without an image
+		if !deployment.ImageID.Valid {
+			slog.Debug("deployment has no image_id yet, waiting for build to complete", "deployment_id", deployment.ID)
+			return nil
+		}
+
 		slog.Info("creating vm for deployment", "deployment_id", deployment.ID, "image_id", deployment.ImageID)
 
 		// Fetch and prepare environment variables for the VM
