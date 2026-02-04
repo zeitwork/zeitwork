@@ -23,9 +23,10 @@ func checkErr(err error) {
 }
 
 type VMConfig struct {
-	AppID  string `json:"app_id"`
-	IPAddr string `json:"ip_addr"`
-	IPGw   string `json:"ip_gw"`
+	AppID  string   `json:"app_id"`
+	IPAddr string   `json:"ip_addr"`
+	IPGw   string   `json:"ip_gw"`
+	Env    []string `json:"env"`
 }
 
 type Config struct {
@@ -81,7 +82,10 @@ func main() {
 
 	checkErr(syscall.Setgid(int(config.Process.User.GID)))
 	checkErr(syscall.Setuid(int(config.Process.User.UID)))
-	for _, e := range config.Process.Env {
+
+	env := append(config.Process.Env, vmConfig.Env...)
+
+	for _, e := range env {
 		parts := strings.SplitN(e, "=", 2)
 		if len(parts) == 2 {
 			checkErr(os.Setenv(parts[0], parts[1]))

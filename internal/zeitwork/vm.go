@@ -124,6 +124,7 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 		"--net", fmt.Sprintf("tap=tap%d,mac=,ip=%s,mask=255.255.255.254", s.nextTap.Add(1), hostIp.Addr())) // todo mask might not be /31 theoretically but who cares
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
+	slog.Info("Starting VM", "cmd", cmd)
 	err = cmd.Start()
 	if err != nil {
 		slog.Error("failed to start hypervisor", "vm_id", vm.ID, "err", err)
@@ -285,7 +286,8 @@ func (s *Service) reconcileVMUpdateStatusIf(ctx context.Context, vm queries.Vm, 
 }
 
 type VMConfig struct {
-	AppID  string `json:"app_id"`
-	IPAddr string `json:"ip_addr"`
-	IPGw   string `json:"ip_gw"`
+	AppID  string   `json:"app_id"`
+	IPAddr string   `json:"ip_addr"`
+	IPGw   string   `json:"ip_gw"`
+	Env    []string `json:"env"`
 }

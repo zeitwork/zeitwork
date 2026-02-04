@@ -10,7 +10,9 @@
     cmd: go build -o /tmp/zeitwork cmd/zeitwork/zeitwork.go
     chdir: "../"
   environment:
-    CGO_ENABLED: false
+    CGO_ENABLED: "0"
+    GOOS: linux
+    GOARCH: amd64
 
 - name: Upload the binary to the remote host
   copy:

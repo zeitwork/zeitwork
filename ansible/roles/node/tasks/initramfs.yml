@@ -3,11 +3,21 @@
     path: /tmp/initramfs
     state: directory
 
+- name: Build the main go app locally
+  delegate_to: localhost
+  command:
+    cmd: go build -o /tmp/initagent cmd/initagent/initagent.go
+    chdir: "../"
+  environment:
+    CGO_ENABLED: "0"
+    GOOS: linux
+    GOARCH: amd64
+
 - name: Copy initagent
   copy:
-    src: initagent
+    src: /tmp/initagent
     dest: /tmp/initramfs/init
-    mode: 0644
+    mode: 0755
 
 - name: Create some important directories
   file:
@@ -26,7 +36,7 @@
   args:
     executable: /bin/bash
 
-- name: Cleanup initramfs
-  file:
-    path: /tmp/initramfs
-    state: absent
+#- name: Cleanup initramfs
+#  file:
+#    path: /tmp/initramfs
+#    state: absent

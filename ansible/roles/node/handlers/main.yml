@@ -6,3 +6,8 @@
   systemd:
     name: zeitwork
     state: restarted
+
+- name: reload nftables
+  systemd:
+    name: nftables
+    state: reloaded
