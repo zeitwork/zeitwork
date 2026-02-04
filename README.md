@@ -1,4 +1,4 @@
-![docs/assets/og.png](docs/assets/og-image.png)
+<!--![docs/assets/og.png](docs/assets/og-image.png)-->
 
 > [!NOTE]
 > This project is in early stage development.

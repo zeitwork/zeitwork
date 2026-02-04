@@ -12,6 +12,7 @@ import (
 
 	"github.com/docker/docker/client"
 	"github.com/zeitwork/zeitwork/internal/database"
+	"github.com/zeitwork/zeitwork/internal/listener"
 	"github.com/zeitwork/zeitwork/internal/reconciler"
 	dnsresolver "github.com/zeitwork/zeitwork/internal/shared/dns"
 	"github.com/zeitwork/zeitwork/internal/shared/github"
@@ -21,7 +22,8 @@ import (
 type Config struct {
 	IPAdress string
 
-	DB *database.DB
+	DB          *database.DB
+	DatabaseURL string // Required for WAL replication listener
 
 	// Docker registry configuration
 	// For GHCR, URL is "ghcr.io" and Username is the org/user (e.g., "zeitwork")
@@ -103,80 +105,100 @@ func New(cfg Config) (*Service, error) {
 func (s *Service) Start(ctx context.Context) error {
 	slog.Info("starting Zeitwork reconciler")
 
+	// Start all schedulers
 	s.deploymentScheduler.Start()
 	s.buildScheduler.Start()
 	s.imageScheduler.Start()
 	s.vmScheduler.Start()
-	// s.domainScheduler.Start()
+	s.domainScheduler.Start()
 
-	ticker := time.NewTicker(5 * time.Second)
-	defer ticker.Stop()
-
-	// TODO: we want to migrate this to listen/notify OR even nicer postgres wal log + nats
-	for {
-		select {
-		case <-ctx.Done():
-			slog.Info("shutting down Zeitwork reconciler")
-			return ctx.Err()
-		case <-ticker.C:
-			// deployment
-			deployments, err := s.db.DeploymentFind(ctx)
-			if err != nil {
-				panic(err)
-			}
-			for _, deployment := range deployments {
-				s.deploymentScheduler.Schedule(deployment.ID, time.Now())
-			}
-
-			// build
-			builds, err := s.db.BuildFind(ctx)
-			if err != nil {
-				panic(err)
-			}
-			for _, build := range builds {
-				s.buildScheduler.Schedule(build.ID, time.Now())
-			}
-
-			// image
-			images, err := s.db.ImageFind(ctx)
-			if err != nil {
-				panic(err)
-			}
-			for _, image := range images {
-				s.imageScheduler.Schedule(image.ID, time.Now())
-			}
-
-			// vm
-			vms, err := s.db.VMFind(ctx)
-			if err != nil {
-				panic(err)
-			}
-			for _, vm := range vms {
-				s.vmScheduler.Schedule(vm.ID, time.Now())
-			}
-
-			// domain
-			domains, err := s.db.DomainFind(ctx)
-			if err != nil {
-				panic(err)
-			}
-			for _, domain := range domains {
-				s.domainScheduler.Schedule(domain.ID, time.Now())
-			}
-		}
+	// Bootstrap: schedule all existing entities once on startup
+	// This ensures we don't miss any changes that happened while we were down
+	if err := s.bootstrap(ctx); err != nil {
+		return fmt.Errorf("failed to bootstrap: %w", err)
 	}
 
-	// // VMs
-	// s.vmScheduler.SetupPGXListener(ctx, s.db.Pool, "vms")
-	// vms, err := s.db.Queries.VMFind(ctx)
-	// if err != nil {
-	// 	return err
-	// }
+	// Create WAL listener with callbacks to schedulers
+	walListener := listener.New(listener.Config{
+		DatabaseURL: s.cfg.DatabaseURL,
+		OnDeployment: func(id uuid.UUID) {
+			s.deploymentScheduler.Schedule(id, time.Now())
+		},
+		OnBuild: func(id uuid.UUID) {
+			s.buildScheduler.Schedule(id, time.Now())
+		},
+		OnImage: func(id uuid.UUID) {
+			s.imageScheduler.Schedule(id, time.Now())
+		},
+		OnVM: func(id uuid.UUID) {
+			s.vmScheduler.Schedule(id, time.Now())
+		},
+		OnDomain: func(id uuid.UUID) {
+			s.domainScheduler.Schedule(id, time.Now())
+		},
+	})
 
-	// for _, vm := range vms {
-	// 	s.vmScheduler.Schedule(vm.ID, time.Now())
-	// }
+	// Start WAL listener (blocks until context is cancelled)
+	slog.Info("starting WAL listener for database changes")
+	return walListener.Start(ctx)
+}
 
+// bootstrap schedules all existing entities for reconciliation on startup
+func (s *Service) bootstrap(ctx context.Context) error {
+	slog.Info("bootstrapping: scheduling all existing entities")
+
+	// Deployments
+	deployments, err := s.db.DeploymentFind(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to find deployments: %w", err)
+	}
+	for _, deployment := range deployments {
+		s.deploymentScheduler.Schedule(deployment.ID, time.Now())
+	}
+	slog.Info("bootstrapped deployments", "count", len(deployments))
+
+	// Builds
+	builds, err := s.db.BuildFind(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to find builds: %w", err)
+	}
+	for _, build := range builds {
+		s.buildScheduler.Schedule(build.ID, time.Now())
+	}
+	slog.Info("bootstrapped builds", "count", len(builds))
+
+	// Images
+	images, err := s.db.ImageFind(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to find images: %w", err)
+	}
+	for _, image := range images {
+		s.imageScheduler.Schedule(image.ID, time.Now())
+	}
+	slog.Info("bootstrapped images", "count", len(images))
+
+	// VMs
+	vms, err := s.db.VMFind(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to find vms: %w", err)
+	}
+	for _, vm := range vms {
+		s.vmScheduler.Schedule(vm.ID, time.Now())
+	}
+	slog.Info("bootstrapped vms", "count", len(vms))
+
+	// Domains
+	domains, err := s.db.DomainFind(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to find domains: %w", err)
+	}
+	for _, domain := range domains {
+		s.domainScheduler.Schedule(domain.ID, time.Now())
+	}
+	slog.Info("bootstrapped domains", "count", len(domains))
+
+	slog.Info("bootstrap complete")
+	return nil
 }
 
 // Stop gracefully stops the reconciler service

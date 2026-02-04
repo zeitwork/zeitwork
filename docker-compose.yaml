@@ -20,9 +20,9 @@ services:
       - MINIO_ACCESS_KEY=minioadmin
       - MINIO_SECRET_KEY=minioadmin
     command: server /data
-  nats:
-    image: nats:2-alpine
-    ports:
-      - "4222:4222"
-      - "6222:6222"
-      - "8222:8222"
+  # nats:
+  #   image: nats:2-alpine
+  #   ports:
+  #     - "4222:4222"
+  #     - "6222:6222"
+  #     - "8222:8222"
