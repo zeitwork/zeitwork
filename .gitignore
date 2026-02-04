@@ -165,13 +165,13 @@ tmp/
 *.tgz
 
 # Python (if any Python scripts)
-__pycache__/
-*.py[cod]
-*$py.class
-*.pyo
-venv/
-env/
-.Python
+#__pycache__/
+#*.py[cod]
+#*$py.class
+#*.pyo
+#venv/
+##env/
+#.Python
 
 # Go workspace file
 go.work

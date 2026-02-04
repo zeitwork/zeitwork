@@ -1,6 +1,7 @@
 import { environmentVariables, githubInstallations, projects } from "@zeitwork/database/schema";
 import { count } from "@zeitwork/database/utils/drizzle";
 import z from "zod";
+import { encrypt } from "~~/server/utils/crypto";
 
 const bodySchema = z.object({
   name: z.string().min(1).max(255),
@@ -92,11 +93,11 @@ export default defineEventHandler(async (event) => {
     }
 
     if (body.secrets.length > 0) {
-      // Create environment variables
+      // Create environment variables with encrypted values
       await tx.insert(environmentVariables).values(
         body.secrets.map((secret) => ({
           name: secret.name,
-          value: secret.value,
+          value: encrypt(secret.value),
           projectId: project.id,
           organisationId: secure.organisationId,
         })),

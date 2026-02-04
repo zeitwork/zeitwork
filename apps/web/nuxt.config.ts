@@ -41,6 +41,8 @@ export default defineNuxtConfig({
     githubAppPrivateKey: "",
 
     githubWebhookSecret: "",
+
+    encryptionKey: "",
   },
 
   modules: ["@nuxt/icon", "@nuxt/fonts", "nuxt-auth-utils", "motion-v/nuxt"],

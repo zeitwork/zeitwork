@@ -1,4 +1,4 @@
-import { deployments, domains, projects } from "@zeitwork/database/schema";
+import { domains, projects } from "@zeitwork/database/schema";
 import { eq, and } from "@zeitwork/database/utils/drizzle";
 import { z } from "zod";
 
@@ -30,7 +30,8 @@ export default defineEventHandler(async (event) => {
     .where(
       and(eq(domains.projectId, project.id), eq(domains.organisationId, secure.organisationId)),
     )
-    .orderBy(desc(deployments.id));
+    .orderBy(desc(domains.id));
 
-  return domainList;
+  // Filter out internal zeitwork.app domains
+  return domainList.filter((domain) => !domain.name.endsWith(".zeitwork.app"));
 });
