@@ -10,8 +10,8 @@ require (
 	github.com/google/go-github/v67 v67.0.0
 	github.com/google/uuid v1.6.0
 	github.com/hetznercloud/hcloud-go/v2 v2.27.0
+	github.com/jackc/pglogrepl v0.0.0-20251213150135-2e8d0df862c1
 	github.com/jackc/pgx/v5 v5.7.2
-	github.com/jackc/pgxlisten v0.0.0-20250802141604-12b92425684c
 	github.com/lmittmann/tint v1.1.2
 	github.com/samber/lo v1.52.0
 	github.com/vishvananda/netlink v1.3.1
@@ -21,9 +21,11 @@ require (
 	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
 	github.com/containerd/log v0.1.0 // indirect
+	github.com/jackc/pgio v1.0.0 // indirect
 	github.com/klauspost/compress v1.18.1 // indirect
 	github.com/moby/sys/atomicwriter v0.1.0 // indirect
 	github.com/morikuni/aec v1.0.0 // indirect
+	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	golang.org/x/crypto v0.44.0 // indirect
 )

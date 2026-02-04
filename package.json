@@ -8,6 +8,7 @@
   "scripts": {
     "db:generate": "bun --cwd ./packages/database drizzle-kit generate",
     "db:migrate": "bun --cwd ./packages/database drizzle-kit migrate",
+    "db:migrate:prod": "bun --env-file .env.prod --cwd ./packages/database drizzle-kit migrate",
     "db:push": "bun --cwd ./packages/database drizzle-kit push",
     "db:studio": "bun --cwd ./packages/database drizzle-kit studio",
     "db:check": "bun --cwd ./packages/database drizzle-kit check",

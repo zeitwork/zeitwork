@@ -53,10 +53,13 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 			return err
 		}
 
-		// if build failed, mark deployment as failed
+		// if build failed, mark deployment as failed (only if not already failed)
 		if build.Status == queries.BuildStatusFailed {
 			slog.Info("build failed, marking deployment as failed", "deployment_id", deployment.ID, "build_id", build.ID)
-			return s.db.DeploymentMarkFailed(ctx, deployment.ID)
+			if deployment.Status != queries.DeploymentStatusFailed {
+				return s.db.DeploymentMarkFailed(ctx, deployment.ID)
+			}
+			return nil
 		}
 
 		// if build has an image then advance to starting (if not already)

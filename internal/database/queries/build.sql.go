@@ -106,6 +106,89 @@ func (q *Queries) BuildFind(ctx context.Context) ([]Build, error) {
 	return items, nil
 }
 
+const buildFindByVMID = `-- name: BuildFindByVMID :many
+SELECT id, status, project_id, github_commit, github_branch, image_id, vm_id, pending_at, building_at, successful_at, failed_at, organisation_id, created_at, updated_at, deleted_at FROM builds WHERE vm_id = $1
+`
+
+func (q *Queries) BuildFindByVMID(ctx context.Context, vmID uuid.UUID) ([]Build, error) {
+	rows, err := q.db.Query(ctx, buildFindByVMID, vmID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Build{}
+	for rows.Next() {
+		var i Build
+		if err := rows.Scan(
+			&i.ID,
+			&i.Status,
+			&i.ProjectID,
+			&i.GithubCommit,
+			&i.GithubBranch,
+			&i.ImageID,
+			&i.VmID,
+			&i.PendingAt,
+			&i.BuildingAt,
+			&i.SuccessfulAt,
+			&i.FailedAt,
+			&i.OrganisationID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const buildFindWaitingForBuildImage = `-- name: BuildFindWaitingForBuildImage :many
+SELECT id, status, project_id, github_commit, github_branch, image_id, vm_id, pending_at, building_at, successful_at, failed_at, organisation_id, created_at, updated_at, deleted_at FROM builds 
+WHERE status IN ('pending', 'building') 
+  AND image_id IS NULL 
+  AND deleted_at IS NULL
+`
+
+func (q *Queries) BuildFindWaitingForBuildImage(ctx context.Context) ([]Build, error) {
+	rows, err := q.db.Query(ctx, buildFindWaitingForBuildImage)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Build{}
+	for rows.Next() {
+		var i Build
+		if err := rows.Scan(
+			&i.ID,
+			&i.Status,
+			&i.ProjectID,
+			&i.GithubCommit,
+			&i.GithubBranch,
+			&i.ImageID,
+			&i.VmID,
+			&i.PendingAt,
+			&i.BuildingAt,
+			&i.SuccessfulAt,
+			&i.FailedAt,
+			&i.OrganisationID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const buildFirstByID = `-- name: BuildFirstByID :one
 SELECT id, status, project_id, github_commit, github_branch, image_id, vm_id, pending_at, building_at, successful_at, failed_at, organisation_id, created_at, updated_at, deleted_at
 FROM builds

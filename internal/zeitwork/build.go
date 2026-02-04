@@ -84,10 +84,14 @@ func (s *Service) reconcileBuild(ctx context.Context, objectID uuid.UUID) error 
 			return err
 		}
 		slog.Info("created build VM", "build_id", build.ID, "vm_id", vm.ID)
-		return s.db.BuildMarkBuilding(ctx, queries.BuildMarkBuildingParams{
-			ID:   build.ID,
-			VmID: vm.ID,
-		})
+		// Only mark as building if currently pending (avoid unnecessary DB update)
+		if build.Status == queries.BuildStatusPending {
+			return s.db.BuildMarkBuilding(ctx, queries.BuildMarkBuildingParams{
+				ID:   build.ID,
+				VmID: vm.ID,
+			})
+		}
+		return nil
 	}
 
 	// We have a VM, check if it's ready
@@ -96,10 +100,12 @@ func (s *Service) reconcileBuild(ctx context.Context, objectID uuid.UUID) error 
 		return err
 	}
 
-	// If VM failed, fail the build
+	// If VM failed, fail the build (only if not already failed)
 	if vm.Status == queries.VmStatusFailed {
 		slog.Error("build VM failed", "build_id", build.ID, "vm_id", vm.ID)
-		s.db.BuildMarkFailed(ctx, build.ID)
+		if build.Status != queries.BuildStatusFailed {
+			s.db.BuildMarkFailed(ctx, build.ID)
+		}
 		return nil
 	}
 
@@ -115,7 +121,10 @@ func (s *Service) reconcileBuild(ctx context.Context, objectID uuid.UUID) error 
 		err = s.executeBuild(ctx, build, vm)
 		if err != nil {
 			slog.Error("build execution failed", "build_id", build.ID, "error", err)
-			s.db.BuildMarkFailed(ctx, build.ID)
+			// Only mark as failed if not already failed (avoid unnecessary DB update)
+			if build.Status != queries.BuildStatusFailed {
+				s.db.BuildMarkFailed(ctx, build.ID)
+			}
 			s.cleanupBuildVM(ctx, build.VmID)
 			return nil // Don't return error - we've handled it by marking failed
 		}
@@ -209,13 +218,15 @@ func (s *Service) executeBuild(ctx context.Context, build queries.Build, vm quer
 
 	slog.Info("created output image record", "build_id", build.ID, "image_id", outputImage.ID)
 
-	// 10. Mark build as successful
-	err = s.db.BuildMarkSuccessful(ctx, queries.BuildMarkSuccessfulParams{
-		ID:      build.ID,
-		ImageID: outputImage.ID,
-	})
-	if err != nil {
-		return fmt.Errorf("failed to mark build successful: %w", err)
+	// 10. Mark build as successful (only if not already successful)
+	if build.Status != queries.BuildStatusSuccesful {
+		err = s.db.BuildMarkSuccessful(ctx, queries.BuildMarkSuccessfulParams{
+			ID:      build.ID,
+			ImageID: outputImage.ID,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to mark build successful: %w", err)
+		}
 	}
 
 	slog.Info("build completed successfully", "build_id", build.ID)

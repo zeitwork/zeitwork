@@ -39,3 +39,9 @@ WHERE id = $1;
 UPDATE deployments
 SET status = 'failed', failed_at = now()
 WHERE id = $1;
+
+-- name: DeploymentFindByBuildID :many
+SELECT * FROM deployments WHERE build_id = $1;
+
+-- name: DeploymentFindByVMID :many
+SELECT * FROM deployments WHERE vm_id = $1;

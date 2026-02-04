@@ -144,23 +144,35 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 		stdout.Close()
 		stderr.Close()
 
+		// Fetch current VM status before updating (avoid unnecessary DB update)
+		currentVM, fetchErr := s.db.VMFirstByID(context.Background(), vm.ID)
+		if fetchErr != nil {
+			slog.Error("failed to fetch VM for status update", "vm", vm.ID.String(), "err", fetchErr)
+		}
+
 		if err != nil {
 			slog.Error("hypervisor exited with error", "vm", vm.ID.String(), "err", err, "pid", cmd.Process.Pid, "processState", cmd.ProcessState.String())
-			_, err = s.db.VMUpdateStatus(context.Background(), queries.VMUpdateStatusParams{
-				Status: queries.VmStatusFailed,
-				ID:     vm.ID,
-			})
-			if err != nil {
-				slog.Error("failed to update VM status to failed", "vm", vm.ID.String(), "err", err)
+			// Only update if status is not already failed
+			if fetchErr == nil && currentVM.Status != queries.VmStatusFailed {
+				_, updateErr := s.db.VMUpdateStatus(context.Background(), queries.VMUpdateStatusParams{
+					Status: queries.VmStatusFailed,
+					ID:     vm.ID,
+				})
+				if updateErr != nil {
+					slog.Error("failed to update VM status to failed", "vm", vm.ID.String(), "err", updateErr)
+				}
 			}
 		} else {
 			slog.Info("hypervisor exited cleanly", "vm", vm.ID.String())
-			_, err = s.db.VMUpdateStatus(context.Background(), queries.VMUpdateStatusParams{
-				Status: queries.VmStatusStopped,
-				ID:     vm.ID,
-			})
-			if err != nil {
-				slog.Error("failed to update VM status to stopped", "vm", vm.ID.String(), "err", err)
+			// Only update if status is not already stopped
+			if fetchErr == nil && currentVM.Status != queries.VmStatusStopped {
+				_, updateErr := s.db.VMUpdateStatus(context.Background(), queries.VMUpdateStatusParams{
+					Status: queries.VmStatusStopped,
+					ID:     vm.ID,
+				})
+				if updateErr != nil {
+					slog.Error("failed to update VM status to stopped", "vm", vm.ID.String(), "err", updateErr)
+				}
 			}
 		}
 

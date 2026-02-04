@@ -38,3 +38,6 @@ FROM lock;
 UPDATE vms
 SET deleted_at = now()
 WHERE id = $1;
+
+-- name: VMFindByImageID :many
+SELECT * FROM vms WHERE image_id = $1;

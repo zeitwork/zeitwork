@@ -17,6 +17,7 @@ import (
 )
 
 type Config struct {
+	IPAdress               string `env:"LOAD_BALANCER_IP,required"`
 	DatabaseURL            string `env:"DATABASE_URL,required"`
 	DockerRegistryURL      string `env:"DOCKER_REGISTRY_URL,required"`
 	DockerRegistryUsername string `env:"DOCKER_REGISTRY_USERNAME,required"`
@@ -51,12 +52,13 @@ func main() {
 
 	db, err := database.New(cfg.DatabaseURL)
 	if err != nil {
-		panic("no db")
+		panic("failed to init database")
 	}
 
 	service, err := zeitwork.New(zeitwork.Config{
-		IPAdress:               "1.1.1.1", // TODO
 		DB:                     db,
+		IPAdress:               cfg.IPAdress,
+		DatabaseURL:            cfg.DatabaseURL,
 		DockerRegistryURL:      cfg.DockerRegistryURL,
 		DockerRegistryUsername: cfg.DockerRegistryUsername,
 		DockerRegistryPAT:      cfg.DockerRegistryPAT,
@@ -92,10 +94,6 @@ func main() {
 			}
 		}()
 	}
-
-	// TODO: builder
-
-	// TODO: vm manager
 
 	sig := <-sigChan
 	logger.Info("shutdown signal", "signal", sig)

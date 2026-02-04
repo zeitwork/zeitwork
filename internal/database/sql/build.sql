@@ -48,3 +48,12 @@ WHERE id = $1;
 -- name: BuildLogCreate :exec
 INSERT INTO build_logs (id, build_id, message, level, organisation_id, created_at)
 VALUES ($1, $2, $3, $4, $5, NOW());
+
+-- name: BuildFindByVMID :many
+SELECT * FROM builds WHERE vm_id = $1;
+
+-- name: BuildFindWaitingForBuildImage :many
+SELECT * FROM builds 
+WHERE status IN ('pending', 'building') 
+  AND image_id IS NULL 
+  AND deleted_at IS NULL;

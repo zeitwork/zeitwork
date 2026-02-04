@@ -55,6 +55,92 @@ func (q *Queries) DeploymentFind(ctx context.Context) ([]Deployment, error) {
 	return items, nil
 }
 
+const deploymentFindByBuildID = `-- name: DeploymentFindByBuildID :many
+SELECT id, status, github_commit, project_id, build_id, image_id, vm_id, pending_at, building_at, starting_at, running_at, stopping_at, stopped_at, failed_at, organisation_id, created_at, updated_at, deleted_at FROM deployments WHERE build_id = $1
+`
+
+func (q *Queries) DeploymentFindByBuildID(ctx context.Context, buildID uuid.UUID) ([]Deployment, error) {
+	rows, err := q.db.Query(ctx, deploymentFindByBuildID, buildID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Deployment{}
+	for rows.Next() {
+		var i Deployment
+		if err := rows.Scan(
+			&i.ID,
+			&i.Status,
+			&i.GithubCommit,
+			&i.ProjectID,
+			&i.BuildID,
+			&i.ImageID,
+			&i.VmID,
+			&i.PendingAt,
+			&i.BuildingAt,
+			&i.StartingAt,
+			&i.RunningAt,
+			&i.StoppingAt,
+			&i.StoppedAt,
+			&i.FailedAt,
+			&i.OrganisationID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const deploymentFindByVMID = `-- name: DeploymentFindByVMID :many
+SELECT id, status, github_commit, project_id, build_id, image_id, vm_id, pending_at, building_at, starting_at, running_at, stopping_at, stopped_at, failed_at, organisation_id, created_at, updated_at, deleted_at FROM deployments WHERE vm_id = $1
+`
+
+func (q *Queries) DeploymentFindByVMID(ctx context.Context, vmID uuid.UUID) ([]Deployment, error) {
+	rows, err := q.db.Query(ctx, deploymentFindByVMID, vmID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Deployment{}
+	for rows.Next() {
+		var i Deployment
+		if err := rows.Scan(
+			&i.ID,
+			&i.Status,
+			&i.GithubCommit,
+			&i.ProjectID,
+			&i.BuildID,
+			&i.ImageID,
+			&i.VmID,
+			&i.PendingAt,
+			&i.BuildingAt,
+			&i.StartingAt,
+			&i.RunningAt,
+			&i.StoppingAt,
+			&i.StoppedAt,
+			&i.FailedAt,
+			&i.OrganisationID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deploymentFirstByID = `-- name: DeploymentFirstByID :one
 SELECT id, status, github_commit, project_id, build_id, image_id, vm_id, pending_at, building_at, starting_at, running_at, stopping_at, stopped_at, failed_at, organisation_id, created_at, updated_at, deleted_at
 FROM deployments

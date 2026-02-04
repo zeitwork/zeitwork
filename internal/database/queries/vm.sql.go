@@ -107,6 +107,48 @@ func (q *Queries) VMFind(ctx context.Context) ([]Vm, error) {
 	return items, nil
 }
 
+const vMFindByImageID = `-- name: VMFindByImageID :many
+SELECT id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at, pending_at, starting_at, running_at, stopping_at, stopped_at, failed_at FROM vms WHERE image_id = $1
+`
+
+func (q *Queries) VMFindByImageID(ctx context.Context, imageID uuid.UUID) ([]Vm, error) {
+	rows, err := q.db.Query(ctx, vMFindByImageID, imageID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Vm{}
+	for rows.Next() {
+		var i Vm
+		if err := rows.Scan(
+			&i.ID,
+			&i.Vcpus,
+			&i.Memory,
+			&i.Status,
+			&i.ImageID,
+			&i.Port,
+			&i.IpAddress,
+			&i.Metadata,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.PendingAt,
+			&i.StartingAt,
+			&i.RunningAt,
+			&i.StoppingAt,
+			&i.StoppedAt,
+			&i.FailedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const vMFirstByID = `-- name: VMFirstByID :one
 SELECT id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at, pending_at, starting_at, running_at, stopping_at, stopped_at, failed_at
 FROM vms
