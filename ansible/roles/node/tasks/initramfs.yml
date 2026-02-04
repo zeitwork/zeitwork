@@ -1,0 +1,32 @@
+- name: Build initramfs
+  file:
+    path: /tmp/initramfs
+    state: directory
+
+- name: Copy initagent
+  copy:
+    src: initagent
+    dest: /tmp/initramfs/init
+    mode: 0644
+
+- name: Create some important directories
+  file:
+    path: /tmp/initramfs/{{item}}
+    state: directory
+    mode: 0644
+  with_items:
+    - mnt
+    - proc
+    - sys
+
+- name: Build the initramfs
+  shell:
+    cmd: find . | cpio -o -H newc | gzip > /data/initramfs.cpio.gz
+    chdir: /tmp/initramfs
+  args:
+    executable: /bin/bash
+
+- name: Cleanup initramfs
+  file:
+    path: /tmp/initramfs
+    state: absent

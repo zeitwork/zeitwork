@@ -113,7 +113,7 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 		return err
 	}
 
-	cmd := exec.Command("/usr/local/bin/cloud-hypervisor", "--kernel", "/root/linux-cloud-hypervisor/arch/x86/boot/compressed/vmlinux.bin",
+	cmd := exec.Command("/data/cloud-hypervisor", "--kernel", "/data/vmlinuz.bin",
 		"--disk", fmt.Sprintf("path=%s,direct=on,queue_size=256", vmDiskPath),
 		"--initramfs", "/data/initramfs.cpio.gz",
 		"--cmdline", fmt.Sprintf(
@@ -173,6 +173,8 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 
 func (s *Service) VMCreate(ctx context.Context, params VMCreateParams) (*queries.Vm, error) {
 	var lastErr error
+
+	// todo: Wrap into TX for pg_advisory_xact_lock to work correctly.
 	for attempt := 0; attempt < 5; attempt++ {
 		if attempt > 0 {
 			slog.Warn("retrying VM IP allocation", "attempt", attempt+1)

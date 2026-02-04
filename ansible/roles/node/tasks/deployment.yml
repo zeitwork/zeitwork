@@ -1,0 +1,28 @@
+- name: Upload sytemd unit
+  notify: systemctl daemonreload
+  copy:
+    src: zeitwork.service
+    dest: /etc/systemd/system/zeitwork.service
+
+- name: Build the main go app locally
+  delegate_to: localhost
+  command:
+    cmd: go build -o /tmp/zeitwork cmd/zeitwork/zeitwork.go
+    chdir: "../"
+  environment:
+    CGO_ENABLED: false
+
+- name: Upload the binary to the remote host
+  copy:
+    src: /tmp/zeitwork
+    dest: /data/zeitwork
+    mode: 0755
+  notify: restart zeitwork
+
+- meta: flush_handlers
+
+- name: Ensure zeitwork started and enabled
+  systemd:
+    name: zeitwork
+    state: started
+    enabled: true

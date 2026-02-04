@@ -1,0 +1,43 @@
+- name: Check if the linux kernel exists
+  stat:
+    path: /data/vmlinuz.bin
+  register: vmlinuz
+
+- name: Compile if it doesn't
+  when: not vmlinuz.stat.exists
+  block:
+    - name: Guess we compile
+      debug:
+        msg: "gotta compile some kernels"
+
+    - name: Clone the repo
+      git:
+        repo: https://github.com/cloud-hypervisor/linux.git
+        version: ch-6.12.8
+        dest: /tmp/kernel
+        depth: 1
+
+    - name: Copy kernel config
+      copy:
+        src: kernelconfig
+        dest: /tmp/kernel/.config
+        mode: 0644
+
+    - name: Compile the kernel
+      shell:
+        cmd: KCFLAGS="-Wa,-mx86-used-note=no" make bzImage -j `nproc`
+        chdir: /tmp/kernel
+        creates: arch/x86/boot/compressed/vmlinux.bin
+      args:
+        executable: /bin/bash
+
+    - name: Copy final binary
+      copy:
+        remote_src: true
+        src: /tmp/kernel/arch/x86/boot/compressed/vmlinux.bin
+        dest: /data/vmlinuz.bin
+
+    - name: Cleanup
+      file:
+        path: /tmp/kernel
+        state: absent

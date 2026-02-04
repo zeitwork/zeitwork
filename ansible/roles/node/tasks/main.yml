@@ -1,0 +1,38 @@
+- name: Install APT requirements
+  apt:
+    name:
+      - skopeo
+      - umoci
+      - guestfs-tools
+      - git
+      - build-essential
+      - bison
+      - flex
+      - libncurses-dev
+      - libssl-dev
+      - libelf-dev
+      - bc
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Check if CloudHypervisor-Binary exists
+  stat:
+    path: /data/cloud-hypervisor
+  register: cloudhypervisor
+
+- name: Download CloudHypervisor
+  when: not cloudhypervisor.stat.exists
+  get_url:
+    url: https://github.com/cloud-hypervisor/cloud-hypervisor/releases/download/v50.0/cloud-hypervisor-static
+    dest: /data/cloud-hypervisor
+
+- name: Prepare /data
+  file:
+    path: /data
+    state: directory
+    mode: 0644
+
+- include_tasks: ./linux.yml
+- include_tasks: ./initramfs.yml
+- include_tasks: ./deployment.yml
