@@ -59,14 +59,22 @@ func (s *Scheduler) Start() {
 		for {
 			<-timer.C
 			now := time.Now()
+
+			// Collect due items while holding lock (fast operation)
+			var dueItems []uuid.UUID
 			s.mu.Lock()
 			for objectID, nextRun := range s.schedule {
 				if !nextRun.IsZero() && nextRun.Before(now) {
-					s.dueRun <- objectID
+					dueItems = append(dueItems, objectID)
 					s.schedule[objectID] = time.Time{}
 				}
 			}
 			s.mu.Unlock()
+
+			// Send to channel without holding lock (may block, but won't deadlock)
+			for _, objectID := range dueItems {
+				s.dueRun <- objectID
+			}
 		}
 	}()
 }
