@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import type { Component } from "vue";
+
 const route = useRoute();
 const orgSlug = computed<string>(() => route.params.org as string);
 const projectSlug = computed<string>(() => route.params.project as string);
@@ -6,26 +8,30 @@ const projectSlug = computed<string>(() => route.params.project as string);
 type Props = {
   to: string;
   name: string;
+  icon?: Component;
   active?: boolean;
+  fullWidth?: boolean;
 };
-const { to, name, active } = defineProps<Props>();
+
+const { to, name, icon, active, fullWidth = false } = defineProps<Props>();
 </script>
 
 <template>
-  <NuxtLink class="group relative flex h-8 items-center px-3 text-sm" :to="to">
-    <div
-      class="bg-surface-strong absolute rounded-md transition-all group-active:-inset-px"
+  <DHover :active="active" background="bg-surface-strong" :full-width="fullWidth">
+    <NuxtLink
+      class="flex h-8 items-center gap-0.5 px-2 text-copy"
       :class="[
-        active
-          ? 'inset-0 opacity-100'
-          : 'inset-1 opacity-0 group-hover:inset-0 group-hover:opacity-100',
+        active ? 'text-neutral' : 'text-neutral-subtle group-hover/h:text-neutral',
+        fullWidth ? 'w-full' : '',
       ]"
-    ></div>
-    <div
-      class="z-10 transition-all"
-      :class="[active ? 'text-neutral' : 'text-neutral-subtle group-hover:text-neutral']"
+      :to="to"
     >
-      {{ name }}
-    </div>
-  </NuxtLink>
+      <div v-if="icon" class="grid size-5 place-items-center">
+        <component :is="icon" class="text-neutral-subtle size-4" />
+      </div>
+      <div class="px-0.5">
+        {{ name }}
+      </div>
+    </NuxtLink>
+  </DHover>
 </template>

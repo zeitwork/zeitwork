@@ -4,6 +4,7 @@ import { z } from "zod";
 
 const paramsSchema = z.object({
   id: z.string(),
+  domainId: z.string(),
 });
 
 export default defineEventHandler(async (event) => {
@@ -11,32 +12,38 @@ export default defineEventHandler(async (event) => {
   if (!secure) throw createError({ statusCode: 401, message: "Unauthorized" });
   if (!verified) throw createError({ statusCode: 403, message: "Account not verified" });
 
-  const { id } = await getValidatedRouterParams(event, paramsSchema.parse);
+  const { id, domainId } = await getValidatedRouterParams(event, paramsSchema.parse);
 
   const [project] = await useDrizzle()
     .select()
     .from(projects)
     .where(and(eq(projects.slug, id), eq(projects.organisationId, secure.organisationId)))
     .orderBy(desc(projects.id));
+
   if (!project) {
-    throw createError({
-      statusCode: 404,
-      message: "Project not found",
-    });
+    throw createError({ statusCode: 404, message: "Project not found" });
   }
 
-  const domainList = await useDrizzle()
+  const [domain] = await useDrizzle()
     .select()
     .from(domains)
     .where(
       and(
+        eq(domains.id, domainId),
         eq(domains.projectId, project.id),
         eq(domains.organisationId, secure.organisationId),
         isNull(domains.deletedAt),
       ),
-    )
-    .orderBy(desc(domains.id));
+    );
 
-  // Filter out internal zeitwork.app domains
-  return domainList.filter((domain) => !domain.name.endsWith(".zeitwork.app"));
+  if (!domain) {
+    throw createError({ statusCode: 404, message: "Domain not found" });
+  }
+
+  await useDrizzle()
+    .update(domains)
+    .set({ deletedAt: new Date(), updatedAt: new Date() })
+    .where(eq(domains.id, domain.id));
+
+  return { success: true };
 });

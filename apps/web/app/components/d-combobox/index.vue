@@ -122,7 +122,7 @@ watch(open, (newOpen, oldOpen) => {
     <ComboboxPortal>
       <ComboboxContent
         :side-offset="4"
-        class="bg-surface border-neutral text-neutral-strong data-[state=open]:animate-fade-in-from-top data-[state=closed]:animate-fade-out relative z-50 max-h-96 w-[var(--reka-combobox-trigger-width)] overflow-hidden rounded-md border shadow-md"
+        class="bg-surface border-neutral text-neutral-strong data-[state=open]:animate-fade-in-from-top data-[state=closed]:animate-fade-out relative z-[200] max-h-96 w-[var(--reka-combobox-trigger-width)] overflow-hidden rounded-md border shadow-md"
         position="popper"
       >
         <ComboboxViewport class="p-0.5">

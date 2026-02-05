@@ -13,11 +13,15 @@ export default defineEventHandler(async (event) => {
 
   const { id } = await getValidatedRouterParams(event, paramsSchema.parse);
 
-  const result = await useDrizzle()
+  const [project] = await useDrizzle()
     .select()
     .from(projects)
     .where(and(eq(projects.slug, id), eq(projects.organisationId, secure.organisationId)))
     .orderBy(desc(projects.id));
 
-  return result;
+  if (!project) {
+    throw createError({ statusCode: 404, message: "Project not found" });
+  }
+
+  return project;
 });

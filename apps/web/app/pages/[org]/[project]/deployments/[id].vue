@@ -28,16 +28,11 @@ const parsedBuildLogs = computed(() => buildLogs.value?.map((log) => parseAnsi(l
 
 <template>
   <div class="h-full flex flex-col flex-1">
-    <!-- Header -->
-    <div class="border-neutral-subtle flex h-16 items-center justify-between border-b p-4">
-      <div class="flex items-center gap-4">
-        <div class="flex items-center gap-1 text-sm">
-          <span class="text-neutral-strong">Deployment details</span>
-          <DotIcon class="text-neutral-subtle size-4" />
-          <span class="text-neutral-subtle"> {{ formattedId }}</span>
-        </div>
-      </div>
-    </div>
+    <DHeader title="Deployment details">
+      <template #leading>
+        <span class="text-copy text-neutral-subtle font-mono">{{ formattedId }}</span>
+      </template>
+    </DHeader>
 
     <div class="flex-1 overflow-auto">
       <!-- <div class="overflow-auto p-4">
