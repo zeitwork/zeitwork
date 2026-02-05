@@ -34,9 +34,8 @@ COPY . .
 # Copy installed node_modules from install stage (hoisted to root)
 COPY --from=install /temp/dev/node_modules node_modules
 
-# Build the web app
-WORKDIR /usr/src/app/apps/web
-RUN bun run build
+# Build the web app from monorepo root (so node_modules/.bin is in PATH)
+RUN bun run --cwd apps/web build
 
 # Production stage
 FROM base AS release
