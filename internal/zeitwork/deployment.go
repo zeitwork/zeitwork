@@ -138,8 +138,8 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 			if deployment.Status != queries.DeploymentStatusRunning {
 				// Perform HTTP health check before marking as running
 				if !s.checkDeploymentHealth(vm.IpAddress.Addr().String(), vm.Port.Int32) {
-					slog.Info("deployment health check failed, waiting", "deployment_id", deployment.ID, "vm_id", deployment.VmID)
-					return nil
+					slog.Info("deployment health check failed, will retry", "deployment_id", deployment.ID, "vm_id", deployment.VmID)
+					return fmt.Errorf("health check failed, will retry")
 				}
 
 				err = s.db.DeploymentMarkRunning(ctx, deployment.ID)
