@@ -13,6 +13,11 @@ const links = computed(() => [
       route.path.startsWith(`/${orgSlug.value}/${projectSlug.value}/deployments`),
   },
   {
+    name: "Logs",
+    to: `/${orgSlug.value}/${projectSlug.value}/logs`,
+    active: route.path.startsWith(`/${orgSlug.value}/${projectSlug.value}/logs`),
+  },
+  {
     name: "Settings",
     to: `/${orgSlug.value}/${projectSlug.value}/settings`,
     active: route.path.startsWith(`/${orgSlug.value}/${projectSlug.value}/settings`),

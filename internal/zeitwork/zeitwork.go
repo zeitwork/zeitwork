@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"github.com/docker/docker/client"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/zeitwork/zeitwork/internal/database"
+	"github.com/zeitwork/zeitwork/internal/database/queries"
 	"github.com/zeitwork/zeitwork/internal/listener"
 	"github.com/zeitwork/zeitwork/internal/reconciler"
 	dnsresolver "github.com/zeitwork/zeitwork/internal/shared/dns"
@@ -40,6 +42,12 @@ type Config struct {
 	MetadataServerAddr string // e.g., "0.0.0.0:8111"
 }
 
+// vmDeploymentInfo maps a VM to its deployment for log routing.
+type vmDeploymentInfo struct {
+	DeploymentID   uuid.UUID
+	OrganisationID uuid.UUID
+}
+
 type Service struct {
 	cfg Config
 
@@ -65,9 +73,10 @@ type Service struct {
 	domainScheduler     *reconciler.Scheduler
 
 	// VM Stuff
-	imageMu sync.Mutex
-	vmToCmd map[uuid.UUID]*exec.Cmd
-	nextTap atomic.Int32
+	imageMu       sync.Mutex
+	vmToCmd       map[uuid.UUID]*exec.Cmd
+	vmDeployments map[uuid.UUID]vmDeploymentInfo // VM ID -> deployment info for log routing
+	nextTap       atomic.Int32
 
 	// Build execution tracking (prevents concurrent execution of the same build)
 	activeBuildsMu sync.Mutex
@@ -76,15 +85,48 @@ type Service struct {
 
 // New creates a new reconciler service
 func New(cfg Config) (*Service, error) {
+	metadataServer := NewMetadataServer()
+
 	s := &Service{
 		cfg:            cfg,
 		db:             cfg.DB,
 		dnsResolver:    dnsresolver.NewResolver(),
-		metadataServer: NewMetadataServer(),
+		metadataServer: metadataServer,
 		vmToCmd:        make(map[uuid.UUID]*exec.Cmd),
+		vmDeployments:  make(map[uuid.UUID]vmDeploymentInfo),
 		imageMu:        sync.Mutex{},
 		nextTap:        atomic.Int32{},
 		activeBuilds:   make(map[uuid.UUID]bool),
+	}
+
+	// Wire up log ingestion callback: metadata server -> deployment_logs table
+	metadataServer.OnLog = func(ctx context.Context, deploymentID, organisationID string, logs []LogEntry) {
+		if deploymentID == "" || organisationID == "" {
+			return
+		}
+		depID, err := uuid.Parse(deploymentID)
+		if err != nil {
+			slog.Error("invalid deployment ID in log callback", "deploymentID", deploymentID, "err", err)
+			return
+		}
+		orgID, err := uuid.Parse(organisationID)
+		if err != nil {
+			slog.Error("invalid organisation ID in log callback", "organisationID", organisationID, "err", err)
+			return
+		}
+		for _, entry := range logs {
+			level := pgtype.Text{String: entry.Level, Valid: entry.Level != ""}
+			if err := s.db.DeploymentLogCreate(ctx, queries.DeploymentLogCreateParams{
+				ID:             uuid.New(),
+				DeploymentID:   depID,
+				Message:        entry.Message,
+				Level:          level,
+				OrganisationID: orgID,
+			}); err != nil {
+				slog.Error("failed to write deployment log", "deploymentID", deploymentID, "err", err)
+				return
+			}
+		}
 	}
 
 	// Initialize GitHub token service if credentials are provided

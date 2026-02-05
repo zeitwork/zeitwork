@@ -19,11 +19,17 @@ const { data: buildLogs, refresh: refreshBuildLogs } = await useFetch(`/api/logs
   },
 });
 
+const { data: runtimeLogs, refresh: refreshRuntimeLogs } = await useFetch(
+  `/api/deployments/${deploymentId}/logs`,
+);
+
 useIntervalFn(() => {
   refreshBuildLogs();
+  refreshRuntimeLogs();
 }, 1000);
 
 const parsedBuildLogs = computed(() => buildLogs.value?.map((log) => parseAnsi(log.message)) ?? []);
+const parsedRuntimeLogs = computed(() => runtimeLogs.value?.map((log) => parseAnsi(log.message)) ?? []);
 </script>
 
 <template>
@@ -68,7 +74,7 @@ No build logs available yet...</pre
       </div>
 
       <!-- Runtime Logs Section -->
-      <!-- <div>
+      <div>
         <div
           class="border-neutral-subtle flex items-center gap-2 border-b bg-neutral-950 px-4 py-2"
         >
@@ -76,9 +82,23 @@ No build logs available yet...</pre
           <span class="text-sm font-medium text-neutral-300">Runtime Logs</span>
         </div>
         <div class="bg-black p-4 font-mono text-sm">
-          <pre class="text-xs text-neutral-500">Runtime logs not available yet. Coming soon...</pre>
+          <pre v-if="runtimeLogs?.length === 0" class="text-xs text-neutral-500">
+No runtime logs available yet...</pre
+          >
+          <pre
+            v-for="(segments, index) in parsedRuntimeLogs"
+            :key="index"
+            class="text-xs text-neutral-400"
+          ><span
+              v-for="(segment, i) in segments"
+              :key="i"
+              :style="{
+                color: segment.color ?? undefined,
+                fontWeight: segment.bold ? 'bold' : undefined,
+              }"
+            >{{ segment.text }}</span></pre>
         </div>
-      </div> -->
+      </div>
     </div>
   </div>
 </template>

@@ -22,11 +22,13 @@ import (
 )
 
 type VMCreateParams struct {
-	VCPUs        int32
-	Memory       int32
-	ImageID      uuid.UUID
-	Port         int32
-	EnvVariables string // Encrypted JSON array of "KEY=value" strings
+	VCPUs          int32
+	Memory         int32
+	ImageID        uuid.UUID
+	Port           int32
+	EnvVariables   string    // Encrypted JSON array of "KEY=value" strings
+	DeploymentID   uuid.UUID // Deployment this VM belongs to (for log routing)
+	OrganisationID uuid.UUID // Organisation this VM belongs to (for log routing)
 }
 
 func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
@@ -127,17 +129,29 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 		}
 	}
 
-	// Generate one-time token and register VM with metadata server
+	// Generate one-time config token and long-lived log token, then register VM with metadata server
 	token := uuid.New().String()
-	s.metadataServer.RegisterVM(vm.ID.String(), token, envVars, vmIp.Addr())
+	logToken := uuid.New().String()
+
+	// Deployment and organisation IDs for log routing (empty for build VMs)
+	deploymentID := ""
+	organisationID := ""
+	if info, ok := s.vmDeployments[vm.ID]; ok {
+		deploymentID = info.DeploymentID.String()
+		organisationID = info.OrganisationID.String()
+	}
+
+	s.metadataServer.RegisterVM(vm.ID.String(), token, logToken, envVars, vmIp.Addr(), deploymentID, organisationID)
 
 	slog.Info("STARTING DA VM", "id", vm.ID, "hostIp", hostIp, "vmIp", vmIp, "vcpus", vm.Vcpus, "memory_mb", vm.Memory, "envVarsCount", len(envVars))
+	metadataBaseURL := fmt.Sprintf("http://%s:8111/v1/vms/%s", hostIp.Addr().String(), vm.ID.String())
 	vmConfig := VMConfig{
 		AppID:         vm.ID.String(),
 		IPAddr:        vmIp.String(),
 		IPGw:          hostIp.Addr().String(),
-		MetadataURL:   fmt.Sprintf("http://%s:8111/v1/vms/%s/config", hostIp.Addr().String(), vm.ID.String()),
+		MetadataURL:   metadataBaseURL + "/config",
 		MetadataToken: token,
+		LogURL:        metadataBaseURL + "/logs",
 	}
 	vmConfigBytes, err := json.Marshal(vmConfig)
 	if err != nil {
@@ -209,6 +223,7 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 		}
 
 		delete(s.vmToCmd, vm.ID)
+		delete(s.vmDeployments, vm.ID)
 		s.vmScheduler.Schedule(vm.ID, time.Now().Add(5*time.Second))
 	}()
 
@@ -249,6 +264,14 @@ func (s *Service) VMCreate(ctx context.Context, params VMCreateParams) (*queries
 			return nil, err
 		}
 
+		// Store deployment info for log routing (used by reconcileVM when registering with metadata server)
+		if params.DeploymentID != (uuid.UUID{}) {
+			s.vmDeployments[vm.ID] = vmDeploymentInfo{
+				DeploymentID:   params.DeploymentID,
+				OrganisationID: params.OrganisationID,
+			}
+		}
+
 		return &vm, nil
 	}
 	return nil, fmt.Errorf("failed to allocate IP after 5 attempts: %w", lastErr)
@@ -276,8 +299,9 @@ func (s *Service) nextIpAddress(ctx context.Context) (netip.Prefix, error) {
 func (s *Service) reconcileVmDelete(ctx context.Context, vm queries.Vm) error {
 	slog.Info("deleting VM", "vm_id", vm.ID.String())
 
-	// Unregister VM from metadata server
+	// Unregister VM from metadata server and clean up deployment mapping
 	s.metadataServer.UnregisterVM(vm.ID.String())
+	delete(s.vmDeployments, vm.ID)
 
 	// If the VM is currently running, kill it
 	if cmd, ok := s.vmToCmd[vm.ID]; ok {
@@ -324,6 +348,7 @@ type VMConfig struct {
 	AppID         string `json:"app_id"`
 	IPAddr        string `json:"ip_addr"`
 	IPGw          string `json:"ip_gw"`
-	MetadataURL   string `json:"metadata_url"`   // URL to fetch env vars from (e.g., "http://10.0.0.0:8111")
+	MetadataURL   string `json:"metadata_url"`   // URL to fetch env vars from (e.g., "http://10.0.0.0:8111/v1/vms/{id}/config")
 	MetadataToken string `json:"metadata_token"` // One-time token for authentication
+	LogURL        string `json:"log_url"`        // URL to send runtime logs to (e.g., "http://10.0.0.0:8111/v1/vms/{id}/logs")
 }
