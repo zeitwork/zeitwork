@@ -115,6 +115,7 @@ func main() {
 	checkErr(syscall.Setuid(int(config.Process.User.UID)))
 
 	env := append(config.Process.Env, envVars...)
+	env = append(env, "ZEITWORK=1")
 
 	// Set environment variables so exec.LookPath uses the container's PATH
 	for _, e := range env {
