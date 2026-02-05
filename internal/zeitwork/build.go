@@ -191,7 +191,7 @@ func (s *Service) executeBuild(ctx context.Context, build queries.Build, vm quer
 	slog.Info("connected to docker daemon", "build_id", build.ID, "host", dockerHost)
 
 	// 6. Prepare build context from tarball (convert gzip tarball to Docker-compatible tar)
-	buildContext, err := s.prepareBuildContext(tarballReader)
+	buildContext, err := s.prepareBuildContext(tarballReader, project.RootDirectory)
 	if err != nil {
 		return fmt.Errorf("failed to prepare build context: %w", err)
 	}
@@ -274,7 +274,8 @@ func (s *Service) downloadSourceTarball(ctx context.Context, token, repo, commit
 
 // prepareBuildContext converts a GitHub gzip tarball to a Docker build context
 // GitHub tarballs have a top-level directory like "owner-repo-sha/" that we need to strip
-func (s *Service) prepareBuildContext(gzipReader io.Reader) (io.Reader, error) {
+// rootDir specifies the subdirectory to use as build context (e.g., "/" for repo root, "/apps/web" for monorepo)
+func (s *Service) prepareBuildContext(gzipReader io.Reader, rootDir string) (io.Reader, error) {
 	// Create a pipe for streaming the output
 	pr, pw := io.Pipe()
 
@@ -296,8 +297,16 @@ func (s *Service) prepareBuildContext(gzipReader io.Reader) (io.Reader, error) {
 		tw := tar.NewWriter(pw)
 		defer tw.Close()
 
-		var prefix string
+		var githubPrefix string
 		foundDockerfile := false
+
+		// Normalize rootDir: remove leading slash for path matching, ensure trailing slash
+		// "/" -> "" (repo root)
+		// "/apps/web" -> "apps/web/"
+		rootDirPrefix := strings.TrimPrefix(rootDir, "/")
+		if rootDirPrefix != "" && !strings.HasSuffix(rootDirPrefix, "/") {
+			rootDirPrefix = rootDirPrefix + "/"
+		}
 
 		for {
 			header, err := tr.Next()
@@ -309,28 +318,44 @@ func (s *Service) prepareBuildContext(gzipReader io.Reader) (io.Reader, error) {
 				return
 			}
 
-			// Determine the prefix from the first entry (e.g., "owner-repo-sha/")
-			if prefix == "" {
+			// Determine the GitHub prefix from the first entry (e.g., "owner-repo-sha/")
+			if githubPrefix == "" {
 				parts := strings.SplitN(header.Name, "/", 2)
 				if len(parts) > 1 {
-					prefix = parts[0] + "/"
+					githubPrefix = parts[0] + "/"
 				}
 			}
 
-			// Strip the prefix
-			newName := strings.TrimPrefix(header.Name, prefix)
-			if newName == "" {
+			// Strip the GitHub prefix first
+			pathAfterGitHub := strings.TrimPrefix(header.Name, githubPrefix)
+			if pathAfterGitHub == "" {
 				continue // Skip the root directory itself
 			}
 
-			// Check if we found a Dockerfile
-			if filepath.Base(newName) == "Dockerfile" && !strings.Contains(newName, "/") {
+			// If rootDir is specified, filter to only include files under that directory
+			if rootDirPrefix != "" {
+				// Skip files not under the root directory
+				if !strings.HasPrefix(pathAfterGitHub, rootDirPrefix) {
+					// Allow the root directory entry itself
+					if pathAfterGitHub != strings.TrimSuffix(rootDirPrefix, "/") {
+						continue
+					}
+				}
+				// Strip the root directory prefix
+				pathAfterGitHub = strings.TrimPrefix(pathAfterGitHub, rootDirPrefix)
+				if pathAfterGitHub == "" {
+					continue // Skip the root directory entry itself
+				}
+			}
+
+			// Check if we found a Dockerfile at the root of the build context
+			if filepath.Base(pathAfterGitHub) == "Dockerfile" && !strings.Contains(pathAfterGitHub, "/") {
 				foundDockerfile = true
 			}
 
-			// Create new header with stripped name
+			// Create new header with the final stripped name
 			newHeader := *header
-			newHeader.Name = newName
+			newHeader.Name = pathAfterGitHub
 
 			if err := tw.WriteHeader(&newHeader); err != nil {
 				pw.CloseWithError(fmt.Errorf("failed to write tar header: %w", err))
@@ -346,7 +371,11 @@ func (s *Service) prepareBuildContext(gzipReader io.Reader) (io.Reader, error) {
 		}
 
 		if !foundDockerfile {
-			pw.CloseWithError(fmt.Errorf("no Dockerfile found in repository root"))
+			if rootDirPrefix != "" {
+				pw.CloseWithError(fmt.Errorf("no Dockerfile found in %s", rootDir))
+			} else {
+				pw.CloseWithError(fmt.Errorf("no Dockerfile found in repository root"))
+			}
 			return
 		}
 	}()

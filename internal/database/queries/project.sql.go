@@ -12,7 +12,7 @@ import (
 )
 
 const projectFirstByID = `-- name: ProjectFirstByID :one
-SELECT id, name, slug, github_repository, github_installation_id, organisation_id, created_at, updated_at, deleted_at
+SELECT id, name, slug, github_repository, github_installation_id, organisation_id, created_at, updated_at, deleted_at, root_directory
 FROM projects
 WHERE id = $1
   AND deleted_at IS NULL
@@ -31,6 +31,7 @@ func (q *Queries) ProjectFirstByID(ctx context.Context, id uuid.UUID) (Project, 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.RootDirectory,
 	)
 	return i, err
 }

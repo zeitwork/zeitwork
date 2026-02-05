@@ -15,6 +15,13 @@ const bodySchema = z.object({
       value: z.string(),
     }),
   ),
+  rootDirectory: z
+    .string()
+    .max(255)
+    .regex(/^\/(?:[^./][^/]*(?:\/[^./][^/]*)*)?$/, {
+      message: "Root directory must start with / and cannot contain '..' or hidden directories",
+    })
+    .default("/"),
 });
 
 export default defineEventHandler(async (event) => {
@@ -86,6 +93,7 @@ export default defineEventHandler(async (event) => {
         githubRepository: githubRepository,
         githubInstallationId: githubInstallationId,
         organisationId: secure.organisationId,
+        rootDirectory: body.rootDirectory,
       })
       .returning();
     if (!project) {

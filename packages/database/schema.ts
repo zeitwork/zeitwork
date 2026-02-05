@@ -89,6 +89,7 @@ export const projects = pgTable(
     githubInstallationId: uuid()
       .notNull()
       .references(() => githubInstallations.id),
+    rootDirectory: text().notNull().default("/"),
     ...organisationId,
     ...timestamps,
   },

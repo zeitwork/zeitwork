@@ -70,6 +70,12 @@ const repoName = computed(() => repo?.split("/")[1]);
 async function createProject() {
   errorMessage.value = null;
   try {
+    // Normalize rootDirectory: empty string or just "/" stays as "/", otherwise prepend "/" if missing
+    let normalizedRootDir = rootDirectory.value?.trim() || "/";
+    if (normalizedRootDir !== "/" && !normalizedRootDir.startsWith("/")) {
+      normalizedRootDir = "/" + normalizedRootDir;
+    }
+
     const result = await $fetch(`/api/projects`, {
       method: "POST",
       body: {
@@ -79,6 +85,7 @@ async function createProject() {
           repo: repoName.value,
         },
         secrets: envVariables.value.filter((e) => e.name.length > 0),
+        rootDirectory: normalizedRootDir,
       },
     });
     navigateTo(`/${org}/${projectName.value}`);
