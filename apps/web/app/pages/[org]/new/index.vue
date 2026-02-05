@@ -1,5 +1,9 @@
 <script setup lang="ts">
-import { MagnifyingGlassIcon, PlusIcon, XMarkIcon } from "@heroicons/vue/16/solid";
+import {
+  MagnifyingGlassIcon,
+  PlusIcon,
+  XMarkIcon,
+} from "@heroicons/vue/16/solid";
 
 definePageMeta({
   layout: "modal",
@@ -88,7 +92,9 @@ function addGitHubAccount() {
                   :value="item.value"
                   :label="item.label"
                 >
-                  <template #leading><img src="/icons/github-mark.svg" /></template>
+                  <template #leading
+                    ><img src="/icons/github-mark.svg"
+                  /></template>
                 </DComboboxItem>
               </template>
               <template #footer>
@@ -111,17 +117,21 @@ function addGitHubAccount() {
               type="text"
               placeholder="Search projects..."
             >
-              <template #leading> <MagnifyingGlassIcon class="size-4" /> </template>
+              <template #leading>
+                <MagnifyingGlassIcon class="size-4" />
+              </template>
             </DInput>
           </div>
           <div class="flex flex-col gap-1">
-            <DHover v-for="project in filteredProjects" class="group">
+            <DHover v-for="project in filteredProjects" class="group w-full">
               <NuxtLink
                 class="flex h-10 w-full items-center justify-between p-2 pr-[6px]"
                 :to="`/${org}/new/setup`"
               >
                 <div class="flex items-center gap-2">
-                  <div class="bg-surface-subtle size-6 overflow-hidden rounded-full">
+                  <div
+                    class="bg-surface-subtle size-6 overflow-hidden rounded-full"
+                  >
                     <img
                       :src="`/icons/framework/${project.framework}.png`"
                       class="size-full"
@@ -130,7 +140,9 @@ function addGitHubAccount() {
                   </div>
                   <p class="text-neutral text-copy">{{ project.label }}</p>
                 </div>
-                <DButton variant="primary" :to="`/${org}/new/setup?repo=${project.value}`"
+                <DButton
+                  variant="primary"
+                  :to="`/${org}/new/setup?repo=${project.value}`"
                   >Import</DButton
                 >
               </NuxtLink>
