@@ -12,6 +12,17 @@ const orgSlug = computed<string>(() => route.params.org as string);
 // Search query
 const searchQuery = ref("");
 
+const filteredProjects = computed(() => {
+  if (!projects.value) return [];
+  const query = searchQuery.value.toLowerCase().trim();
+  if (!query) return projects.value;
+  return projects.value.filter(
+    (project) =>
+      project.name.toLowerCase().includes(query) ||
+      project.githubRepository.toLowerCase().includes(query),
+  );
+});
+
 // Fetch organisation by slug
 const { data: organisation } = await useFetch(`/api/organisations/${orgSlug.value}`);
 
@@ -78,19 +89,18 @@ const justInstalled = computed(() => route.query.installed === "true");
     </div>
 
     <div
-      v-if="projects && projects.length > 0"
+      v-if="filteredProjects.length > 0"
       class="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4"
     >
-      <!-- <pre>{{ projects }}</pre> -->
-      <DProjectCard v-for="project in projects" :key="project.id" :project="project" />
+      <DProjectCard v-for="project in filteredProjects" :key="project.id" :project="project" />
     </div>
 
-    <div v-else-if="hasGitHubInstallation && projects && projects.length > 0">
-      <p>No projects match your search.</p>
+    <div v-else-if="projects && projects.length > 0 && filteredProjects.length === 0">
+      <p class="text-neutral-subtle text-copy-sm">No projects match your search.</p>
     </div>
 
-    <div v-else-if="hasGitHubInstallation">
-      <p>No projects yet. Create your first project!</p>
+    <div v-else-if="!projects || projects.length === 0">
+      <p class="text-neutral-subtle text-copy-sm">No projects yet. Create your first project!</p>
     </div>
   </div>
 </template>

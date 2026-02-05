@@ -45,3 +45,16 @@ SELECT * FROM deployments WHERE build_id = $1;
 
 -- name: DeploymentFindByVMID :many
 SELECT * FROM deployments WHERE vm_id = $1;
+
+-- name: DeploymentFindOtherRunningByProjectID :many
+-- Find all running deployments for a project, excluding a specific deployment
+SELECT * FROM deployments
+WHERE project_id = $1
+  AND id != $2
+  AND status = 'running'
+  AND deleted_at IS NULL;
+
+-- name: DeploymentMarkStopped :exec
+UPDATE deployments
+SET status = 'stopped', stopped_at = now()
+WHERE id = $1;

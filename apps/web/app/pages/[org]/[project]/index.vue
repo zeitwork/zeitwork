@@ -57,7 +57,7 @@ function deploymentStatusColor(status: string) {
       return "text-green-500";
     case "failed":
       return "text-red-500";
-    case "inactive":
+    case "stopped":
       return "text-neutral-subtle";
     default:
       return "text-neutral";
@@ -76,7 +76,7 @@ function deploymentStatusBgColor(status: string) {
       return "bg-green-100";
     case "failed":
       return "bg-red-100";
-    case "inactive":
+    case "stopped":
       return "bg-neutral-subtle";
     default:
       return "bg-neutral/10";
@@ -129,7 +129,7 @@ function deploymentLink(deployment: any) {
           </div>
         </div>
         <div class="font-mono">{{ deployment.githubCommit.slice(0, 7) }}</div>
-        <div>
+        <div class="line-clamp-1">
           <template v-if="deployment.domains?.length">
             <a
               v-for="(domain, idx) in deployment.domains"
@@ -138,11 +138,15 @@ function deploymentLink(deployment: any) {
               target="_blank"
               class="text-blue-500 hover:underline"
               @click.stop
-            >{{ domain }}<span v-if="idx < deployment.domains.length - 1" class="text-neutral-subtle">, </span></a>
+              >{{ domain
+              }}<span v-if="idx < deployment.domains.length - 1" class="text-neutral-subtle"
+                >,
+              </span></a
+            >
           </template>
           <span v-else class="text-neutral-subtle">—</span>
         </div>
-        <div class="text-right">{{ renderDate(deployment.createdAt) }}</div>
+        <div class="text-right line-clamp-1">{{ renderDate(deployment.createdAt) }}</div>
       </nuxt-link>
     </div>
   </div>

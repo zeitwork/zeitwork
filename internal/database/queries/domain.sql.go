@@ -69,3 +69,22 @@ func (q *Queries) DomainFirstByID(ctx context.Context, id uuid.UUID) (Domain, er
 	)
 	return i, err
 }
+
+const domainUpdateDeploymentForProject = `-- name: DomainUpdateDeploymentForProject :exec
+UPDATE domains
+SET deployment_id = $1, updated_at = now()
+WHERE project_id = $2
+  AND name NOT LIKE '%.zeitwork.app'
+  AND deleted_at IS NULL
+`
+
+type DomainUpdateDeploymentForProjectParams struct {
+	DeploymentID uuid.UUID `json:"deployment_id"`
+	ProjectID    uuid.UUID `json:"project_id"`
+}
+
+// Update all custom domains (non-zeitwork.app) for a project to point to a new deployment
+func (q *Queries) DomainUpdateDeploymentForProject(ctx context.Context, arg DomainUpdateDeploymentForProjectParams) error {
+	_, err := q.db.Exec(ctx, domainUpdateDeploymentForProject, arg.DeploymentID, arg.ProjectID)
+	return err
+}

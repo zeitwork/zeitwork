@@ -141,6 +141,59 @@ func (q *Queries) DeploymentFindByVMID(ctx context.Context, vmID uuid.UUID) ([]D
 	return items, nil
 }
 
+const deploymentFindOtherRunningByProjectID = `-- name: DeploymentFindOtherRunningByProjectID :many
+SELECT id, status, github_commit, project_id, build_id, image_id, vm_id, pending_at, building_at, starting_at, running_at, stopping_at, stopped_at, failed_at, organisation_id, created_at, updated_at, deleted_at FROM deployments
+WHERE project_id = $1
+  AND id != $2
+  AND status = 'running'
+  AND deleted_at IS NULL
+`
+
+type DeploymentFindOtherRunningByProjectIDParams struct {
+	ProjectID uuid.UUID `json:"project_id"`
+	ID        uuid.UUID `json:"id"`
+}
+
+// Find all running deployments for a project, excluding a specific deployment
+func (q *Queries) DeploymentFindOtherRunningByProjectID(ctx context.Context, arg DeploymentFindOtherRunningByProjectIDParams) ([]Deployment, error) {
+	rows, err := q.db.Query(ctx, deploymentFindOtherRunningByProjectID, arg.ProjectID, arg.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Deployment{}
+	for rows.Next() {
+		var i Deployment
+		if err := rows.Scan(
+			&i.ID,
+			&i.Status,
+			&i.GithubCommit,
+			&i.ProjectID,
+			&i.BuildID,
+			&i.ImageID,
+			&i.VmID,
+			&i.PendingAt,
+			&i.BuildingAt,
+			&i.StartingAt,
+			&i.RunningAt,
+			&i.StoppingAt,
+			&i.StoppedAt,
+			&i.FailedAt,
+			&i.OrganisationID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deploymentFirstByID = `-- name: DeploymentFirstByID :one
 SELECT id, status, github_commit, project_id, build_id, image_id, vm_id, pending_at, building_at, starting_at, running_at, stopping_at, stopped_at, failed_at, organisation_id, created_at, updated_at, deleted_at
 FROM deployments
@@ -280,6 +333,17 @@ type DeploymentMarkStartingParams struct {
 
 func (q *Queries) DeploymentMarkStarting(ctx context.Context, arg DeploymentMarkStartingParams) error {
 	_, err := q.db.Exec(ctx, deploymentMarkStarting, arg.ID, arg.ImageID)
+	return err
+}
+
+const deploymentMarkStopped = `-- name: DeploymentMarkStopped :exec
+UPDATE deployments
+SET status = 'stopped', stopped_at = now()
+WHERE id = $1
+`
+
+func (q *Queries) DeploymentMarkStopped(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deploymentMarkStopped, id)
 	return err
 }
 

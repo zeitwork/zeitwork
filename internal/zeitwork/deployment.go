@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
+	"time"
 
 	"github.com/zeitwork/zeitwork/internal/database/queries"
 	"github.com/zeitwork/zeitwork/internal/shared/crypto"
@@ -134,18 +136,34 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 		if vm.Status == queries.VmStatusRunning {
 			// mark the deployment as running if it isn't already
 			if deployment.Status != queries.DeploymentStatusRunning {
+				// Perform HTTP health check before marking as running
+				if !s.checkDeploymentHealth(vm.IpAddress.Addr().String(), vm.Port.Int32) {
+					slog.Info("deployment health check failed, will retry", "deployment_id", deployment.ID, "vm_id", deployment.VmID)
+					return fmt.Errorf("health check failed, will retry")
+				}
+
 				err = s.db.DeploymentMarkRunning(ctx, deployment.ID)
 				if err != nil {
 					return err
 				}
 				slog.Info("marked deployment as running", "deployment_id", deployment.ID, "vm_id", deployment.VmID)
+
+				// Point custom domains to this new deployment
+				if err := s.pointCustomDomainsToDeployment(ctx, deployment); err != nil {
+					slog.Error("failed to point custom domains to deployment", "deployment_id", deployment.ID, "error", err)
+					// Don't return error - deployment is running, domain update can be retried
+				}
+
+				// Stop older deployments for this project now that the new one is healthy
+				if err := s.stopOldDeployments(ctx, deployment); err != nil {
+					slog.Error("failed to stop old deployments", "deployment_id", deployment.ID, "error", err)
+					// Don't return error - the new deployment is running, stopping old ones can be retried
+				}
+
 				return nil
 			}
 		}
 	}
-
-	// TODO: stopping
-	// TODO: stopping
 
 	// switch deployment.Status {
 	// case queries.DeploymentStatusPending:
@@ -210,4 +228,76 @@ func (s *Service) prepareEnvVariablesForVM(ctx context.Context, projectID uuid.U
 
 	slog.Info("prepared environment variables for VM", "projectID", projectID, "count", len(envStrings))
 	return encryptedEnvVars, nil
+}
+
+// checkDeploymentHealth performs an HTTP health check on a deployment's VM
+func (s *Service) checkDeploymentHealth(ip string, port int32) bool {
+	client := &http.Client{
+		Timeout: 2 * time.Second,
+	}
+
+	healthURL := fmt.Sprintf("http://%s:%d/", ip, port)
+	resp, err := client.Get(healthURL)
+	if err != nil {
+		slog.Debug("deployment health check failed", "url", healthURL, "error", err)
+		return false
+	}
+	defer resp.Body.Close()
+
+	// Consider 2xx and 3xx status codes as healthy
+	healthy := resp.StatusCode >= 200 && resp.StatusCode < 400
+	slog.Debug("deployment health check", "url", healthURL, "status", resp.StatusCode, "healthy", healthy)
+	return healthy
+}
+
+// pointCustomDomainsToDeployment updates all custom domains for the project to point to this deployment
+func (s *Service) pointCustomDomainsToDeployment(ctx context.Context, deployment queries.Deployment) error {
+	err := s.db.DomainUpdateDeploymentForProject(ctx, queries.DomainUpdateDeploymentForProjectParams{
+		DeploymentID: deployment.ID,
+		ProjectID:    deployment.ProjectID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to update domains: %w", err)
+	}
+	slog.Info("pointed custom domains to deployment", "deployment_id", deployment.ID, "project_id", deployment.ProjectID)
+	return nil
+}
+
+// stopOldDeployments finds and stops all other running deployments for the same project
+func (s *Service) stopOldDeployments(ctx context.Context, currentDeployment queries.Deployment) error {
+	// Find all other running deployments for this project
+	oldDeployments, err := s.db.DeploymentFindOtherRunningByProjectID(ctx, queries.DeploymentFindOtherRunningByProjectIDParams{
+		ProjectID: currentDeployment.ProjectID,
+		ID:        currentDeployment.ID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to find old deployments: %w", err)
+	}
+
+	if len(oldDeployments) == 0 {
+		slog.Info("no old deployments to stop", "deployment_id", currentDeployment.ID)
+		return nil
+	}
+
+	slog.Info("stopping old deployments", "deployment_id", currentDeployment.ID, "old_deployment_count", len(oldDeployments))
+
+	for _, oldDep := range oldDeployments {
+		// Soft delete the VM (this will trigger the VM reconciler to kill the process)
+		if oldDep.VmID.Valid {
+			if err := s.db.VMSoftDelete(ctx, oldDep.VmID); err != nil {
+				slog.Error("failed to soft delete VM for old deployment", "deployment_id", oldDep.ID, "vm_id", oldDep.VmID, "error", err)
+				continue
+			}
+			slog.Info("soft deleted VM for old deployment", "deployment_id", oldDep.ID, "vm_id", oldDep.VmID)
+		}
+
+		// Mark the deployment as stopped
+		if err := s.db.DeploymentMarkStopped(ctx, oldDep.ID); err != nil {
+			slog.Error("failed to mark old deployment as stopped", "deployment_id", oldDep.ID, "error", err)
+			continue
+		}
+		slog.Info("marked old deployment as stopped", "deployment_id", oldDep.ID)
+	}
+
+	return nil
 }
