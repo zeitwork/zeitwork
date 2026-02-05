@@ -11,17 +11,17 @@ import {
   AlertDialogTrigger,
 } from "reka-ui";
 
-type Size = "default" | "lg";
+type Size = "md" | "lg";
 
 type Props = {
   size?: Size;
 };
 
-const { size = "default" } = defineProps<Props>();
+const { size = "md" } = defineProps<Props>();
 const open = defineModel<boolean>();
 
 const maxWidthClasses: Record<Size, string> = {
-  default: "max-w-[450px]",
+  md: "max-w-[450px]",
   lg: "max-w-[550px]",
 };
 </script>

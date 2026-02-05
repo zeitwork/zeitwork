@@ -8,11 +8,12 @@ type Props = {
   actionIcon?: Component;
 };
 
-const { title, description, actionLabel, actionIcon } = defineProps<Props>();
-
-const emit = defineEmits<{
+type Emits = {
   action: [];
-}>();
+};
+
+const { title, description, actionLabel, actionIcon } = defineProps<Props>();
+const emit = defineEmits<Emits>();
 </script>
 
 <template>

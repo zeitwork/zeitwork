@@ -68,7 +68,7 @@ watch(
 
 <template>
   <div class="border-neutral flex items-center gap-6 border-b p-4.5">
-    <!-- Domain info - w-400 -->
+
     <div class="flex w-[400px] items-center gap-3">
       <CheckCircleIcon v-if="isVerified" class="size-4 shrink-0 text-green-600" />
       <ExclamationTriangleIcon v-else class="size-4 shrink-0 text-orange-500" />
@@ -94,14 +94,14 @@ watch(
       </div>
     </div>
 
-    <!-- Target - flex-1 -->
+
     <div class="text-neutral flex flex-1 items-center gap-2">
       <GlobeAltIcon v-if="isProduction" class="size-4" />
       <GitMergeIcon v-else class="size-4" />
       <span class="text-copy">{{ isProduction ? "Production" : "Development" }}</span>
     </div>
 
-    <!-- Actions - w-300 -->
+
     <div class="flex w-[300px] items-center justify-end gap-2">
       <DButton v-if="!isVerified" size="sm" @click="emit('setup')">Setup</DButton>
       <DButton variant="secondary" size="sm" @click="emit('edit')">Edit</DButton>

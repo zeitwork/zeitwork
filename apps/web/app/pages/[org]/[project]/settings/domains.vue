@@ -8,14 +8,16 @@ const { data: domains, refresh: refreshDomains } = await useFetch(
   `/api/projects/${projectSlug}/domains`,
 );
 
+type Domain = NonNullable<typeof domains.value>[number];
+
 const search = ref("");
 const domainName = ref("");
 const isAddDialogOpen = ref(false);
 
-const setupDomain = ref<(typeof filteredDomains.value)[0] | null>(null);
+const setupDomain = ref<Domain>();
 const isSetupDialogOpen = ref(false);
 
-const editDomain = ref<(typeof filteredDomains.value)[0] | null>(null);
+const editDomain = ref<Domain>();
 const isEditDialogOpen = ref(false);
 const editDomainName = ref("");
 const isDeleteConfirmOpen = ref(false);
@@ -54,12 +56,12 @@ async function updateDomain() {
   await refreshDomains();
 }
 
-function handleSetup(domain: (typeof filteredDomains.value)[0]) {
+function handleSetup(domain: Domain) {
   setupDomain.value = domain;
   isSetupDialogOpen.value = true;
 }
 
-function handleEdit(domain: (typeof filteredDomains.value)[0]) {
+function handleEdit(domain: Domain) {
   editDomain.value = domain;
   editDomainName.value = domain.name;
   isEditDialogOpen.value = true;

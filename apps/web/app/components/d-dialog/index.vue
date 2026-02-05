@@ -10,17 +10,17 @@ import {
   DialogTrigger,
 } from "reka-ui";
 
-type Size = "default" | "lg";
+type Size = "md" | "lg";
 
 type Props = {
   size?: Size;
 };
 
-const { size = "default" } = defineProps<Props>();
+const { size = "md" } = defineProps<Props>();
 const open = defineModel<boolean>();
 
 const maxWidthClasses: Record<Size, string> = {
-  default: "max-w-[450px]",
+  md: "max-w-[450px]",
   lg: "max-w-[550px]",
 };
 </script>
@@ -31,15 +31,19 @@ const maxWidthClasses: Record<Size, string> = {
       <slot name="trigger" />
     </DialogTrigger>
     <DialogPortal>
-      <DialogOverlay class="fixed inset-0 z-30 bg-black/10 backdrop-blur-[5px]" />
+      <DialogOverlay
+        class="fixed inset-0 z-30 bg-black/10 backdrop-blur-[5px]"
+      />
       <DialogContent
         :class="[
-          'bg-surface-subtle fixed top-[50%] left-[50%] z-[100] max-h-[85vh] w-[90vw] translate-x-[-50%] translate-y-[-50%] rounded-[14px] p-0.5 shadow-[hsl(206_22%_7%_/_35%)_0px_10px_38px_-10px,_hsl(206_22%_7%_/_20%)_0px_10px_20px_-15px] focus:outline-none',
+          'bg-surface-subtle fixed top-[50%] left-[50%] z-100 max-h-[85vh] w-[90vw] translate-x-[-50%] translate-y-[-50%] rounded-[14px] p-0.5 shadow-[hsl(206_22%_7%_/_35%)_0px_10px_38px_-10px,_hsl(206_22%_7%_/_20%)_0px_10px_20px_-15px] focus:outline-none',
           maxWidthClasses[size],
         ]"
       >
         <div class="bg-surface border-neutral rounded-xl border">
-          <DialogTitle class="text-neutral border-neutral border-b px-4 py-3 text-sm font-medium">
+          <DialogTitle
+            class="text-neutral border-neutral border-b px-4 py-3 text-sm font-medium"
+          >
             <slot name="title" />
           </DialogTitle>
           <DialogDescription class="text-neutral-subtle hidden">

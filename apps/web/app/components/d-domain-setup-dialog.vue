@@ -100,7 +100,6 @@ async function copyToClipboard(text: string, field: string) {
     <template #title>Setup domain</template>
     <template #content>
       <div class="flex flex-col gap-3">
-        <!-- Status row -->
         <div class="flex items-center justify-between">
           <span
             v-if="isVerified"
@@ -121,20 +120,17 @@ async function copyToClipboard(text: string, field: string) {
           </div>
         </div>
 
-        <!-- Description -->
         <p class="text-copy text-neutral-subtle leading-relaxed">
           Setup these DNS records at your provider to connect your domain to Zeitwork:
         </p>
 
-        <!-- DNS records table -->
         <div class="border-neutral overflow-hidden rounded-md border shadow-xs">
-          <!-- Header -->
           <div class="border-neutral flex border-b">
             <div class="text-neutral-subtle w-[100px] px-3 py-2 text-sm font-medium">Type</div>
             <div class="text-neutral-subtle w-[135px] px-3 py-2 text-sm font-medium">Name</div>
             <div class="text-neutral-subtle flex-1 px-3 py-2 text-sm font-medium">Value</div>
           </div>
-          <!-- A/CNAME row -->
+
           <div class="border-neutral flex items-center border-b">
             <div class="text-neutral w-[100px] px-3 py-2 text-sm font-medium">
               {{ dnsRecord.type }}
@@ -168,7 +164,7 @@ async function copyToClipboard(text: string, field: string) {
               </button>
             </div>
           </div>
-          <!-- TXT row -->
+
           <div class="flex items-center">
             <div class="text-neutral w-[100px] px-3 py-2 text-sm font-medium">TXT</div>
             <div class="flex w-[135px] items-center gap-2 px-3 py-2">
