@@ -33,6 +33,7 @@ export const users = pgTable("users", {
   username: text().notNull().unique(),
   profilePictureUrl: text(),
   githubAccountId: integer(),
+  verifiedAt: timestamp({ withTimezone: true }), // null = not verified (on waitlist)
   ...timestamps,
 });
 

@@ -11,12 +11,9 @@ const querySchema = z.object({
 
 export default defineEventHandler(async (event) => {
   try {
-    const session = await requireUserSession(event);
-    const { secure } = session;
-
-    if (!secure) {
-      throw createError({ statusCode: 401, message: "Unauthorized" });
-    }
+    const { secure, verified } = await requireVerifiedUser(event);
+    if (!secure) throw createError({ statusCode: 401, message: "Unauthorized" });
+    if (!verified) throw createError({ statusCode: 403, message: "Account not verified" });
 
     // Validate query parameters
     let query;

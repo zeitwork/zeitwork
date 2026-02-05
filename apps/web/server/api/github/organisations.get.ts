@@ -2,11 +2,9 @@ import { githubInstallations, users } from "@zeitwork/database/schema";
 
 export default defineEventHandler(async (event) => {
   try {
-    const { secure } = await requireUserSession(event);
-    if (!secure) {
-      console.error("[GitHub API - organisations.get] Missing session data");
-      throw createError({ statusCode: 401, message: "Unauthorized" });
-    }
+    const { secure, verified } = await requireVerifiedUser(event);
+    if (!secure) throw createError({ statusCode: 401, message: "Unauthorized" });
+    if (!verified) throw createError({ statusCode: 403, message: "Account not verified" });
 
     // Get user
     let user;

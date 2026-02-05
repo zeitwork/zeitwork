@@ -197,6 +197,7 @@ export default defineOAuthGitHubEventHandler({
             username: dbUser.username,
             githubId: dbUser.githubAccountId,
             avatarUrl: user.avatar_url,
+            verifiedAt: dbUser.verifiedAt,
           },
           secure: {
             userId: dbUser.id,

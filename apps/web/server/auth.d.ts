@@ -7,6 +7,7 @@ declare module "#auth-utils" {
     username: string;
     githubId: number;
     avatarUrl: string;
+    verifiedAt: string | null; // null = not verified (on waitlist)
   }
 
   interface UserSession {

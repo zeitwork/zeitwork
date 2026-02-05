@@ -18,8 +18,9 @@ const bodySchema = z.object({
 });
 
 export default defineEventHandler(async (event) => {
-  const { secure } = await requireUserSession(event);
+  const { secure, verified } = await requireVerifiedUser(event);
   if (!secure) throw createError({ statusCode: 401, message: "Unauthorized" });
+  if (!verified) throw createError({ statusCode: 403, message: "Account not verified" });
 
   const { id: projectSlug, envId } = await getValidatedRouterParams(event, paramsSchema.parse);
   const body = await readValidatedBody(event, bodySchema.parse);
