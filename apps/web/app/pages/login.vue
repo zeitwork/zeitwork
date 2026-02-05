@@ -33,10 +33,10 @@ function dismissError() {
   <div class="flex flex-1 justify-center pt-[15vh]">
     <div class="flex flex-col items-center p-8 text-center">
       <div class="mb-4">
-        <DLogo class="text-neutral-strong h-5" />
+        <DLogo class="text-primary h-5" />
       </div>
-      <h1 class="text-neutral text-md mb-2 font-medium">Welcome to Zeitwork</h1>
-      <p class="text-neutral-subtle mb-4 max-w-md text-sm">Log in or sign up to get started.</p>
+      <h1 class="text-primary text-md mb-2 font-medium">Welcome to Zeitwork</h1>
+      <p class="text-secondary mb-4 max-w-md text-sm">Log in or sign up to get started.</p>
 
       <!-- Error message display -->
       <div

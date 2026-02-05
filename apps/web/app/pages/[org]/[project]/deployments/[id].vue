@@ -30,7 +30,7 @@ const parsedBuildLogs = computed(() => buildLogs.value?.map((log) => parseAnsi(l
   <div class="h-full flex flex-col flex-1">
     <DHeader title="Deployment details">
       <template #leading>
-        <span class="text-copy text-neutral-subtle font-mono">{{ formattedId }}</span>
+        <span class="text-copy text-secondary font-mono">{{ formattedId }}</span>
       </template>
     </DHeader>
 
@@ -41,21 +41,21 @@ const parsedBuildLogs = computed(() => buildLogs.value?.map((log) => parseAnsi(l
         </div>
       </div> -->
       <!-- Build Logs Section -->
-      <div class="border-neutral-subtle border-b">
+      <div class="border-edge-subtle border-b">
         <div
-          class="border-neutral-subtle flex items-center gap-2 border-b bg-neutral-950 px-4 py-2"
+          class="border-edge-subtle flex items-center gap-2 border-b bg-surface-1 px-4 py-2"
         >
-          <HammerIcon class="size-4 text-neutral-400" />
-          <span class="text-sm font-medium text-neutral-300">Build Logs</span>
+          <HammerIcon class="size-4 text-secondary" />
+          <span class="text-sm font-medium text-secondary">Build Logs</span>
         </div>
-        <div class="bg-black p-4 font-mono text-sm">
-          <pre v-if="buildLogs?.length === 0" class="text-xs text-neutral-500">
+        <div class="bg-surface-0 p-4 font-mono text-sm">
+          <pre v-if="buildLogs?.length === 0" class="text-xs text-tertiary">
 No build logs available yet...</pre
           >
           <pre
             v-for="(segments, index) in parsedBuildLogs"
             :key="index"
-            class="text-xs text-neutral-400"
+            class="text-xs text-secondary"
           ><span
               v-for="(segment, i) in segments"
               :key="i"
@@ -70,13 +70,13 @@ No build logs available yet...</pre
       <!-- Runtime Logs Section -->
       <!-- <div>
         <div
-          class="border-neutral-subtle flex items-center gap-2 border-b bg-neutral-950 px-4 py-2"
+          class="border-edge-subtle flex items-center gap-2 border-b bg-surface-2 px-4 py-2"
         >
-          <PlayIcon class="size-4 text-neutral-400" />
-          <span class="text-sm font-medium text-neutral-300">Runtime Logs</span>
+          <PlayIcon class="size-4 text-secondary" />
+          <span class="text-sm font-medium text-secondary">Runtime Logs</span>
         </div>
-        <div class="bg-black p-4 font-mono text-sm">
-          <pre class="text-xs text-neutral-500">Runtime logs not available yet. Coming soon...</pre>
+        <div class="bg-surface-1 p-4 font-mono text-sm">
+          <pre class="text-xs text-tertiary">Runtime logs not available yet. Coming soon...</pre>
         </div>
       </div> -->
     </div>

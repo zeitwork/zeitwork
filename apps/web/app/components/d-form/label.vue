@@ -9,9 +9,9 @@ const { name, required = false } = defineProps<Props>();
 <template>
   <label
     :for="name"
-    class="text-label text-neutral flex justify-between gap-1 font-medium whitespace-nowrap"
+    class="text-label text-primary flex justify-between gap-1 font-medium whitespace-nowrap"
   >
     <slot></slot>
-    <span v-if="required" class="text-xs text-orange-500"> * </span>
+    <span v-if="required" class="text-xs text-warn"> * </span>
   </label>
 </template>

@@ -28,18 +28,18 @@ const open = ref(false);
   <SelectRoot v-model="model" :open="open" @update:open="open = $event">
     <SelectTrigger
       :disabled="disabled"
-      class="bg-neutral border-neutral hover: focus:bg-neutral flex cursor-default items-center justify-between rounded-lg border px-2.5 text-sm outline-none select-none focus:border-blue-600 focus:ring-2 focus:ring-blue-300"
+      class="bg-surface-0 border-edge focus:bg-surface-0 focus:border-edge-strong flex cursor-default items-center justify-between rounded-lg border px-2.5 text-sm outline-none select-none"
       :class="[
         disabled
-          ? 'bg-neutral-strong cursor-not-allowed opacity-50'
-          : 'hover:border-neutral-strong/30',
+          ? 'bg-surface-2 cursor-not-allowed opacity-50'
+          : 'hover:border-edge-strong',
         size === 'sm' ? 'h-7' : 'h-9',
       ]"
     >
       <SelectValue :placeholder="placeholder" />
       <div>
-        <ChevronDownIcon v-if="!open" class="ml-2 size-4 text-neutral-700" />
-        <ChevronUpIcon v-else class="ml-2 size-4 text-neutral-700" />
+        <ChevronDownIcon v-if="!open" class="ml-2 size-4 text-secondary" />
+        <ChevronUpIcon v-else class="ml-2 size-4 text-secondary" />
       </div>
     </SelectTrigger>
 
@@ -48,7 +48,7 @@ const open = ref(false);
         position="popper"
         side="bottom"
         align="start"
-        class="border-neutral bg-neutral z-[9999] w-[var(--reka-select-trigger-width)] rounded-lg border shadow-sm"
+        class="border-edge bg-surface-0 z-[9999] w-[var(--reka-select-trigger-width)] rounded-lg border shadow-sm"
         :side-offset="5"
         ref="selectContentRef"
       >
@@ -57,7 +57,7 @@ const open = ref(false);
             v-for="option in options"
             :key="String(option.value)"
             :value="option.value as string | number"
-            class="hover:bg-neutral-hover focus:bg-neutral-hover text-neutral flex cursor-default items-center justify-between rounded-md px-2.5 py-1.5 text-sm select-none focus:outline-0"
+            class="hover:bg-surface-1 focus:bg-surface-1 text-primary flex cursor-default items-center justify-between rounded-md px-2.5 py-1.5 text-sm select-none focus:outline-0"
           >
             <SelectItemText>
               {{ option.display }}

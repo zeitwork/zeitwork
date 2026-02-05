@@ -32,21 +32,21 @@ const maxWidthClasses: Record<Size, string> = {
     </DialogTrigger>
     <DialogPortal>
       <DialogOverlay
-        class="fixed inset-0 z-30 bg-black/10 backdrop-blur-[5px]"
+        class="fixed inset-0 z-30 bg-overlay backdrop-blur-[2px]"
       />
       <DialogContent
         :class="[
-          'bg-surface-subtle fixed top-[50%] left-[50%] z-100 max-h-[85vh] w-[90vw] translate-x-[-50%] translate-y-[-50%] rounded-[14px] p-0.5 shadow-[hsl(206_22%_7%_/_35%)_0px_10px_38px_-10px,_hsl(206_22%_7%_/_20%)_0px_10px_20px_-15px] focus:outline-none',
+          'bg-surface-1 fixed top-[50%] left-[50%] z-100 max-h-[85vh] w-[90vw] translate-x-[-50%] translate-y-[-50%] rounded-[14px] p-0.5 shadow-[hsl(206_22%_7%_/_35%)_0px_10px_38px_-10px,_hsl(206_22%_7%_/_20%)_0px_10px_20px_-15px] focus:outline-none',
           maxWidthClasses[size],
         ]"
       >
-        <div class="bg-surface border-neutral rounded-xl border">
+        <div class="bg-surface-0 border-edge rounded-xl border">
           <DialogTitle
-            class="text-neutral border-neutral border-b px-4 py-3 text-sm font-medium"
+            class="text-primary border-edge border-b px-4 py-3 text-sm font-medium"
           >
             <slot name="title" />
           </DialogTitle>
-          <DialogDescription class="text-neutral-subtle hidden">
+          <DialogDescription class="text-secondary hidden">
             <slot name="description" />
           </DialogDescription>
           <div class="p-4">

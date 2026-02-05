@@ -67,9 +67,9 @@ function addGitHubAccount() {
     <DButton variant="secondary" :to="`/${org}`" :icon-left="XMarkIcon" />
 
     <div class="mx-auto mt-20 flex max-w-xl flex-col gap-4">
-      <h1 class="text-title-sm text-neutral">Import from Git</h1>
-      <div class="bg-surface-subtle w-full rounded-[14px] p-0.5">
-        <div class="bg-surface flex flex-col gap-2 rounded-xl p-2">
+      <h1 class="text-title-sm text-primary">Import from Git</h1>
+      <div class="bg-surface-1 w-full rounded-[14px] p-0.5">
+        <div class="bg-surface-0 flex flex-col gap-2 rounded-xl p-2">
           <div class="flex items-center gap-2">
             <DCombobox
               class="w-50"
@@ -99,7 +99,7 @@ function addGitHubAccount() {
               </template>
               <template #footer>
                 <div
-                  class="border-neutral-subtle mt-1 border-t pt-1"
+                  class="border-edge-subtle mt-1 border-t pt-1"
                   @click.prevent="addGitHubAccount"
                 >
                   <DComboboxItem value="add-account" label="Add GitHub account">
@@ -130,7 +130,7 @@ function addGitHubAccount() {
               >
                 <div class="flex items-center gap-2">
                   <div
-                    class="bg-surface-subtle size-6 overflow-hidden rounded-full"
+                    class="bg-surface-1 size-6 overflow-hidden rounded-full"
                   >
                     <img
                       :src="`/icons/framework/${project.framework}.png`"
@@ -138,7 +138,7 @@ function addGitHubAccount() {
                       alt=""
                     />
                   </div>
-                  <p class="text-neutral text-copy">{{ project.label }}</p>
+                  <p class="text-primary text-copy">{{ project.label }}</p>
                 </div>
                 <DButton
                   variant="primary"

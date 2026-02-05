@@ -108,32 +108,32 @@ async function createProject() {
 
     <div class="mx-auto mt-20 flex max-w-xl flex-col gap-4">
       <div>
-        <h1 class="text-title-sm text-neutral">New project</h1>
-        <p class="text-neutral-subtle text-copy-sm mt-2">
-          We require your project to have a <code class="text-neutral rounded bg-neutral-100 px-1 dark:bg-neutral-800">Dockerfile</code> and expose on port <code class="text-neutral rounded bg-neutral-100 px-1 dark:bg-neutral-800">3000</code>.
+        <h1 class="text-title-sm text-primary">New project</h1>
+        <p class="text-secondary text-copy-sm mt-2">
+          We require your project to have a <code class="text-primary rounded bg-surface-2 px-1">Dockerfile</code> and expose on port <code class="text-primary rounded bg-surface-2 px-1">3000</code>.
           Feel free to DM <a href="https://x.com/tomhaerter" target="_blank" class="underline hover:no-underline">x.com/tomhaerter</a> if you have other requirements.
           We're working on automatic framework support - <a href="https://github.com/zeitwork/zeitwork/issues/15" target="_blank" class="underline hover:no-underline">upvote the issue</a> if you'd like to see it sooner.
         </p>
       </div>
-      <div class="bg-surface-subtle w-full rounded-[14px] p-0.5">
+      <div class="bg-surface-2 w-full rounded-[14px] p-0.5">
         <div class="flex flex-col gap-1 px-[18px] py-3">
-          <p class="text-neutral-subtle text-copy-sm">Importing from GitHub</p>
-          <div class="text-neutral text-copy flex items-center gap-1">
+          <p class="text-secondary text-copy-sm">Importing from GitHub</p>
+          <div class="text-primary text-copy flex items-center gap-1">
             <img src="/icons/github-mark.svg" />
             <p>
               <span>{{ repo }}</span>
             </p>
-            <p class="text-neutral-subtle flex items-center gap-1">
+            <p class="text-secondary flex items-center gap-1">
               <GitMergeIcon class="size-3" stroke-width="2" />
               <span>main</span>
             </p>
           </div>
         </div>
-        <div class="bg-surface flex flex-col gap-2 rounded-xl">
+        <div class="bg-surface-0 flex flex-col gap-2 rounded-xl">
           <div class="flex flex-col gap-3 p-[18px]">
             <div class="flex w-full items-end gap-2">
               <DFormGroup v-if="false" class="flex-1">
-                <DLabel class="text-neutral text-copy-sm">Team</DLabel>
+                <DLabel class="text-primary text-copy-sm">Team</DLabel>
                 <DCombobox
                   v-model="selectedTeam"
                   :items="teams"
@@ -148,7 +148,7 @@ async function createProject() {
                         :src="`/icons/team/${selectedItem?.value}.png`"
                         class="size-5"
                       />
-                      <div v-else class="bg-surface-strong size-5 rounded-full"></div>
+                      <div v-else class="bg-surface-2 size-5 rounded-full"></div>
                       {{ selectedItem ? selectedItem.label : placeholder }}
                     </div>
                   </template>
@@ -165,7 +165,7 @@ async function createProject() {
                     </DComboboxItem>
                   </template>
                   <template #footer>
-                    <div class="border-neutral-subtle mt-1 border-t pt-1">
+                    <div class="border-edge-subtle mt-1 border-t pt-1">
                       <DComboboxItem value="add-account" label="Create a Team">
                         <template #leading>
                           <PlusIcon class="size-4" />
@@ -176,7 +176,7 @@ async function createProject() {
                 </DCombobox>
               </DFormGroup>
               <DFormGroup class="flex-1">
-                <DLabel class="text-neutral text-copy-sm">Project Name</DLabel>
+                <DLabel class="text-primary text-copy-sm">Project Name</DLabel>
                 <DInput type="text" placeholder="Enter project name..." v-model="projectName" />
               </DFormGroup>
             </div>
@@ -185,7 +185,7 @@ async function createProject() {
               <DInput type="text" placeholder="Leave blank for root" v-model="rootDirectory" />
             </DFormGroup>
             <DFormGroup v-if="false" class="flex-1">
-              <DLabel class="text-neutral text-copy-sm">Framework</DLabel>
+              <DLabel class="text-primary text-copy-sm">Framework</DLabel>
               <DCombobox
                 v-model="selectedFramework"
                 :items="frameworks"
@@ -200,7 +200,7 @@ async function createProject() {
                       :src="`/icons/framework/${selectedItem?.value}.png`"
                       class="size-5"
                     />
-                    <div v-else class="bg-surface-strong size-5 rounded-full"></div>
+                    <div v-else class="bg-surface-2 size-5 rounded-full"></div>
                     {{ selectedItem ? selectedItem.label : placeholder }}
                   </div>
                 </template>
@@ -217,7 +217,7 @@ async function createProject() {
                   </DComboboxItem>
                 </template>
                 <template #footer>
-                  <div class="border-neutral-subtle mt-1 border-t pt-1">
+                  <div class="border-edge-subtle mt-1 border-t pt-1">
                     <DComboboxItem value="add-account" label="Add Dockerfile">
                       <template #leading>
                         <PlusIcon class="size-4" />
@@ -228,7 +228,7 @@ async function createProject() {
               </DCombobox>
             </DFormGroup>
             <div class="flex flex-col gap-2">
-              <DLabel class="text-neutral text-copy-sm">Environment Variables</DLabel>
+              <DLabel class="text-primary text-copy-sm">Environment Variables</DLabel>
               <div class="flex flex-col gap-2">
                 <div
                   v-for="(envVariable, index) in envVariables"
@@ -267,7 +267,7 @@ async function createProject() {
             >Back</DButton
           >
           <div class="flex flex-col items-end gap-2">
-            <p v-if="errorMessage" class="text-copy-sm text-red-500">{{ errorMessage }}</p>
+            <p v-if="errorMessage" class="text-copy-sm text-danger">{{ errorMessage }}</p>
             <DButton variant="primary" @click="createProject">Deploy</DButton>
           </div>
         </div>

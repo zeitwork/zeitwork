@@ -88,13 +88,13 @@ function handleDomainVerified() {
       <template #trailing>
         <div class="relative">
           <MagnifyingGlassIcon
-            class="text-neutral-weak pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2"
+            class="text-tertiary pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2"
           />
           <input
             v-model="search"
             type="text"
             placeholder="Search Domains..."
-            class="bg-surface-subtle border-neutral text-copy text-neutral placeholder:text-neutral-weak h-8 w-[230px] rounded-md border py-1.5 pr-3 pl-8 outline-none"
+            class="bg-surface-1 border-edge text-copy text-primary placeholder:text-tertiary h-8 w-[230px] rounded-md border py-1.5 pr-3 pl-8 outline-none"
           />
         </div>
         <DDialog v-model="isAddDialogOpen">
@@ -105,7 +105,7 @@ function handleDomainVerified() {
           <template #content>
             <form class="flex flex-col gap-3" @submit.prevent="createDomain">
               <div class="flex flex-col gap-1.5">
-                <label class="text-copy-sm text-neutral">Domain name</label>
+                <label class="text-copy-sm text-primary">Domain name</label>
                 <DInput v-model="domainName" placeholder="example.com" />
               </div>
             </form>
@@ -160,7 +160,7 @@ function handleDomainVerified() {
       <template #content>
         <form class="flex flex-col gap-3" @submit.prevent="updateDomain">
           <div class="flex flex-col gap-1.5">
-            <label class="text-copy-sm text-neutral">Domain name</label>
+            <label class="text-copy-sm text-primary">Domain name</label>
             <DInput v-model="editDomainName" placeholder="example.com" />
           </div>
         </form>
@@ -172,9 +172,9 @@ function handleDomainVerified() {
           </template>
           <template #title>Delete domain</template>
           <template #content>
-            <p class="text-copy text-neutral-subtle">
+            <p class="text-copy text-secondary">
               Are you sure you want to delete
-              <strong class="text-neutral">{{ editDomain?.name }}</strong>?
+              <strong class="text-primary">{{ editDomain?.name }}</strong>?
               This will remove the domain and its DNS configuration.
             </p>
           </template>

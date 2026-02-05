@@ -76,17 +76,17 @@ const hasTrailing = computed(() => {
 
 <template>
   <div
-    class="bg-surface-weak border-neutral text-neutral text-copy has-[:focus]:bg-neutral has-[:focus]:ring-neutral has-[:focus]:border-neutral-strong/20 flex h-8 overflow-hidden rounded-md border leading-none transition-all outline-none has-[:focus]:ring-2"
+    class="bg-surface-1 border-edge text-primary text-copy has-[:focus]:bg-surface-0 has-[:focus]:border-edge-strong flex h-8 overflow-hidden rounded-md border leading-none transition-all outline-none"
     :class="[
       disabled
-        ? 'bg-neutral-strong cursor-not-allowed opacity-50'
-        : 'hover:border-neutral-strong/15',
+        ? 'bg-surface-2 cursor-not-allowed opacity-50'
+        : 'hover:border-edge-strong',
     ]"
   >
     <div
       v-if="$slots.leading || leading"
-      class="border-neutral flex items-center px-2"
-      :class="leadingBackground ? 'bg-neutral-subtle' : ''"
+      class="border-edge flex items-center px-2"
+      :class="leadingBackground ? 'bg-surface-1' : ''"
     >
       <template v-if="leading">
         {{ leading }}
@@ -116,8 +116,8 @@ const hasTrailing = computed(() => {
 
     <div
       v-if="$slots.trailing || trailing"
-      class="border-neutral flex items-center px-2"
-      :class="trailingBackground ? 'bg-neutral-subtle' : ''"
+      class="border-edge flex items-center px-2"
+      :class="trailingBackground ? 'bg-surface-1' : ''"
     >
       <template v-if="trailing">
         {{ trailing }}

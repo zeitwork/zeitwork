@@ -17,17 +17,17 @@ const { to, name, icon, active, fullWidth = false } = defineProps<Props>();
 </script>
 
 <template>
-  <DHover :active="active" background="bg-surface-strong" :full-width="fullWidth">
+  <DHover :active="active" background="bg-inverse/5" :full-width="fullWidth">
     <NuxtLink
       class="flex h-8 items-center gap-0.5 px-2 text-copy"
       :class="[
-        active ? 'text-neutral' : 'text-neutral-subtle group-hover/h:text-neutral',
+        active ? 'text-primary' : 'text-secondary group-hover/h:text-primary',
         fullWidth ? 'w-full' : '',
       ]"
       :to="to"
     >
       <div v-if="icon" class="grid size-5 place-items-center">
-        <component :is="icon" class="text-neutral-subtle size-4" />
+        <component :is="icon" class="text-secondary size-4" />
       </div>
       <div class="px-0.5">
         {{ name }}

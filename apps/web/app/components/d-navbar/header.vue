@@ -7,7 +7,7 @@ const environmentName = computed<string>(() => route.params.env as string);
 <template>
   <div class="flex items-center px-3 py-2">
     <NuxtLink :to="`/${orgSlug}`" class="grid size-8 place-items-center">
-      <d-logo class="text-neutral-strong size-4" />
+      <d-logo class="text-primary size-4" />
     </NuxtLink>
     <d-page-header-separator />
     <d-page-header-breadcrumb-link :to="`/${orgSlug}`" :name="orgSlug" />

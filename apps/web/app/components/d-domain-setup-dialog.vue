@@ -103,36 +103,36 @@ async function copyToClipboard(text: string, field: string) {
         <div class="flex items-center justify-between">
           <span
             v-if="isVerified"
-            class="rounded bg-green-100 px-1.5 py-0.5 text-xs font-medium text-green-700"
+            class="rounded bg-success-subtle px-1.5 py-0.5 text-xs font-medium text-success"
           >
             Verified
           </span>
-          <span v-else class="rounded bg-orange-100 px-1.5 py-0.5 text-xs font-medium text-orange-700">
+          <span v-else class="rounded bg-warn-subtle px-1.5 py-0.5 text-xs font-medium text-warn">
             Setup needed
           </span>
-          <div v-if="!isVerified" class="text-neutral-subtle flex items-center gap-1.5">
+          <div v-if="!isVerified" class="text-secondary flex items-center gap-1.5">
             <LoaderIcon class="size-4 animate-spin" />
             <span class="text-copy">Verifying</span>
           </div>
-          <div v-else class="text-green-600 flex items-center gap-1.5">
+          <div v-else class="text-success flex items-center gap-1.5">
             <CheckCircleIcon class="size-4" />
             <span class="text-copy">Verified</span>
           </div>
         </div>
 
-        <p class="text-copy text-neutral-subtle leading-relaxed">
+        <p class="text-copy text-secondary leading-relaxed">
           Setup these DNS records at your provider to connect your domain to Zeitwork:
         </p>
 
-        <div class="border-neutral overflow-hidden rounded-md border shadow-xs">
-          <div class="border-neutral flex border-b">
-            <div class="text-neutral-subtle w-[100px] px-3 py-2 text-sm font-medium">Type</div>
-            <div class="text-neutral-subtle w-[135px] px-3 py-2 text-sm font-medium">Name</div>
-            <div class="text-neutral-subtle flex-1 px-3 py-2 text-sm font-medium">Value</div>
+        <div class="border-edge overflow-hidden rounded-md border shadow-xs">
+          <div class="border-edge flex border-b">
+            <div class="text-secondary w-[100px] px-3 py-2 text-sm font-medium">Type</div>
+            <div class="text-secondary w-[135px] px-3 py-2 text-sm font-medium">Name</div>
+            <div class="text-secondary flex-1 px-3 py-2 text-sm font-medium">Value</div>
           </div>
 
-          <div class="border-neutral flex items-center border-b">
-            <div class="text-neutral w-[100px] px-3 py-2 text-sm font-medium">
+          <div class="border-edge flex items-center border-b">
+            <div class="text-primary w-[100px] px-3 py-2 text-sm font-medium">
               {{ dnsRecord.type }}
             </div>
             <div class="flex w-[135px] items-center gap-2 px-3 py-2">
@@ -140,10 +140,10 @@ async function copyToClipboard(text: string, field: string) {
                 type="text"
                 readonly
                 :value="dnsRecord.name"
-                class="text-neutral w-full truncate bg-transparent text-sm font-medium outline-none"
+                class="text-primary w-full truncate bg-transparent text-sm font-medium outline-none"
               />
               <button
-                class="text-neutral-subtle hover:text-neutral shrink-0 cursor-pointer rounded p-0.5 transition-colors"
+                class="text-secondary hover:text-primary shrink-0 cursor-pointer rounded p-0.5 transition-colors"
                 @click="copyToClipboard(dnsRecord.name, 'dns-name')"
               >
                 <CopyIcon class="size-4" />
@@ -154,10 +154,10 @@ async function copyToClipboard(text: string, field: string) {
                 type="text"
                 readonly
                 :value="dnsRecord.value"
-                class="text-neutral w-full truncate bg-transparent text-sm font-medium outline-none"
+                class="text-primary w-full truncate bg-transparent text-sm font-medium outline-none"
               />
               <button
-                class="text-neutral-subtle hover:text-neutral shrink-0 cursor-pointer rounded p-0.5 transition-colors"
+                class="text-secondary hover:text-primary shrink-0 cursor-pointer rounded p-0.5 transition-colors"
                 @click="copyToClipboard(dnsRecord.value, 'dns-value')"
               >
                 <CopyIcon class="size-4" />
@@ -166,16 +166,16 @@ async function copyToClipboard(text: string, field: string) {
           </div>
 
           <div class="flex items-center">
-            <div class="text-neutral w-[100px] px-3 py-2 text-sm font-medium">TXT</div>
+            <div class="text-primary w-[100px] px-3 py-2 text-sm font-medium">TXT</div>
             <div class="flex w-[135px] items-center gap-2 px-3 py-2">
               <input
                 type="text"
                 readonly
                 :value="txtName"
-                class="text-neutral w-full truncate bg-transparent text-sm font-medium outline-none"
+                class="text-primary w-full truncate bg-transparent text-sm font-medium outline-none"
               />
               <button
-                class="text-neutral-subtle hover:text-neutral shrink-0 cursor-pointer rounded p-0.5 transition-colors"
+                class="text-secondary hover:text-primary shrink-0 cursor-pointer rounded p-0.5 transition-colors"
                 @click="copyToClipboard(txtName, 'txt-name')"
               >
                 <CopyIcon class="size-4" />
@@ -186,10 +186,10 @@ async function copyToClipboard(text: string, field: string) {
                 type="text"
                 readonly
                 :value="txtValue"
-                class="text-neutral w-full truncate bg-transparent text-sm font-medium outline-none"
+                class="text-primary w-full truncate bg-transparent text-sm font-medium outline-none"
               />
               <button
-                class="text-neutral-subtle hover:text-neutral shrink-0 cursor-pointer rounded p-0.5 transition-colors"
+                class="text-secondary hover:text-primary shrink-0 cursor-pointer rounded p-0.5 transition-colors"
                 @click="copyToClipboard(txtValue, 'txt-value')"
               >
                 <CopyIcon class="size-4" />

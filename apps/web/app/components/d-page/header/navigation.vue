@@ -9,7 +9,7 @@ const route = useRoute();
 </script>
 
 <template>
-  <div class="bg-neutral" :class="[padding ? 'px-2 md:px-4' : '']">
+  <div class="bg-surface-0" :class="[padding ? 'px-2 md:px-4' : '']">
     <div
       class="flex overflow-x-auto whitespace-nowrap no-scrollbar md:overflow-visible md:whitespace-normal"
     >
@@ -19,12 +19,12 @@ const route = useRoute();
         :to="item?.to"
         :class="
           route.path.endsWith(item?.to)
-            ? 'text-neutral border-neutral-strong'
-            : 'text-neutral-subtle border-transparent'
+            ? 'text-primary border-edge-strong'
+            : 'text-secondary border-transparent'
         "
-        class="group hover:text-neutral border-b-2 py-2 transition duration-150 ease-in-out"
+        class="group hover:text-primary border-b-2 py-2 transition duration-150 ease-in-out"
       >
-        <div class="group-hover:bg-neutral-subtle text-copy rounded-lg px-3 py-1">
+        <div class="group-hover:bg-surface-1 text-copy rounded-lg px-3 py-1">
           {{ item?.name }}
         </div>
       </NuxtLink>

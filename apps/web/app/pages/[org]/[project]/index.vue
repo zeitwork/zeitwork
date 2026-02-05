@@ -48,38 +48,38 @@ function renderDate(date: string) {
 function deploymentStatusColor(status: string) {
   switch (status) {
     case "pending":
-      return "text-yellow-500";
+      return "text-warn";
     case "building":
-      return "text-blue-500";
+      return "text-accent";
     case "starting":
-      return "text-blue-500";
+      return "text-accent";
     case "running":
-      return "text-green-500";
+      return "text-success";
     case "failed":
-      return "text-red-500";
+      return "text-danger";
     case "stopped":
-      return "text-neutral-subtle";
+      return "text-tertiary";
     default:
-      return "text-neutral";
+      return "text-tertiary";
   }
 }
 
 function deploymentStatusBgColor(status: string) {
   switch (status) {
     case "pending":
-      return "bg-yellow-100";
+      return "bg-warn-subtle";
     case "building":
-      return "bg-blue-100";
+      return "bg-accent-subtle";
     case "starting":
-      return "bg-blue-100";
+      return "bg-accent-subtle";
     case "running":
-      return "bg-green-100";
+      return "bg-success-subtle";
     case "failed":
-      return "bg-red-100";
+      return "bg-danger-subtle";
     case "stopped":
-      return "bg-neutral-subtle";
+      return "bg-inverse/5";
     default:
-      return "bg-neutral/10";
+      return "bg-inverse/5";
   }
 }
 
@@ -92,12 +92,12 @@ function deploymentLink(deployment: any) {
   <div class="flex h-full flex-col overflow-auto">
     <DHeader title="Deployments">
       <template #leading>
-        <span class="text-copy text-neutral-subtle">Automatically created for pushes to</span>
+        <span class="text-copy text-secondary">Automatically created for pushes to</span>
         <a
           v-if="project?.githubRepository"
           :href="`https://github.com/${project.githubRepository}`"
           target="_blank"
-          class="text-neutral flex items-center gap-1"
+          class="text-primary flex items-center gap-1"
         >
           <Icon name="mdi:github" class="size-3.5" />
           <span class="text-copy hover:underline">{{ project.githubRepository }}</span>
@@ -114,7 +114,7 @@ function deploymentLink(deployment: any) {
         v-for="deployment in deployments"
         :key="deployment.id"
         :to="deploymentLink(deployment)"
-        class="hover:bg-surface-subtle border-neutral-subtle text-neutral grid cursor-pointer grid-cols-[auto_100px_100px_3fr_1fr] items-center gap-4 border-b p-4 text-sm"
+        class="hover:bg-surface-1 border-edge-subtle text-primary grid cursor-pointer grid-cols-[auto_100px_100px_3fr_1fr] items-center gap-4 border-b p-4 text-sm"
       >
         <div class="font-mono">{{ uuidToBase58(deployment.id) }}</div>
         <div>
@@ -136,15 +136,15 @@ function deploymentLink(deployment: any) {
               :key="domain"
               :href="`https://${domain}`"
               target="_blank"
-              class="text-blue-500 hover:underline"
+              class="text-secondary hover:text-primary hover:underline"
               @click.stop
               >{{ domain
-              }}<span v-if="idx < deployment.domains.length - 1" class="text-neutral-subtle"
+              }}<span v-if="idx < deployment.domains.length - 1" class="text-secondary"
                 >,
               </span></a
             >
           </template>
-          <span v-else class="text-neutral-subtle">—</span>
+          <span v-else class="text-secondary">—</span>
         </div>
         <div class="text-right line-clamp-1">{{ renderDate(deployment.createdAt) }}</div>
       </nuxt-link>

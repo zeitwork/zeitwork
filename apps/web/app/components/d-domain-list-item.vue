@@ -67,25 +67,25 @@ watch(
 </script>
 
 <template>
-  <div class="border-neutral flex items-center gap-6 border-b p-4.5">
+  <div class="border-edge flex items-center gap-6 border-b p-4.5">
 
     <div class="flex w-[400px] items-center gap-3">
-      <CheckCircleIcon v-if="isVerified" class="size-4 shrink-0 text-green-600" />
-      <ExclamationTriangleIcon v-else class="size-4 shrink-0 text-orange-500" />
+      <CheckCircleIcon v-if="isVerified" class="size-4 shrink-0 text-success" />
+      <ExclamationTriangleIcon v-else class="size-4 shrink-0 text-warn" />
       <div class="flex flex-col gap-1.5">
-        <span class="text-copy text-neutral-strong">{{ domain.name }}</span>
+        <span class="text-copy text-primary">{{ domain.name }}</span>
         <div class="flex items-center gap-1.5">
           <span
             v-if="isVerified"
-            class="bg-neutral-subtle text-neutral rounded px-1 py-0.5 text-xs font-medium"
+            class="bg-surface-1 text-primary rounded px-1 py-0.5 text-xs font-medium"
           >
             Valid configuration
           </span>
           <template v-else>
-            <span class="rounded bg-orange-100 px-1 py-0.5 text-xs font-medium text-orange-700">
+            <span class="rounded bg-warn-subtle px-1 py-0.5 text-xs font-medium text-warn">
               Verification needed
             </span>
-            <div class="text-neutral-subtle flex items-center gap-1.5">
+            <div class="text-secondary flex items-center gap-1.5">
               <LoaderIcon class="size-3.5 animate-spin" />
               <span class="text-xs font-medium">Verifying</span>
             </div>
@@ -95,7 +95,7 @@ watch(
     </div>
 
 
-    <div class="text-neutral flex flex-1 items-center gap-2">
+    <div class="text-primary flex flex-1 items-center gap-2">
       <GlobeAltIcon v-if="isProduction" class="size-4" />
       <GitMergeIcon v-else class="size-4" />
       <span class="text-copy">{{ isProduction ? "Production" : "Development" }}</span>
