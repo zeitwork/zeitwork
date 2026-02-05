@@ -109,6 +109,11 @@ async function createProject() {
     <div class="mx-auto mt-20 flex max-w-xl flex-col gap-4">
       <div>
         <h1 class="text-title-sm text-neutral">New project</h1>
+        <p class="text-neutral-subtle text-copy-sm mt-2">
+          We require your project to have a <code class="text-neutral rounded bg-neutral-100 px-1 dark:bg-neutral-800">Dockerfile</code> and expose on port <code class="text-neutral rounded bg-neutral-100 px-1 dark:bg-neutral-800">3000</code>.
+          Feel free to DM <a href="https://x.com/tomhaerter" target="_blank" class="underline hover:no-underline">x.com/tomhaerter</a> if you have other requirements.
+          We're working on automatic framework support - <a href="https://github.com/zeitwork/zeitwork/issues/15" target="_blank" class="underline hover:no-underline">upvote the issue</a> if you'd like to see it sooner.
+        </p>
       </div>
       <div class="bg-surface-subtle w-full rounded-[14px] p-0.5">
         <div class="flex flex-col gap-1 px-[18px] py-3">
