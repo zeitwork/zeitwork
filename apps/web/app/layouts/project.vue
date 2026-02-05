@@ -8,7 +8,9 @@ const links = computed(() => [
   {
     name: "Deployments",
     to: `/${orgSlug.value}/${projectSlug.value}`,
-    active: route.path === `/${orgSlug.value}/${projectSlug.value}`,
+    active:
+      route.path === `/${orgSlug.value}/${projectSlug.value}` ||
+      route.path.startsWith(`/${orgSlug.value}/${projectSlug.value}/deployments`),
   },
   {
     name: "Settings",

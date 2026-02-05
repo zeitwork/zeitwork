@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { Icon } from "@iconify/vue";
 import {
   DialogClose,
   DialogContent,
@@ -10,39 +9,57 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "reka-ui";
+
+type Size = "default" | "lg";
+
+type Props = {
+  size?: Size;
+};
+
+const { size = "default" } = defineProps<Props>();
+const open = defineModel<boolean>();
+
+const maxWidthClasses: Record<Size, string> = {
+  default: "max-w-[450px]",
+  lg: "max-w-[550px]",
+};
 </script>
 
 <template>
-  <DialogRoot>
-    <DialogTrigger>
+  <DialogRoot v-model:open="open">
+    <DialogTrigger as-child>
       <slot name="trigger" />
     </DialogTrigger>
     <DialogPortal>
-      <DialogOverlay class="fixed inset-0 z-30 bg-black/10" />
+      <DialogOverlay class="fixed inset-0 z-30 bg-black/10 backdrop-blur-[5px]" />
       <DialogContent
-        class="bg-surface border-neutral-subtle fixed top-[50%] left-[50%] z-[100] max-h-[85vh] w-[90vw] max-w-[450px] translate-x-[-50%] translate-y-[-50%] rounded-[6px] border p-[25px] shadow-[hsl(206_22%_7%_/_35%)_0px_10px_38px_-10px,_hsl(206_22%_7%_/_20%)_0px_10px_20px_-15px] focus:outline-none"
+        :class="[
+          'bg-surface-subtle fixed top-[50%] left-[50%] z-[100] max-h-[85vh] w-[90vw] translate-x-[-50%] translate-y-[-50%] rounded-[14px] p-0.5 shadow-[hsl(206_22%_7%_/_35%)_0px_10px_38px_-10px,_hsl(206_22%_7%_/_20%)_0px_10px_20px_-15px] focus:outline-none',
+          maxWidthClasses[size],
+        ]"
       >
-        <DialogTitle class="text-neutral-strong m-0 text-[17px] font-semibold">
-          <slot name="title" />
-        </DialogTitle>
-        <DialogDescription class="text-neutral-subtle mt-[10px] mb-5 text-sm leading-normal">
-          <slot name="description" />
-        </DialogDescription>
-        <slot name="content" />
-        <div class="mt-6 flex justify-between">
-          <DialogClose as-child>
-            <slot name="cancel" />
-          </DialogClose>
-          <DialogClose as-child>
-            <slot name="submit" />
-          </DialogClose>
+        <div class="bg-surface border-neutral rounded-xl border">
+          <DialogTitle class="text-neutral border-neutral border-b px-4 py-3 text-sm font-medium">
+            <slot name="title" />
+          </DialogTitle>
+          <DialogDescription class="text-neutral-subtle hidden">
+            <slot name="description" />
+          </DialogDescription>
+          <div class="p-4">
+            <slot name="content" />
+          </div>
         </div>
-        <DialogClose
-          class="absolute top-[10px] right-[10px] inline-flex h-[25px] w-[25px] appearance-none items-center justify-center rounded-full focus:shadow-[0_0_0_2px] focus:outline-none"
-          aria-label="Close"
-        >
-          <slot name="close-x" />
-        </DialogClose>
+        <div class="flex items-center justify-between p-2">
+          <div>
+            <slot name="footer-left" />
+          </div>
+          <div class="flex gap-2">
+            <DialogClose as-child>
+              <slot name="cancel" />
+            </DialogClose>
+            <slot name="submit" />
+          </div>
+        </div>
       </DialogContent>
     </DialogPortal>
   </DialogRoot>

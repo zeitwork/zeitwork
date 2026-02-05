@@ -9,6 +9,8 @@ const route = useRoute();
 const orgId = route.params.org as string;
 const projectSlug = route.params.project as string;
 
+const { data: project } = await useFetch(`/api/projects/${projectSlug}`);
+
 const { data: deployments, refresh: refreshDeployments } = await useFetch(
   `/api/projects/${projectSlug}/deployments`,
 );
@@ -88,12 +90,25 @@ function deploymentLink(deployment: any) {
 
 <template>
   <div class="flex h-full flex-col overflow-auto">
-    <div class="border-neutral-subtle flex h-16 items-center justify-between border-b p-4">
-      <div class="text-neutral-strong text-sm">Deployments</div>
-      <d-button @click="createDeployment" :loading="isCreatingDeployment">
-        Create Deployment
-      </d-button>
-    </div>
+    <DHeader title="Deployments">
+      <template #leading>
+        <span class="text-copy text-neutral-subtle">Automatically created for pushes to</span>
+        <a
+          v-if="project?.githubRepository"
+          :href="`https://github.com/${project.githubRepository}`"
+          target="_blank"
+          class="text-neutral flex items-center gap-1"
+        >
+          <Icon name="mdi:github" class="size-3.5" />
+          <span class="text-copy hover:underline">{{ project.githubRepository }}</span>
+        </a>
+      </template>
+      <template #trailing>
+        <d-button @click="createDeployment" :loading="isCreatingDeployment">
+          Create Deployment
+        </d-button>
+      </template>
+    </DHeader>
     <div class="flex-1 overflow-auto">
       <nuxt-link
         v-for="deployment in deployments"
