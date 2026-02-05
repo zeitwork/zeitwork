@@ -34,6 +34,10 @@ type Config struct {
 	// GitHub App credentials for fetching source code
 	GitHubAppID         string
 	GitHubAppPrivateKey string // base64-encoded
+
+	// Metadata server configuration
+	// Serves env variables to VMs via HTTP (avoids kernel cmdline size limits)
+	MetadataServerAddr string // e.g., "0.0.0.0:8111"
 }
 
 type Service struct {
@@ -49,6 +53,9 @@ type Service struct {
 
 	// GitHub token service for fetching source code
 	githubTokenService *github.Service
+
+	// Metadata server for serving env vars to VMs
+	metadataServer *MetadataServer
 
 	// Schedulers
 	deploymentScheduler *reconciler.Scheduler
@@ -70,13 +77,14 @@ type Service struct {
 // New creates a new reconciler service
 func New(cfg Config) (*Service, error) {
 	s := &Service{
-		cfg:          cfg,
-		db:           cfg.DB,
-		dnsResolver:  dnsresolver.NewResolver(),
-		vmToCmd:      make(map[uuid.UUID]*exec.Cmd),
-		imageMu:      sync.Mutex{},
-		nextTap:      atomic.Int32{},
-		activeBuilds: make(map[uuid.UUID]bool),
+		cfg:            cfg,
+		db:             cfg.DB,
+		dnsResolver:    dnsresolver.NewResolver(),
+		metadataServer: NewMetadataServer(),
+		vmToCmd:        make(map[uuid.UUID]*exec.Cmd),
+		imageMu:        sync.Mutex{},
+		nextTap:        atomic.Int32{},
+		activeBuilds:   make(map[uuid.UUID]bool),
 	}
 
 	// Initialize GitHub token service if credentials are provided
@@ -104,6 +112,15 @@ func New(cfg Config) (*Service, error) {
 // Start starts the reconciler service
 func (s *Service) Start(ctx context.Context) error {
 	slog.Info("starting Zeitwork reconciler")
+
+	// Start metadata server (firewall rules are configured via nftables in ansible)
+	if s.cfg.MetadataServerAddr != "" {
+		go func() {
+			if err := s.metadataServer.Start(ctx, s.cfg.MetadataServerAddr); err != nil {
+				slog.Error("metadata server error", "err", err)
+			}
+		}()
+	}
 
 	// Start all schedulers
 	s.deploymentScheduler.Start()

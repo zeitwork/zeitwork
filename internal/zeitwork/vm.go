@@ -127,12 +127,17 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 		}
 	}
 
+	// Generate one-time token and register VM with metadata server
+	token := uuid.New().String()
+	s.metadataServer.RegisterVM(vm.ID.String(), token, envVars, vmIp.Addr())
+
 	slog.Info("STARTING DA VM", "id", vm.ID, "hostIp", hostIp, "vmIp", vmIp, "vcpus", vm.Vcpus, "memory_mb", vm.Memory, "envVarsCount", len(envVars))
 	vmConfig := VMConfig{
-		AppID:  vm.ID.String(),
-		IPAddr: vmIp.String(),
-		IPGw:   hostIp.Addr().String(),
-		Env:    envVars,
+		AppID:         vm.ID.String(),
+		IPAddr:        vmIp.String(),
+		IPGw:          hostIp.Addr().String(),
+		MetadataURL:   fmt.Sprintf("http://%s:8111/v1/vms/%s/config", hostIp.Addr().String(), vm.ID.String()),
+		MetadataToken: token,
 	}
 	vmConfigBytes, err := json.Marshal(vmConfig)
 	if err != nil {
@@ -271,6 +276,9 @@ func (s *Service) nextIpAddress(ctx context.Context) (netip.Prefix, error) {
 func (s *Service) reconcileVmDelete(ctx context.Context, vm queries.Vm) error {
 	slog.Info("deleting VM", "vm_id", vm.ID.String())
 
+	// Unregister VM from metadata server
+	s.metadataServer.UnregisterVM(vm.ID.String())
+
 	// If the VM is currently running, kill it
 	if cmd, ok := s.vmToCmd[vm.ID]; ok {
 		if cmd.Process != nil {
@@ -313,8 +321,9 @@ func (s *Service) reconcileVMUpdateStatusIf(ctx context.Context, vm queries.Vm, 
 }
 
 type VMConfig struct {
-	AppID  string   `json:"app_id"`
-	IPAddr string   `json:"ip_addr"`
-	IPGw   string   `json:"ip_gw"`
-	Env    []string `json:"env"`
+	AppID         string `json:"app_id"`
+	IPAddr        string `json:"ip_addr"`
+	IPGw          string `json:"ip_gw"`
+	MetadataURL   string `json:"metadata_url"`   // URL to fetch env vars from (e.g., "http://10.0.0.0:8111")
+	MetadataToken string `json:"metadata_token"` // One-time token for authentication
 }

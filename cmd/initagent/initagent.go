@@ -4,8 +4,10 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"regexp"
@@ -22,11 +24,35 @@ func checkErr(err error) {
 	}
 }
 
+// fetchEnvVars retrieves environment variables from the metadata server using a one-time token.
+// metadataURL is the full URL including the path (e.g., "http://10.0.0.0:8111/v1/vms/{vm_id}/config")
+func fetchEnvVars(metadataURL, token string) ([]string, error) {
+	resp, err := http.Get(metadataURL + "?token=" + token)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch env vars: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("metadata server returned %d: %s", resp.StatusCode, string(body))
+	}
+
+	var result struct {
+		Env []string `json:"env"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode env vars: %w", err)
+	}
+	return result.Env, nil
+}
+
 type VMConfig struct {
-	AppID  string   `json:"app_id"`
-	IPAddr string   `json:"ip_addr"`
-	IPGw   string   `json:"ip_gw"`
-	Env    []string `json:"env"`
+	AppID         string `json:"app_id"`
+	IPAddr        string `json:"ip_addr"`
+	IPGw          string `json:"ip_gw"`
+	MetadataURL   string `json:"metadata_url"`   // Full URL to fetch config (e.g., "http://10.0.0.0:8111/v1/vms/{vm_id}/config")
+	MetadataToken string `json:"metadata_token"` // One-time token for authentication
 }
 
 type Config struct {
@@ -77,13 +103,18 @@ func main() {
 	// implement some microscopic % of the oci spec
 	setupNetwork(vmConfig)
 
+	// Fetch environment variables from metadata server
+	envVars, err := fetchEnvVars(vmConfig.MetadataURL, vmConfig.MetadataToken)
+	checkErr(err)
+	slog.Info("fetched env vars from metadata server", "count", len(envVars))
+
 	// set hostname. If the container provides /etc, we set hostname.
 	checkErr(syscall.Sethostname([]byte("zeit-" + vmConfig.AppID)))
 
 	checkErr(syscall.Setgid(int(config.Process.User.GID)))
 	checkErr(syscall.Setuid(int(config.Process.User.UID)))
 
-	env := append(config.Process.Env, vmConfig.Env...)
+	env := append(config.Process.Env, envVars...)
 
 	// Set environment variables so exec.LookPath uses the container's PATH
 	for _, e := range env {

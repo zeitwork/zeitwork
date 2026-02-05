@@ -30,6 +30,9 @@ type Config struct {
 	EdgeProxyHTTPSAddr   string `env:"EDGEPROXY_HTTPS_ADDR" envDefault:":443"`
 	EdgeProxyACMEEmail   string `env:"EDGEPROXY_ACME_EMAIL" envDefault:"admin@zeitwork.com"`
 	EdgeProxyACMEStaging bool   `env:"EDGEPROXY_ACME_STAGING" envDefault:"false"`
+
+	// Metadata server config (serves env vars to VMs via HTTP)
+	MetadataServerAddr string `env:"METADATA_SERVER_ADDR" envDefault:"0.0.0.0:8111"`
 }
 
 func main() {
@@ -64,6 +67,7 @@ func main() {
 		DockerRegistryPAT:      cfg.DockerRegistryPAT,
 		GitHubAppID:            cfg.GitHubAppID,
 		GitHubAppPrivateKey:    cfg.GitHubAppPrivateKey,
+		MetadataServerAddr:     cfg.MetadataServerAddr,
 	})
 	if err != nil {
 		panic(err)
