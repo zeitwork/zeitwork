@@ -34,8 +34,9 @@ COPY . .
 # Copy installed node_modules from install stage (hoisted to root)
 COPY --from=install /temp/dev/node_modules node_modules
 
-# Build the web app
-RUN bun run --cwd apps/web build
+# Build the web app using Node (Bun has memory issues with large builds)
+WORKDIR /usr/src/app/apps/web
+RUN npx nuxt build
 
 # Production stage
 FROM base AS release
