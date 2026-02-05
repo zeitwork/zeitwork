@@ -59,6 +59,17 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 		return err
 	}
 
+	// Handle VMs that were stopped/failed due to service restart.
+	// Reset them to starting so they can be restarted.
+	// This is safe because build VMs are soft-deleted after use, and deployment VMs should always run.
+	if vm.Status == queries.VmStatusFailed || vm.Status == queries.VmStatusStopped {
+		slog.Info("recovering VM from stopped/failed state", "vm_id", vm.ID, "previous_status", vm.Status)
+		vm, err = s.reconcileVMUpdateStatusIf(ctx, vm, queries.VmStatusStarting, queries.VmStatusFailed, queries.VmStatusStopped)
+		if err != nil {
+			return err
+		}
+	}
+
 	// if the vm already has a running cloud-hypervisor, skip
 	if _, ok := s.vmToCmd[vm.ID]; ok {
 		vm, err = s.reconcileVMUpdateStatusIf(ctx, vm, queries.VmStatusRunning, queries.VmStatusStarting)
@@ -116,7 +127,7 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 		}
 	}
 
-	slog.Info("STARTING DA VM", "id", vm.ID, "hostIp", hostIp, "vmIp", vmIp, "envVarsCount", len(envVars))
+	slog.Info("STARTING DA VM", "id", vm.ID, "hostIp", hostIp, "vmIp", vmIp, "vcpus", vm.Vcpus, "memory_mb", vm.Memory, "envVarsCount", len(envVars))
 	vmConfig := VMConfig{
 		AppID:  vm.ID.String(),
 		IPAddr: vmIp.String(),
@@ -134,8 +145,8 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 		"--cmdline", fmt.Sprintf(
 			"console=hvc0 config=%s",
 			base64.StdEncoding.EncodeToString(vmConfigBytes)),
-		"--cpus", "boot=4",
-		"--memory", "size=1024M",
+		"--cpus", fmt.Sprintf("boot=%d", vm.Vcpus),
+		"--memory", fmt.Sprintf("size=%dM", vm.Memory),
 		"--net", fmt.Sprintf("tap=tap%d,mac=,ip=%s,mask=255.255.255.254", s.nextTap.Add(1), hostIp.Addr())) // todo mask might not be /31 theoretically but who cares
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
