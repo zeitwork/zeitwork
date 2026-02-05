@@ -1,0 +1,22 @@
+- name: Copy nftables configuration
+  copy:
+    src: nftables.conf
+    dest: /etc/nftables.conf
+    owner: root
+    group: root
+    mode: '0644'
+  notify: reload nftables
+
+- name: Enable and start nftables service
+  systemd:
+    name: nftables
+    state: started
+    enabled: yes
+
+- name: Enable IPv4 forwarding
+  sysctl:
+    name: net.ipv4.ip_forward
+    value: '1'
+    state: present
+    reload: yes
+    sysctl_file: /etc/sysctl.d/99-ip-forward.conf

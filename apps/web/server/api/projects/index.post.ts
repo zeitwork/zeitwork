@@ -1,6 +1,7 @@
-import { projects, githubInstallations, projectEnvironments } from "@zeitwork/database/schema"
-import { useDeploymentModel } from "~~/server/models/deployment"
-import z from "zod"
+import { environmentVariables, githubInstallations, projects } from "@zeitwork/database/schema";
+import { count } from "@zeitwork/database/utils/drizzle";
+import z from "zod";
+import { encrypt } from "~~/server/utils/crypto";
 
 const bodySchema = z.object({
   name: z.string().min(1).max(255),
@@ -14,144 +15,116 @@ const bodySchema = z.object({
       value: z.string(),
     }),
   ),
-})
+  rootDirectory: z
+    .string()
+    .max(255)
+    .regex(/^\/(?:[^./][^/]*(?:\/[^./][^/]*)*)?$/, {
+      message: "Root directory must start with / and cannot contain '..' or hidden directories",
+    })
+    .default("/"),
+});
 
 export default defineEventHandler(async (event) => {
-  const { secure } = await requireUserSession(event)
-  if (!secure) throw createError({ statusCode: 401, message: "Unauthorized" })
+  const { user, secure } = await requireUserSession(event);
+  if (!secure) throw createError({ statusCode: 401, message: "Unauthorized" });
 
-  // Require active subscription to create projects
-  await requireSubscription(event)
+  const body = await readValidatedBody(event, bodySchema.parse);
 
   // Enforce 5 project limit for all users
-  const existingProjects = await useDrizzle()
-    .select()
+  const [countResult] = await useDrizzle()
+    .select({ count: count() })
     .from(projects)
-    .where(eq(projects.organisationId, secure.organisationId))
-
-  if (existingProjects.length >= 5) {
+    .where(eq(projects.organisationId, secure.organisationId));
+  if (!countResult || countResult.count >= 5) {
     throw createError({
       statusCode: 403,
       message: "Project limit reached (5 projects maximum)",
-    })
+    });
   }
 
-  const body = await readValidatedBody(event, bodySchema.parse)
+  const githubRepository = `${body.repository.owner}/${body.repository.repo}`;
 
-  const github = useGitHub()
+  // check if project already exists
+  const [foundExisting] = await useDrizzle()
+    .select()
+    .from(projects)
+    .where(
+      and(
+        eq(projects.organisationId, secure.organisationId),
+        eq(projects.githubRepository, githubRepository),
+      ),
+    )
+    .limit(1);
+  if (foundExisting) {
+    throw createError({ statusCode: 400, message: "Project already exists" });
+  }
 
-  // Check if we have access to the repository
+  // Check if we have access to the GitHub repository and find the githubInstallationId
+  const github = useGitHub();
+
   const installations = await useDrizzle()
     .select()
     .from(githubInstallations)
-    .where(eq(githubInstallations.organisationId, secure.organisationId))
+    .where(eq(githubInstallations.organisationId, secure.organisationId));
 
-  let githubInstallationId = null
-  let githubRepositoryId = null
-  for (const iteration of installations) {
-    const { data: repository, error: repositoryError } = await github.repository.get(
-      iteration.githubInstallationId,
+  let githubInstallationId: null | string = null;
+  for (const installation of installations) {
+    const { data: repo } = await github.repository.get(
+      installation.githubInstallationId,
       body.repository.owner,
       body.repository.repo,
-    )
-    if (repository) {
-      githubInstallationId = iteration.id
-      githubRepositoryId = repository.id
-      break
+    );
+    if (repo) {
+      githubInstallationId = installation.id;
     }
   }
   if (!githubInstallationId) {
-    throw createError({ statusCode: 400, message: "No installation found for repository" })
-  }
-
-  const githubRepository = `${body.repository.owner}/${body.repository.repo}`
-
-  // Check if project already exists
-  const [project] = await useDrizzle()
-    .select()
-    .from(projects)
-    .where(and(eq(projects.organisationId, secure.organisationId), eq(projects.githubRepository, githubRepository)))
-    .limit(1)
-  if (project) {
-    throw createError({ statusCode: 400, message: "Project already exists" })
+    throw createError({ statusCode: 500, message: "Installation not found" });
   }
 
   // Create project and environment variables in a transaction
-  const { project: txProject, productionEnv } = await useDrizzle().transaction(async (tx) => {
+  const { project } = await useDrizzle().transaction(async (tx) => {
     // Create project
     const [project] = await tx
       .insert(projects)
       .values({
         name: body.name,
-        slug: generateSlug(body.name),
+        slug: slugify(body.name),
         githubRepository: githubRepository,
         githubInstallationId: githubInstallationId,
         organisationId: secure.organisationId,
+        rootDirectory: body.rootDirectory,
       })
-      .returning()
+      .returning();
     if (!project) {
-      throw createError({ statusCode: 500, message: "Failed to create project" })
+      throw createError({ statusCode: 500, message: "Failed to create project" });
     }
 
-    // Create default production environment
-    const [productionEnv] = await tx
-      .insert(projectEnvironments)
-      .values({
-        name: "production",
-        branch: "main",
-        projectId: project.id,
-        organisationId: secure.organisationId,
-      })
-      .returning()
-    if (!productionEnv) {
-      throw createError({ statusCode: 500, message: "Failed to create production environment" })
+    if (body.secrets.length > 0) {
+      // Create environment variables with encrypted values
+      await tx.insert(environmentVariables).values(
+        body.secrets.map((secret) => ({
+          name: secret.name,
+          value: encrypt(secret.value),
+          projectId: project.id,
+          organisationId: secure.organisationId,
+        })),
+      );
     }
 
-    // if (body.secrets.length > 0) {
-    //   // Create environment variables
-    //   await tx.insert(projectEnvironmentVariables).values(
-    //     body.secrets.map((secret) => ({
-    //       name: secret.name,
-    //       value: encryptSecret(secret.value),
-    //       projectId: project.id,
-    //       environmentId: productionEnv.id,
-    //       organisationId: secure.organisationId,
-    //     })),
-    //   )
-    // }
+    return { project };
+  });
 
-    return { project, productionEnv }
-  })
-
-  // Create a deployment for the latest commit
-  const deploymentModel = useDeploymentModel()
-  const { data: deployment, error: deploymentError } = await deploymentModel.create({
-    projectId: txProject.id,
-    environmentId: productionEnv.id,
-    organisationId: secure.organisationId,
-  })
-
-  if (deploymentError) {
-    throw createError({ statusCode: 500, message: deploymentError.message })
-  }
+  // TODO: Create a deployment for the latest commit
 
   return {
-    project: txProject,
-    deployment,
-  }
-})
+    project,
+  };
+});
 
-function generateSlug(name: string): string {
+function slugify(name: string): string {
   return name
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-") // replace non-alphanumerics with -
-    .replace(/^-+|-+$/g, "") // trim leading/trailing -
-}
-
-function encryptSecret(secret: string): string {
-  return secret // TODO: Implement
-}
-
-function decryptSecret(secret: string): string {
-  return secret // TODO: Implement
+    .replace(/^-+|-+$/g, ""); // trim leading/trailing -
 }

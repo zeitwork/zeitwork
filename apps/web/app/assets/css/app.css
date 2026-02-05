@@ -14,7 +14,10 @@
   --background-color-neutral: light-dark(#fcfcfc, var(--color-neutral-950));
   --background-color-neutral-subtle: light-dark(#f8f8f8, var(--color-neutral-900));
   --background-color-neutral-strong: light-dark(#f3f3f3, var(--color-neutral-800));
-  --background-color-neutral-inverse: light-dark(var(--color-neutral-900), var(--color-neutral-200));
+  --background-color-neutral-inverse: light-dark(
+    var(--color-neutral-900),
+    var(--color-neutral-200)
+  );
 
   /* Surface colors */
   /* bg-surface-[subtle, strong] */
@@ -29,7 +32,10 @@
   --text-color-neutral-subtle: light-dark(var(--color-neutral-500), var(--color-neutral-400));
   --text-color-neutral-strong: light-dark(var(--color-neutral-900), var(--color-white));
   --text-color-neutral-inverse: light-dark(var(--color-white), var(--color-black));
-  --text-color-neutral-inverse-subtle: light-dark(var(--color-neutral-300), var(--color-neutral-700));
+  --text-color-neutral-inverse-subtle: light-dark(
+    var(--color-neutral-300),
+    var(--color-neutral-700)
+  );
 
   /* Stroke colors */
   --border-color-neutral: light-dark(var(--color-neutral-200), var(--color-neutral-800));
@@ -178,10 +184,12 @@
   --shadow-lg: 0 1px 1px 0 rgba(0, 0, 0, 0.02), 0 4px 8px 0 rgba(0, 0, 0, 0.04);
 
   --shadow-xl:
-    0 1px 1px 0 rgba(0, 0, 0, 0.02), 0 4px 8px -4px rgba(0, 0, 0, 0.04), 0 16px 24px -8px rgba(0, 0, 0, 0.06);
+    0 1px 1px 0 rgba(0, 0, 0, 0.02), 0 4px 8px -4px rgba(0, 0, 0, 0.04),
+    0 16px 24px -8px rgba(0, 0, 0, 0.06);
 
   --shadow-2xl:
-    0 1px 1px 0 rgba(0, 0, 0, 0.02), 0 8px 16px -4px rgba(0, 0, 0, 0.04), 0 24px 32px -8px rgba(0, 0, 0, 0.06);
+    0 1px 1px 0 rgba(0, 0, 0, 0.02), 0 8px 16px -4px rgba(0, 0, 0, 0.04),
+    0 24px 32px -8px rgba(0, 0, 0, 0.06);
 
   /* Animations */
   --animate-overlayShow: overlayShow 150ms cubic-bezier(0.16, 1, 0.3, 1);

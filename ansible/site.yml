@@ -1,0 +1,4 @@
+- name: Zeitwork nodes
+  hosts: nodes
+  roles:
+    - node

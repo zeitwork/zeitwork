@@ -4,33 +4,33 @@ definePageMeta({
     name: "layout-forward",
     mode: "out-in",
   },
-})
+});
 
-const route = useRoute()
-const orgSlug = computed<string>(() => route.params.org as string)
+const route = useRoute();
+const orgSlug = computed<string>(() => route.params.org as string);
 
 // Search query
-const searchQuery = ref("")
+const searchQuery = ref("");
 
 // Fetch organisation by slug
-const { data: organisation } = await useFetch(`/api/organisations/${orgSlug.value}`)
+const { data: organisation } = await useFetch(`/api/organisations/${orgSlug.value}`);
 
-const { data: projects } = await useFetch(`/api/projects`)
+const { data: projects } = await useFetch(`/api/projects`);
 
 // Check if GitHub App is installed
-const hasGitHubInstallation = computed(() => !!organisation.value?.installationId)
+const hasGitHubInstallation = computed(() => !!organisation.value?.installationId);
 
-const config = useRuntimeConfig()
+const config = useRuntimeConfig();
 
 // GitHub App installation URL
 const githubAppInstallUrl = computed(() => {
-  const appName = "zeitwork" // Your GitHub App name
-  const redirectUri = `${config.appUrl}/auth/github` // in prod: https://zeitwork.com/auth/github
-  return `https://github.com/apps/${appName}/installations/new?redirect_uri=${redirectUri}`
-})
+  const appName = "zeitwork"; // Your GitHub App name
+  const redirectUri = `${config.appUrl}/auth/github`; // in prod: https://zeitwork.com/auth/github
+  return `https://github.com/apps/${appName}/installations/new?redirect_uri=${redirectUri}`;
+});
 
 // Check for installation success message
-const justInstalled = computed(() => route.query.installed === "true")
+const justInstalled = computed(() => route.query.installed === "true");
 </script>
 
 <template>
@@ -50,7 +50,10 @@ const justInstalled = computed(() => route.query.installed === "true")
         style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 16px; border-radius: 4px"
       >
         <h3>Install GitHub App Required</h3>
-        <p>To create and deploy projects, you need to install the Zeitwork GitHub App for this organisation.</p>
+        <p>
+          To create and deploy projects, you need to install the Zeitwork GitHub App for this
+          organisation.
+        </p>
         <a
           :href="githubAppInstallUrl"
           style="
@@ -74,7 +77,10 @@ const justInstalled = computed(() => route.query.installed === "true")
       <DButton :to="`/${orgSlug}/new`">Add Project</DButton>
     </div>
 
-    <div v-if="projects && projects.length > 0" class="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4">
+    <div
+      v-if="projects && projects.length > 0"
+      class="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-4"
+    >
       <!-- <pre>{{ projects }}</pre> -->
       <DProjectCard v-for="project in projects" :key="project.id" :project="project" />
     </div>

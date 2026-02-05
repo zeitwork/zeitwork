@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { HourglassIcon } from "lucide-vue-next"
+import { HourglassIcon } from "lucide-vue-next";
 
 definePageMeta({
   layout: "default",
-})
+});
 </script>
 
 <template>
@@ -17,7 +17,9 @@ definePageMeta({
           <HourglassIcon class="text-neutral-subtle size-12 stroke-[1.5]" />
         </div>
         <div class="text-neutral-subtle font-medium">Coming soon</div>
-        <div class="text-neutral-weak text-sm">We are working on adding this feature to your account.</div>
+        <div class="text-neutral-weak text-sm">
+          We are working on adding this feature to your account.
+        </div>
       </div>
     </div>
   </div>

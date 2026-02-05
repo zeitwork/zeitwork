@@ -1,27 +1,27 @@
 <script lang="ts" setup>
-import { LogOutIcon } from "lucide-vue-next"
+import { LogOutIcon } from "lucide-vue-next";
 type Props = {
-  navigation: Array<{ name: string; to: string }>
-}
-const { navigation } = defineProps<Props>()
-const route = useRoute()
-const orgName = route.params.org
+  navigation: Array<{ name: string; to: string }>;
+};
+const { navigation } = defineProps<Props>();
+const route = useRoute();
+const orgName = route.params.org;
 
-const projectName = route.params.project
+const projectName = route.params.project;
 
-const { user, clear } = useUserSession()
+const { user, clear } = useUserSession();
 
-const me = computed(() => user.value)
+const me = computed(() => user.value);
 
 const initials = computed(() => {
-  if (!me.value) return ""
-  const name = me.value.name?.split(" ")
-  return (name[0]?.charAt(0) || "") + (name[1]?.charAt(0) || "")
-})
+  if (!me.value) return "";
+  const name = me.value.name?.split(" ");
+  return (name[0]?.charAt(0) || "") + (name[1]?.charAt(0) || "");
+});
 
 async function logout() {
-  await clear()
-  await navigateTo("/login")
+  await clear();
+  await navigateTo("/login");
 }
 </script>
 
@@ -37,7 +37,10 @@ async function logout() {
 
         <template v-if="projectName">
           <DPageHeaderSeparator />
-          <DPageHeaderBreadcrumbLink :name="projectName as string" :to="`/${orgName}/${projectName}`" />
+          <DPageHeaderBreadcrumbLink
+            :name="projectName as string"
+            :to="`/${orgName}/${projectName}`"
+          />
         </template>
       </div>
       <div class="flex items-center gap-2">

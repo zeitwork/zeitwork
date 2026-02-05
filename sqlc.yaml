@@ -1,18 +1,33 @@
 version: "2"
 sql:
-  - schema: "packages/database/migrations/*.sql"
-    queries: "internal/database/queries/*.sql"
-    engine: "postgresql"
+  - engine: "postgresql"
+    schema: "packages/database/migrations/*/migration.sql"
+    queries: "internal/database/sql/*.sql"
     gen:
       go:
-        package: "database"
-        out: "internal/database"
+        package: "queries"
+        out: "internal/database/queries"
         sql_package: "pgx/v5"
         emit_json_tags: true
-        emit_interface: true
-        emit_exact_table_names: false
-        emit_result_struct_pointers: true
-        emit_params_struct_pointers: true
+        emit_empty_slices: true
+        # emit_pointers_for_null_types: true
         overrides:
+          - db_type: "uuid"
+            go_type:
+              import: "github.com/zeitwork/zeitwork/internal/shared/uuid"
+              type: "UUID"
+            nullable: false
+          - db_type: "uuid"
+            go_type:
+              import: "github.com/zeitwork/zeitwork/internal/shared/uuid"
+              type: "UUID"
+            nullable: true
+          - db_type: "timestamptz"
+            go_type:
+              import: "time"
+              type: "Time"
+              pointer: true
           - db_type: "jsonb"
             go_type: "encoding/json.RawMessage"
+          - db_type: "inet"
+            go_type: "net/netip.Prefix"

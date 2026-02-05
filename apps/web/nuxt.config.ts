@@ -1,4 +1,4 @@
-import tailwindcss from "@tailwindcss/vite"
+import tailwindcss from "@tailwindcss/vite";
 
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
@@ -22,51 +22,31 @@ export default defineNuxtConfig({
   },
 
   runtimeConfig: {
-    appUrl: process.env.NUXT_APP_URL || "http://localhost:3000",
+    appUrl: "http://localhost:3000",
 
     public: {
-      appUrl: process.env.NUXT_APP_URL || "http://localhost:3000",
-      appName: process.env.NUXT_APP_NAME || "zeitwork",
-      graphEndpoint: process.env.NUXT_PUBLIC_GRAPH_ENDPOINT,
-      githubClientId: process.env.NUXT_PUBLIC_GITHUB_CLIENT_ID || "",
-
-      stripeEnabled: process.env.NUXT_STRIPE_ENABLED !== "false",
-
-      stripe: {
-        planEarlyAccessId: process.env.NUXT_PUBLIC_STRIPE_PLAN_EARLY_ACCESS_ID || "",
-        planHobbyId: process.env.NUXT_PUBLIC_STRIPE_PLAN_HOBBY_ID || "",
-        planBusinessId: process.env.NUXT_PUBLIC_STRIPE_PLAN_BUSINESS_ID || "",
-      },
-
-      posthog: {
-        publicKey: process.env.NUXT_PUBLIC_POSTHOG_PUBLIC_KEY || "",
-        host: process.env.NUXT_PUBLIC_POSTHOG_HOST || "https://us.i.posthog.com",
-        defaults: process.env.NUXT_PUBLIC_POSTHOG_DEFAULTS || "2025-05-24",
-      },
+      appUrl: "http://localhost:3000",
+      appName: "zeitwork",
+      githubClientId: "",
     },
 
     oauth: {
       github: {
-        clientId: process.env.NUXT_PUBLIC_GITHUB_CLIENT_ID || "",
-        redirectURL: process.env.NUXT_OAUTH_GITHUB_REDIRECT_URL || "http://localhost:3000/auth/github",
+        clientId: "",
+        redirectURL: "http://localhost:3000/auth/github",
       },
     },
 
-    githubAppId: process.env.NUXT_GITHUB_APP_ID || "",
-    githubAppPrivateKey: process.env.NUXT_GITHUB_APP_PRIVATE_KEY || "",
+    githubAppId: "",
+    githubAppPrivateKey: "",
 
     githubWebhookSecret: "",
 
-    kubeConfig: process.env.NUXT_KUBE_CONFIG || "",
-
-    stripe: {
-      secretKey: process.env.NUXT_STRIPE_SECRET_KEY || "",
-      webhookSecret: process.env.NUXT_STRIPE_WEBHOOK_SECRET || "",
-    },
+    encryptionKey: "",
   },
 
   modules: ["@nuxt/icon", "@nuxt/fonts", "nuxt-auth-utils", "motion-v/nuxt"],
-})
+});
 
 function head() {
   return {
@@ -107,7 +87,10 @@ function head() {
 
       // Twitter
       { name: "twitter:card", content: "summary_large_image" },
-      { name: "twitter:title", content: "Zeitwork - The fastest way to deploy and scale any application" },
+      {
+        name: "twitter:title",
+        content: "Zeitwork - The fastest way to deploy and scale any application",
+      },
       {
         name: "twitter:description",
         content:
@@ -116,5 +99,5 @@ function head() {
       { name: "twitter:image", content: "https://zeitwork.com/og-image.png" },
       { name: "twitter:site", content: "@zeitwork" },
     ],
-  }
+  };
 }

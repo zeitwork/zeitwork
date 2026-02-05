@@ -1,0 +1,13 @@
+- name: systemctl daemonreload
+  systemd:
+    daemon_reload: true
+
+- name: restart zeitwork
+  systemd:
+    name: zeitwork
+    state: restarted
+
+- name: reload nftables
+  systemd:
+    name: nftables
+    state: reloaded

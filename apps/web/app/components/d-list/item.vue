@@ -1,16 +1,16 @@
 <script setup lang="ts">
-import { NuxtLink } from "#components"
+import { NuxtLink } from "#components";
 
 type Props = {
-  to?: string
-  padding?: boolean
-}
+  to?: string;
+  padding?: boolean;
+};
 
-const { to = undefined, padding = true } = defineProps<Props>()
+const { to = undefined, padding = true } = defineProps<Props>();
 
 const component = computed(() => {
-  return to ? NuxtLink : "div"
-})
+  return to ? NuxtLink : "div";
+});
 </script>
 <template>
   <component

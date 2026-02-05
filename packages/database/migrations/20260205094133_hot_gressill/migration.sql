@@ -1,0 +1,1 @@
+ALTER TABLE "projects" ADD COLUMN "root_directory" text DEFAULT '/' NOT NULL;

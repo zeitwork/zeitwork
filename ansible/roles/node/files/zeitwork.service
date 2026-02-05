@@ -1,0 +1,12 @@
+[Unit]
+Description=zeitwork
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/data/zeitwork
+EnvironmentFile=/data/zeitwork.env
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target

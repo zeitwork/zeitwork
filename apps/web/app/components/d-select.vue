@@ -8,28 +8,24 @@ import {
   SelectViewport,
   SelectItem,
   SelectItemIndicator,
-  SelectItemText
-} from "reka-ui"
-import { ChevronDownIcon, ChevronUpIcon, CheckIcon } from "lucide-vue-next"
+  SelectItemText,
+} from "reka-ui";
+import { ChevronDownIcon, ChevronUpIcon, CheckIcon } from "lucide-vue-next";
 
 interface Props {
-  options: { value: string | number | boolean | null; display: string }[]
-  placeholder?: string
-  disabled?: boolean
-  size?: "sm" | "md"
+  options: { value: string | number | boolean | null; display: string }[];
+  placeholder?: string;
+  disabled?: boolean;
+  size?: "sm" | "md";
 }
 
-const { options, placeholder, disabled, size = "md" } = defineProps<Props>()
-const model = defineModel<string | null>()
-const open = ref(false)
+const { options, placeholder, disabled, size = "md" } = defineProps<Props>();
+const model = defineModel<string | null>();
+const open = ref(false);
 </script>
 
 <template>
-  <SelectRoot
-    v-model="model"
-    :open="open"
-    @update:open="open = $event"
-  >
+  <SelectRoot v-model="model" :open="open" @update:open="open = $event">
     <SelectTrigger
       :disabled="disabled"
       class="bg-neutral border-neutral hover: focus:bg-neutral flex cursor-default items-center justify-between rounded-lg border px-2.5 text-sm outline-none select-none focus:border-blue-600 focus:ring-2 focus:ring-blue-300"
@@ -37,19 +33,13 @@ const open = ref(false)
         disabled
           ? 'bg-neutral-strong cursor-not-allowed opacity-50'
           : 'hover:border-neutral-strong/30',
-        size === 'sm' ? 'h-7' : 'h-9'
+        size === 'sm' ? 'h-7' : 'h-9',
       ]"
     >
       <SelectValue :placeholder="placeholder" />
       <div>
-        <ChevronDownIcon
-          v-if="!open"
-          class="ml-2 size-4 text-neutral-700"
-        />
-        <ChevronUpIcon
-          v-else
-          class="ml-2 size-4 text-neutral-700"
-        />
+        <ChevronDownIcon v-if="!open" class="ml-2 size-4 text-neutral-700" />
+        <ChevronUpIcon v-else class="ml-2 size-4 text-neutral-700" />
       </div>
     </SelectTrigger>
 

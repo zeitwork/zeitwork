@@ -1,11 +1,11 @@
-import { organisations, organisationMembers } from "@zeitwork/database/schema"
-import { eq, and } from "@zeitwork/database/utils/drizzle"
-import type { H3Event } from "h3"
+import { organisations, organisationMembers } from "@zeitwork/database/schema";
+import { eq, and } from "@zeitwork/database/utils/drizzle";
+import type { H3Event } from "h3";
 
 /**
  * Valid Stripe subscription statuses that allow access to the product
  */
-const VALID_SUBSCRIPTION_STATUSES = ["active", "trialing"]
+const VALID_SUBSCRIPTION_STATUSES = ["active", "trialing"];
 
 /**
  * Checks if an organization has a valid, paid subscription
@@ -15,10 +15,10 @@ export async function hasValidSubscription(organisationId: string): Promise<bool
     .select()
     .from(organisations)
     .where(eq(organisations.id, organisationId))
-    .limit(1)
+    .limit(1);
 
   if (!organisation) {
-    return false
+    return false;
   }
 
   // Check if organization has a subscription with valid status
@@ -27,10 +27,10 @@ export async function hasValidSubscription(organisationId: string): Promise<bool
     organisation.stripeSubscriptionStatus &&
     VALID_SUBSCRIPTION_STATUSES.includes(organisation.stripeSubscriptionStatus)
   ) {
-    return true
+    return true;
   }
 
-  return false
+  return false;
 }
 
 /**
@@ -38,25 +38,25 @@ export async function hasValidSubscription(organisationId: string): Promise<bool
  * Throws a 403 error if not subscribed
  */
 export async function requireSubscription(event: H3Event) {
-  const { secure } = await requireUserSession(event)
+  const { secure } = await requireUserSession(event);
 
   if (!secure?.organisationId) {
     throw createError({
       statusCode: 401,
       message: "Unauthorized",
-    })
+    });
   }
 
-  const isSubscribed = await hasValidSubscription(secure.organisationId)
+  const isSubscribed = await hasValidSubscription(secure.organisationId);
 
   if (!isSubscribed) {
     throw createError({
       statusCode: 403,
       message: "Active subscription required",
-    })
+    });
   }
 
-  return { organisationId: secure.organisationId, userId: secure.userId }
+  return { organisationId: secure.organisationId, userId: secure.userId };
 }
 
 /**
@@ -67,17 +67,17 @@ export async function getFirstUserOrganisation(userId: string) {
     .select()
     .from(organisationMembers)
     .where(eq(organisationMembers.userId, userId))
-    .limit(1)
+    .limit(1);
 
   if (!member) {
-    return null
+    return null;
   }
 
   const [organisation] = await useDrizzle()
     .select()
     .from(organisations)
     .where(eq(organisations.id, member.organisationId))
-    .limit(1)
+    .limit(1);
 
-  return organisation || null
+  return organisation || null;
 }

@@ -1,13 +1,13 @@
 <script lang="ts" setup>
 type Props = {
-  active?: boolean
-  background?: string
-  borderRadius?: string
-  hoverScale?: string
-  activeScale?: string
-  inactiveScale?: string
-  ring?: boolean
-}
+  active?: boolean;
+  background?: string;
+  borderRadius?: string;
+  hoverScale?: string;
+  activeScale?: string;
+  inactiveScale?: string;
+  ring?: boolean;
+};
 
 const {
   active = false,
@@ -17,7 +17,7 @@ const {
   activeScale = "inset-0",
   inactiveScale = "inset-1",
   ring = true,
-} = defineProps<Props>()
+} = defineProps<Props>();
 </script>
 
 <template>

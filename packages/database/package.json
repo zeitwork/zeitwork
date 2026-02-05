@@ -1,22 +1,23 @@
 {
   "name": "@zeitwork/database",
   "scripts": {
+    "db:kit": "drizzle-kit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "db:check": "drizzle-kit check"
   },
+  "dependencies": {
+    "drizzle-kit": "beta",
+    "drizzle-orm": "beta",
+    "postgres": "^3.4.7",
+    "uuidv7": "^1.1.0"
+  },
   "devDependencies": {
     "@types/bun": "latest"
   },
   "peerDependencies": {
     "typescript": "^5"
-  },
-  "dependencies": {
-    "drizzle-kit": "^0.31.4",
-    "drizzle-orm": "^0.44.4",
-    "postgres": "^3.4.7",
-    "uuidv7": "^1.0.2"
   }
 }

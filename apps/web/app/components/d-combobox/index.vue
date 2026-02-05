@@ -9,84 +9,84 @@ import {
   ComboboxRoot,
   ComboboxTrigger,
   ComboboxViewport,
-} from "reka-ui"
+} from "reka-ui";
 
-import { ChevronUpDownIcon } from "@heroicons/vue/16/solid"
+import { ChevronUpDownIcon } from "@heroicons/vue/16/solid";
 
-import { ref, computed, watch } from "vue"
+import { ref, computed, watch } from "vue";
 
 interface Props {
-  modelValue?: string
-  placeholder?: string
-  searchPlaceholder?: string
-  emptyText?: string
-  items?: Array<{ value: string; label: string }>
-  filterFunction?: (items: any[], term: string) => any[]
-  displayValue?: (value: string) => string
+  modelValue?: string;
+  placeholder?: string;
+  searchPlaceholder?: string;
+  emptyText?: string;
+  items?: Array<{ value: string; label: string }>;
+  filterFunction?: (items: any[], term: string) => any[];
+  displayValue?: (value: string) => string;
 }
 
 const props = withDefaults(defineProps<Props>(), {
   placeholder: "Select an option",
   searchPlaceholder: "Search...",
   emptyText: "No results found",
-})
+});
 
 const emit = defineEmits<{
-  "update:modelValue": [value: string]
-}>()
+  "update:modelValue": [value: string];
+}>();
 
-const open = ref(false)
-const isClosing = ref(false)
-const searchTerm = ref("")
-const frozenSearchTerm = ref("")
+const open = ref(false);
+const isClosing = ref(false);
+const searchTerm = ref("");
+const frozenSearchTerm = ref("");
 
 const modelValue = computed({
   get: () => props.modelValue,
   set: (value) => emit("update:modelValue", value as string),
-})
+});
 
 const selectedLabel = computed(() => {
-  if (!props.modelValue || !props.items) return props.placeholder
-  const item = props.items.find((i) => i.value === props.modelValue)
-  return item ? item.label : props.placeholder
-})
+  if (!props.modelValue || !props.items) return props.placeholder;
+  const item = props.items.find((i) => i.value === props.modelValue);
+  return item ? item.label : props.placeholder;
+});
 
 const selectedItem = computed(() => {
-  if (!props.modelValue || !props.items) return null
-  return props.items.find((i) => i.value === props.modelValue) || null
-})
+  if (!props.modelValue || !props.items) return null;
+  return props.items.find((i) => i.value === props.modelValue) || null;
+});
 
 const filteredItems = computed(() => {
-  if (!props.items) return []
+  if (!props.items) return [];
 
-  const term = isClosing.value ? frozenSearchTerm.value : searchTerm.value
-  if (!term) return props.items
+  const term = isClosing.value ? frozenSearchTerm.value : searchTerm.value;
+  if (!term) return props.items;
 
   if (props.filterFunction) {
-    return props.filterFunction(props.items, term)
+    return props.filterFunction(props.items, term);
   }
 
-  return props.items.filter((item) => item.label.toLowerCase().includes(term.toLowerCase()))
-})
+  return props.items.filter((item) => item.label.toLowerCase().includes(term.toLowerCase()));
+});
 
 const customFilterFunction = (items: any[], term: string) => {
-  return items
-}
+  return items;
+};
 
 const handleModelValueUpdate = (value: string) => {
-  frozenSearchTerm.value = searchTerm.value
-  emit("update:modelValue", value)
-}
+  frozenSearchTerm.value = searchTerm.value;
+  emit("update:modelValue", value);
+};
 
 watch(open, (newOpen, oldOpen) => {
   if (oldOpen && !newOpen) {
-    isClosing.value = true
+    isClosing.value = true;
     setTimeout(() => {
-      isClosing.value = false
-      searchTerm.value = ""
-    }, 300)
+      isClosing.value = false;
+      searchTerm.value = "";
+    }, 300);
   }
-})
+});
 </script>
 
 <template>
@@ -144,10 +144,20 @@ watch(open, (newOpen, oldOpen) => {
               :items="filteredItems"
             />
             <template v-else>
-              <DComboboxItem v-for="item in filteredItems" :key="item.value" :value="item.value" :label="item.label" />
+              <DComboboxItem
+                v-for="item in filteredItems"
+                :key="item.value"
+                :value="item.value"
+                :label="item.label"
+              />
             </template>
           </ComboboxGroup>
-          <slot name="footer" :is-closing="isClosing" :search-term="searchTerm" :filtered-items="filteredItems" />
+          <slot
+            name="footer"
+            :is-closing="isClosing"
+            :search-term="searchTerm"
+            :filtered-items="filteredItems"
+          />
         </ComboboxViewport>
       </ComboboxContent>
     </ComboboxPortal>

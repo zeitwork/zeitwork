@@ -1,0 +1,1 @@
+ALTER TABLE "vms" ADD COLUMN "env_variables" text;

@@ -1,15 +1,15 @@
 <script setup lang="ts">
-import { GitMergeIcon } from "lucide-vue-next"
-import { PlusIcon, XMarkIcon, ArrowLeftIcon } from "@heroicons/vue/16/solid"
+import { GitMergeIcon } from "lucide-vue-next";
+import { PlusIcon, XMarkIcon, ArrowLeftIcon } from "@heroicons/vue/16/solid";
 
 definePageMeta({
   layout: "modal",
-})
+});
 
-const route = useRoute()
-const repo = route.query.repo as string
+const route = useRoute();
+const repo = route.query.repo as string;
 
-const selectedTeam = ref<string | undefined>("dokedu")
+const selectedTeam = ref<string | undefined>("dokedu");
 const teams = [
   {
     value: "aaronmahlke",
@@ -19,9 +19,9 @@ const teams = [
     value: "dokedu",
     label: "Dokedu",
   },
-]
+];
 
-const selectedFramework = ref<string | undefined>("nuxt")
+const selectedFramework = ref<string | undefined>("nuxt");
 const frameworks = [
   {
     value: "nuxt",
@@ -39,37 +39,43 @@ const frameworks = [
     value: "go",
     label: "Go",
   },
-]
+];
 
-const projectName = ref<string | undefined>("")
-const rootDirectory = ref<string | undefined>("")
+const projectName = ref<string | undefined>("");
+const rootDirectory = ref<string | undefined>("");
 
-const org = route.params.org
+const org = route.params.org;
 
 interface EnvVariable {
-  name: string
-  value: string
+  name: string;
+  value: string;
 }
 
-const envVariables = ref<EnvVariable[]>([{ name: "", value: "" }])
-const errorMessage = ref<string | null>(null)
+const envVariables = ref<EnvVariable[]>([{ name: "", value: "" }]);
+const errorMessage = ref<string | null>(null);
 
 function addEnvVariable() {
-  envVariables.value.push({ name: "", value: "" })
+  envVariables.value.push({ name: "", value: "" });
 }
 
 function removeEnvVariable(index: number) {
   // only remove if not the last one
-  if (envVariables.value.length === 1) return
-  envVariables.value.splice(index, 1)
+  if (envVariables.value.length === 1) return;
+  envVariables.value.splice(index, 1);
 }
 
-const repoOwner = computed(() => repo?.split("/")[0])
-const repoName = computed(() => repo?.split("/")[1])
+const repoOwner = computed(() => repo?.split("/")[0]);
+const repoName = computed(() => repo?.split("/")[1]);
 
 async function createProject() {
-  errorMessage.value = null
+  errorMessage.value = null;
   try {
+    // Normalize rootDirectory: empty string or just "/" stays as "/", otherwise prepend "/" if missing
+    let normalizedRootDir = rootDirectory.value?.trim() || "/";
+    if (normalizedRootDir !== "/" && !normalizedRootDir.startsWith("/")) {
+      normalizedRootDir = "/" + normalizedRootDir;
+    }
+
     const result = await $fetch(`/api/projects`, {
       method: "POST",
       body: {
@@ -79,15 +85,16 @@ async function createProject() {
           repo: repoName.value,
         },
         secrets: envVariables.value.filter((e) => e.name.length > 0),
+        rootDirectory: normalizedRootDir,
       },
-    })
-    navigateTo(`/${org}/${projectName.value}`)
+    });
+    navigateTo(`/${org}/${projectName.value}`);
   } catch (error: any) {
-    console.error("Failed to create project:", error)
+    console.error("Failed to create project:", error);
     if (error?.statusCode === 403) {
-      errorMessage.value = error?.data?.message || error?.message || "Project limit reached"
+      errorMessage.value = error?.data?.message || error?.message || "Project limit reached";
     } else {
-      errorMessage.value = "Failed to create project. Please try again."
+      errorMessage.value = "Failed to create project. Please try again.";
     }
   }
 }
@@ -131,7 +138,11 @@ async function createProject() {
                 >
                   <template #trigger="{ selectedItem, selectedLabel, placeholder }">
                     <div class="flex items-center gap-2">
-                      <img v-if="selectedItem" :src="`/icons/team/${selectedItem?.value}.png`" class="size-5" />
+                      <img
+                        v-if="selectedItem"
+                        :src="`/icons/team/${selectedItem?.value}.png`"
+                        class="size-5"
+                      />
                       <div v-else class="bg-surface-strong size-5 rounded-full"></div>
                       {{ selectedItem ? selectedItem.label : placeholder }}
                     </div>
@@ -179,7 +190,11 @@ async function createProject() {
               >
                 <template #trigger="{ selectedItem, selectedLabel, placeholder }">
                   <div class="flex items-center gap-2">
-                    <img v-if="selectedItem" :src="`/icons/framework/${selectedItem?.value}.png`" class="size-5" />
+                    <img
+                      v-if="selectedItem"
+                      :src="`/icons/framework/${selectedItem?.value}.png`"
+                      class="size-5"
+                    />
                     <div v-else class="bg-surface-strong size-5 rounded-full"></div>
                     {{ selectedItem ? selectedItem.label : placeholder }}
                   </div>
@@ -215,19 +230,37 @@ async function createProject() {
                   :key="index"
                   class="grid grid-cols-[1fr_2fr_auto] gap-2"
                 >
-                  <DInput type="text" placeholder="Name" class="w-full" v-model="envVariable.name" />
-                  <DInput type="text" placeholder="Value" class="w-full" v-model="envVariable.value" />
-                  <DButton variant="secondary" :icon-left="XMarkIcon" @click="removeEnvVariable(index)" />
+                  <DInput
+                    type="text"
+                    placeholder="Name"
+                    class="w-full"
+                    v-model="envVariable.name"
+                  />
+                  <DInput
+                    type="text"
+                    placeholder="Value"
+                    class="w-full"
+                    v-model="envVariable.value"
+                  />
+                  <DButton
+                    variant="secondary"
+                    :icon-left="XMarkIcon"
+                    @click="removeEnvVariable(index)"
+                  />
                 </div>
                 <div>
-                  <DButton variant="secondary" :icon-left="PlusIcon" @click="addEnvVariable">Add</DButton>
+                  <DButton variant="secondary" :icon-left="PlusIcon" @click="addEnvVariable"
+                    >Add</DButton
+                  >
                 </div>
               </div>
             </div>
           </div>
         </div>
         <div class="flex items-center justify-between px-[18px] py-3">
-          <DButton variant="transparent" :icon-left="ArrowLeftIcon" :to="`/${org}/new`">Back</DButton>
+          <DButton variant="transparent" :icon-left="ArrowLeftIcon" :to="`/${org}/new`"
+            >Back</DButton
+          >
           <div class="flex flex-col items-end gap-2">
             <p v-if="errorMessage" class="text-copy-sm text-red-500">{{ errorMessage }}</p>
             <DButton variant="primary" @click="createProject">Deploy</DButton>

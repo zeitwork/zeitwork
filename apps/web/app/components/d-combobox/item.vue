@@ -1,15 +1,15 @@
 <script setup lang="ts">
-import { ComboboxItem, ComboboxItemIndicator } from "reka-ui"
+import { ComboboxItem, ComboboxItemIndicator } from "reka-ui";
 
-import { CheckIcon } from "@heroicons/vue/16/solid"
+import { CheckIcon } from "@heroicons/vue/16/solid";
 
 interface Props {
-  value: string
-  label?: string
-  disabled?: boolean
+  value: string;
+  label?: string;
+  disabled?: boolean;
 }
 
-defineProps<Props>()
+defineProps<Props>();
 </script>
 
 <template>

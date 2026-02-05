@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/zeitwork/zeitwork/internal/database"
+	"github.com/zeitwork/zeitwork/internal/database/queries"
 )
 
 // PostgreSQLStorage implements certmagic.Storage using PostgreSQL via sqlc
@@ -35,7 +36,7 @@ func (s *PostgreSQLStorage) Store(ctx context.Context, key string, value []byte)
 		slog.Info("storing certmagic JSON", "key", key, "size", len(value), "content", string(value))
 	}
 
-	err := s.db.Queries().StoreCertmagicData(ctx, &database.StoreCertmagicDataParams{
+	err := s.db.StoreCertmagicData(ctx, queries.StoreCertmagicDataParams{
 		Key:   key,
 		Value: encodedValue,
 		Modified: pgtype.Timestamptz{
@@ -52,7 +53,7 @@ func (s *PostgreSQLStorage) Store(ctx context.Context, key string, value []byte)
 
 // Load retrieves the value at the given key
 func (s *PostgreSQLStorage) Load(ctx context.Context, key string) ([]byte, error) {
-	data, err := s.db.Queries().LoadCertmagicData(ctx, key)
+	data, err := s.db.LoadCertmagicData(ctx, key)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			// Return fs.ErrNotExist - the standard Go error for "not found"
@@ -84,7 +85,7 @@ func (s *PostgreSQLStorage) Load(ctx context.Context, key string) ([]byte, error
 // Delete removes the value at the given key
 // Like os.RemoveAll, returns nil even if key doesn't exist
 func (s *PostgreSQLStorage) Delete(ctx context.Context, key string) error {
-	_, err := s.db.Queries().DeleteCertmagicData(ctx, key)
+	_, err := s.db.DeleteCertmagicData(ctx, key)
 	if err != nil {
 		return err
 	}
@@ -93,7 +94,7 @@ func (s *PostgreSQLStorage) Delete(ctx context.Context, key string) error {
 
 // Exists returns true if the key exists
 func (s *PostgreSQLStorage) Exists(ctx context.Context, key string) bool {
-	exists, err := s.db.Queries().ExistsCertmagicData(ctx, key)
+	exists, err := s.db.ExistsCertmagicData(ctx, key)
 	if err != nil {
 		return false
 	}
@@ -109,14 +110,14 @@ func (s *PostgreSQLStorage) List(ctx context.Context, prefix string, recursive b
 	}
 
 	if recursive {
-		return s.db.Queries().ListCertmagicDataRecursive(ctx, prefixParam)
+		return s.db.ListCertmagicDataRecursive(ctx, prefixParam)
 	}
-	return s.db.Queries().ListCertmagicDataNonRecursive(ctx, prefixParam)
+	return s.db.ListCertmagicDataNonRecursive(ctx, prefixParam)
 }
 
 // Stat returns information about the key
 func (s *PostgreSQLStorage) Stat(ctx context.Context, key string) (certmagic.KeyInfo, error) {
-	data, err := s.db.Queries().StatCertmagicData(ctx, key)
+	data, err := s.db.StatCertmagicData(ctx, key)
 	if err != nil {
 		if err == pgx.ErrNoRows {
 			return certmagic.KeyInfo{}, fs.ErrNotExist
@@ -146,7 +147,7 @@ func (s *PostgreSQLStorage) Lock(ctx context.Context, key string) error {
 		Valid: true,
 	}
 
-	rowsAffected, err := s.db.Queries().AcquireCertmagicLock(ctx, &database.AcquireCertmagicLockParams{
+	rowsAffected, err := s.db.AcquireCertmagicLock(ctx, queries.AcquireCertmagicLockParams{
 		Key:     key,
 		Expires: lockExpiration,
 	})
@@ -164,7 +165,7 @@ func (s *PostgreSQLStorage) Lock(ctx context.Context, key string) error {
 // Unlock releases a lock for the given key
 // Like os.Remove, returns nil even if lock doesn't exist
 func (s *PostgreSQLStorage) Unlock(ctx context.Context, key string) error {
-	_, err := s.db.Queries().ReleaseCertmagicLock(ctx, key)
+	_, err := s.db.ReleaseCertmagicLock(ctx, key)
 	if err != nil {
 		return err
 	}

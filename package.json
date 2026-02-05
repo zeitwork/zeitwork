@@ -1,18 +1,19 @@
 {
   "name": "zeitwork",
   "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "db:generate": "bun --cwd ./packages/database drizzle-kit generate",
     "db:migrate": "bun --cwd ./packages/database drizzle-kit migrate",
+    "db:migrate:prod": "bun --env-file .env.prod --cwd ./packages/database drizzle-kit migrate",
     "db:push": "bun --cwd ./packages/database drizzle-kit push",
     "db:studio": "bun --cwd ./packages/database drizzle-kit studio",
     "db:check": "bun --cwd ./packages/database drizzle-kit check",
     "web:dev": "bun --cwd ./apps/web dev",
     "web:build": "bun --cwd ./apps/web build",
     "api:start": "bun --cwd ./apps/api start"
-  },
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ]
+  }
 }

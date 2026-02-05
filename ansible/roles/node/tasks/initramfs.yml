@@ -1,0 +1,42 @@
+- name: Build initramfs
+  file:
+    path: /tmp/initramfs
+    state: directory
+
+- name: Build the main go app locally
+  delegate_to: localhost
+  command:
+    cmd: go build -o /tmp/initagent cmd/initagent/initagent.go
+    chdir: "../"
+  environment:
+    CGO_ENABLED: "0"
+    GOOS: linux
+    GOARCH: amd64
+
+- name: Copy initagent
+  copy:
+    src: /tmp/initagent
+    dest: /tmp/initramfs/init
+    mode: 0755
+
+- name: Create some important directories
+  file:
+    path: /tmp/initramfs/{{item}}
+    state: directory
+    mode: 0644
+  with_items:
+    - mnt
+    - proc
+    - sys
+
+- name: Build the initramfs
+  shell:
+    cmd: find . | cpio -o -H newc | gzip > /data/initramfs.cpio.gz
+    chdir: /tmp/initramfs
+  args:
+    executable: /bin/bash
+
+#- name: Cleanup initramfs
+#  file:
+#    path: /tmp/initramfs
+#    state: absent
