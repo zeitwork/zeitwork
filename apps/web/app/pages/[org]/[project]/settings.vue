@@ -22,14 +22,14 @@ const projectSlug = route.params.project as string;
             :to="`/${orgId}/${projectSlug}/settings`"
           />
           <DNavbarLink
-            name="Environment Variables"
-            :active="route.path == `/${orgId}/${projectSlug}/settings/environment-variables`"
-            :to="`/${orgId}/${projectSlug}/settings/environment-variables`"
-          />
-          <DNavbarLink
             name="Domains"
             :active="route.path == `/${orgId}/${projectSlug}/settings/domains`"
             :to="`/${orgId}/${projectSlug}/settings/domains`"
+          />
+          <DNavbarLink
+            name="Environment Variables"
+            :active="route.path == `/${orgId}/${projectSlug}/settings/environment-variables`"
+            :to="`/${orgId}/${projectSlug}/settings/environment-variables`"
           />
         </div>
         <div class="flex flex-1 flex-col overflow-auto">

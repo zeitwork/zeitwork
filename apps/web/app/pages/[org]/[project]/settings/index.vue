@@ -57,22 +57,12 @@ async function saveSettings() {
     <div class="space-y-6">
       <div>
         <h3 class="text-neutral-strong mb-2 text-sm font-medium">Project Name</h3>
-        <input
-          type="text"
-          class="bg-neutral-weak border-neutral-subtle text-neutral-strong placeholder-neutral-moderate focus:border-neutral-moderate focus:ring-neutral-moderate w-full rounded-md border px-3 py-2 text-sm focus:ring-1 focus:outline-none"
-          :value="projectSlug"
-          disabled
-        />
+        <DInput :model-value="projectSlug" disabled />
       </div>
 
       <div>
         <h3 class="text-neutral-strong mb-2 text-sm font-medium">Organization</h3>
-        <input
-          type="text"
-          class="bg-neutral-weak border-neutral-subtle text-neutral-strong placeholder-neutral-moderate focus:border-neutral-moderate focus:ring-neutral-moderate w-full rounded-md border px-3 py-2 text-sm focus:ring-1 focus:outline-none"
-          :value="orgId"
-          disabled
-        />
+        <DInput :model-value="orgId" disabled />
       </div>
 
       <div>
@@ -81,12 +71,7 @@ async function saveSettings() {
           The directory where your Dockerfile is located. Use "/" for repository root, or specify a
           subdirectory like "/apps/web" for monorepos.
         </p>
-        <input
-          type="text"
-          v-model="rootDirectory"
-          placeholder="/"
-          class="bg-neutral-weak border-neutral-subtle text-neutral-strong placeholder-neutral-moderate focus:border-neutral-moderate focus:ring-neutral-moderate w-full rounded-md border px-3 py-2 text-sm focus:ring-1 focus:outline-none"
-        />
+        <DInput v-model="rootDirectory" placeholder="/" />
       </div>
 
       <div class="flex items-center gap-3">

@@ -51,7 +51,7 @@ function deploymentStatusColor(status: string) {
       return "text-blue-500";
     case "starting":
       return "text-blue-500";
-    case "ready":
+    case "running":
       return "text-green-500";
     case "failed":
       return "text-red-500";
@@ -70,7 +70,7 @@ function deploymentStatusBgColor(status: string) {
       return "bg-blue-100";
     case "starting":
       return "bg-blue-100";
-    case "ready":
+    case "running":
       return "bg-green-100";
     case "failed":
       return "bg-red-100";
@@ -115,15 +115,16 @@ function deploymentLink(deployment: any) {
         </div>
         <div class="font-mono">{{ deployment.githubCommit.slice(0, 7) }}</div>
         <div>
-          <a
-            v-if="deployment.domain"
-            :href="`https://${deployment.domain}`"
-            target="_blank"
-            class="text-blue-500 hover:underline"
-            @click.stop
-          >
-            {{ deployment.domain }}
-          </a>
+          <template v-if="deployment.domains?.length">
+            <a
+              v-for="(domain, idx) in deployment.domains"
+              :key="domain"
+              :href="`https://${domain}`"
+              target="_blank"
+              class="text-blue-500 hover:underline"
+              @click.stop
+            >{{ domain }}<span v-if="idx < deployment.domains.length - 1" class="text-neutral-subtle">, </span></a>
+          </template>
           <span v-else class="text-neutral-subtle">—</span>
         </div>
         <div class="text-right">{{ renderDate(deployment.createdAt) }}</div>

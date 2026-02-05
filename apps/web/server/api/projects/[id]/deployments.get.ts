@@ -1,5 +1,5 @@
 import { deployments, projects, domains } from "@zeitwork/database/schema";
-import { eq, and } from "@zeitwork/database/utils/drizzle";
+import { eq, and, inArray } from "@zeitwork/database/utils/drizzle";
 import { z } from "zod";
 
 const paramsSchema = z.object({
@@ -25,6 +25,7 @@ export default defineEventHandler(async (event) => {
     });
   }
 
+  // Step 1: Fetch deployments
   const deploymentList = await useDrizzle()
     .select({
       id: deployments.id,
@@ -34,10 +35,8 @@ export default defineEventHandler(async (event) => {
       organisationId: deployments.organisationId,
       createdAt: deployments.createdAt,
       updatedAt: deployments.updatedAt,
-      domain: domains.name,
     })
     .from(deployments)
-    .leftJoin(domains, eq(domains.deploymentId, deployments.id))
     .where(
       and(
         eq(deployments.projectId, project.id),
@@ -46,5 +45,22 @@ export default defineEventHandler(async (event) => {
     )
     .orderBy(desc(deployments.id));
 
-  return deploymentList;
+  // Step 2: Fetch domains for these deployments
+  const deploymentIds = deploymentList.map((d) => d.id);
+  const domainList =
+    deploymentIds.length > 0
+      ? await useDrizzle()
+          .select({
+            deploymentId: domains.deploymentId,
+            name: domains.name,
+          })
+          .from(domains)
+          .where(inArray(domains.deploymentId, deploymentIds))
+      : [];
+
+  // Step 3: Merge domains into deployments
+  return deploymentList.map((d) => ({
+    ...d,
+    domains: domainList.filter((dom) => dom.deploymentId === d.id).map((dom) => dom.name),
+  }));
 });
