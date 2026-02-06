@@ -14,6 +14,45 @@
     GOOS: linux
     GOARCH: amd64
 
+# Drain the server before restarting: mark as draining in DB, wait for VMs to migrate off
+- name: Check if server-id exists
+  stat:
+    path: /data/server-id
+  register: server_id_stat
+
+- name: Read server ID
+  when: server_id_stat.stat.exists
+  command: cat /data/server-id
+  register: server_id_raw
+  changed_when: false
+
+- name: Set server_id fact
+  set_fact:
+    server_id: "{{ server_id_raw.stdout | trim if server_id_stat.stat.exists else '' }}"
+
+- name: Mark server as draining
+  when: server_id != ''
+  shell: |
+    source /data/zeitwork.env
+    psql "$DATABASE_URL" -c "UPDATE servers SET status = 'draining', updated_at = now() WHERE id = '{{ server_id }}'"
+  args:
+    executable: /bin/bash
+  ignore_errors: true
+
+- name: Wait for server to drain (all VMs migrated off)
+  when: server_id != ''
+  shell: |
+    source /data/zeitwork.env
+    result=$(psql "$DATABASE_URL" -t -A -c "SELECT NOT EXISTS (SELECT 1 FROM vms WHERE server_id = '{{ server_id }}' AND deleted_at IS NULL AND status NOT IN ('stopped', 'failed')) as is_drained")
+    if [ "$result" = "t" ]; then exit 0; else exit 1; fi
+  args:
+    executable: /bin/bash
+  register: drain_check
+  until: drain_check.rc == 0
+  retries: 60
+  delay: 5
+  ignore_errors: true
+
 - name: Upload the binary to the remote host
   copy:
     src: /tmp/zeitwork

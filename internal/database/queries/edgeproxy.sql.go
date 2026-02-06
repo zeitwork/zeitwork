@@ -32,10 +32,13 @@ SELECT
     d.name as domain_name,
     v.port as vm_port,
     v.id as vm_id,
-    v.ip_address as vm_ip
+    v.ip_address as vm_ip,
+    v.server_id as server_id,
+    s.internal_ip as server_internal_ip
 FROM domains d
          INNER JOIN deployments dep ON d.deployment_id = dep.id
          INNER JOIN vms v ON dep.vm_id = v.id
+         LEFT JOIN servers s ON v.server_id = s.id
 WHERE d.verified_at IS NOT NULL
   AND dep.status = 'running'
   AND v.status = 'running'
@@ -43,13 +46,16 @@ ORDER BY d.name
 `
 
 type RouteFindActiveRow struct {
-	DomainName string       `json:"domain_name"`
-	VmPort     pgtype.Int4  `json:"vm_port"`
-	VmID       uuid.UUID    `json:"vm_id"`
-	VmIp       netip.Prefix `json:"vm_ip"`
+	DomainName       string       `json:"domain_name"`
+	VmPort           pgtype.Int4  `json:"vm_port"`
+	VmID             uuid.UUID    `json:"vm_id"`
+	VmIp             netip.Prefix `json:"vm_ip"`
+	ServerID         uuid.UUID    `json:"server_id"`
+	ServerInternalIp pgtype.Text  `json:"server_internal_ip"`
 }
 
-// Domains -> Deployment -> VM
+// Domains -> Deployment -> VM -> Server
+// Returns routes with server info so the edge proxy can forward cross-server.
 func (q *Queries) RouteFindActive(ctx context.Context) ([]RouteFindActiveRow, error) {
 	rows, err := q.db.Query(ctx, routeFindActive)
 	if err != nil {
@@ -64,6 +70,8 @@ func (q *Queries) RouteFindActive(ctx context.Context) ([]RouteFindActiveRow, er
 			&i.VmPort,
 			&i.VmID,
 			&i.VmIp,
+			&i.ServerID,
+			&i.ServerInternalIp,
 		); err != nil {
 			return nil, err
 		}

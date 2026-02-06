@@ -2,6 +2,7 @@ package edgeproxy
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log/slog"
 	"net"
@@ -13,21 +14,31 @@ import (
 
 	"github.com/caddyserver/certmagic"
 	"github.com/zeitwork/zeitwork/internal/database"
+	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 )
 
 type Config struct {
-	HTTPAddr       string        // HTTP listen address (e.g., ":80")
-	HTTPSAddr      string        // HTTPS listen address (e.g., ":443")
-	DatabaseURL    string        // Database connection string
-	UpdateInterval time.Duration // How often to refresh routes from database
-	ACMEEmail      string        // Email for Let's Encrypt account
-	ACMEStaging    bool          // Use Let's Encrypt staging environment
+	HTTPAddr    string    // HTTP listen address (e.g., ":80")
+	HTTPSAddr   string    // HTTPS listen address (e.g., ":443")
+	ACMEEmail   string    // Email for Let's Encrypt account
+	ACMEStaging bool      // Use Let's Encrypt staging environment
+	ServerID    uuid.UUID // This server's ID for determining local vs remote VMs
+
+	// Database connection (shared with zeitwerk service, may go through PgBouncer)
+	DB *database.DB
+
+	// RouteChangeNotify receives signals from the WAL listener when routes may have changed.
+	// The edge proxy debounces these and reloads routes.
+	// If nil, only the 60s fallback poll is used.
+	RouteChangeNotify <-chan struct{}
 }
 
 // Route represents routing information for a domain
 type Route struct {
-	Port int32  // VM's port
-	IP   string // VM's IP address
+	Port             int32     // VM's port
+	IP               string    // VM's IP address
+	ServerID         uuid.UUID // Server that hosts this VM
+	ServerInternalIP string    // Internal IP of the server hosting this VM
 }
 
 // Service is the edgeproxy service
@@ -51,18 +62,14 @@ func NewService(cfg Config, logger *slog.Logger) (*Service, error) {
 	if cfg.HTTPSAddr == "" {
 		cfg.HTTPSAddr = ":8443"
 	}
-	if cfg.UpdateInterval == 0 {
-		cfg.UpdateInterval = 10 * time.Second
-	}
 	if cfg.ACMEEmail == "" {
 		return nil, fmt.Errorf("ACME email is required")
 	}
-
-	// Initialize database connection
-	db, err := database.New(cfg.DatabaseURL)
-	if err != nil {
-		return nil, fmt.Errorf("failed to connect to database: %w", err)
+	if cfg.DB == nil {
+		return nil, fmt.Errorf("database connection is required")
 	}
+
+	db := cfg.DB
 
 	// Initialize certmagic with PostgreSQL storage
 	storage := NewPostgreSQLStorage(db)
@@ -89,9 +96,7 @@ func NewService(cfg Config, logger *slog.Logger) (*Service, error) {
 	certmagicConfig.Issuers = []certmagic.Issuer{issuer}
 
 	// Enable on-demand TLS for automatic certificate acquisition
-	// This is the correct approach for TLS-ALPN-01 challenges
 	certmagicConfig.OnDemand = &certmagic.OnDemandConfig{
-		// DecisionFunc checks if we should obtain a certificate for this domain
 		DecisionFunc: func(ctx context.Context, name string) error {
 			domainLogger := logger.With("domain", name)
 
@@ -135,8 +140,6 @@ func NewService(cfg Config, logger *slog.Logger) (*Service, error) {
 		IdleTimeout:  120 * time.Second,
 	}
 
-	// HTTPS server will be configured in Start()
-
 	return s, nil
 }
 
@@ -149,8 +152,8 @@ func (s *Service) Start(ctx context.Context) error {
 		s.logger.Warn("initial route load failed", "error", err)
 	}
 
-	// Start route refresh background goroutine
-	go s.refreshRoutesLoop(ctx)
+	// Start route refresh: channel-driven from WAL listener + 60s fallback poll
+	go s.routeRefreshLoop(ctx)
 
 	// Note: Certificate acquisition is on-demand via TLS-ALPN-01
 	s.httpsServer = &http.Server{
@@ -195,9 +198,7 @@ func (s *Service) Stop(ctx context.Context) error {
 		}
 	}
 
-	if s.db != nil {
-		s.db.Close()
-	}
+	// Don't close the DB -- it's shared with the zeitwerk service and owned by main()
 
 	return nil
 }
@@ -215,9 +216,16 @@ func (s *Service) loadRoutes(ctx context.Context) error {
 			continue
 		}
 
+		serverInternalIP := ""
+		if row.ServerInternalIp.Valid {
+			serverInternalIP = row.ServerInternalIp.String
+		}
+
 		newRoutes[row.DomainName] = Route{
-			IP:   row.VmIp.Addr().String(),
-			Port: row.VmPort.Int32,
+			IP:               row.VmIp.Addr().String(),
+			Port:             row.VmPort.Int32,
+			ServerID:         row.ServerID,
+			ServerInternalIP: serverInternalIP,
 		}
 	}
 
@@ -228,17 +236,50 @@ func (s *Service) loadRoutes(ctx context.Context) error {
 	return nil
 }
 
-func (s *Service) refreshRoutesLoop(ctx context.Context) {
-	ticker := time.NewTicker(s.cfg.UpdateInterval)
-	defer ticker.Stop()
+// routeRefreshLoop reloads routes on WAL change notifications, debounced,
+// with a 60s fallback poll in case the WAL listener misses something.
+func (s *Service) routeRefreshLoop(ctx context.Context) {
+	fallbackTicker := time.NewTicker(60 * time.Second)
+	defer fallbackTicker.Stop()
+
+	// Debounce timer: after receiving a WAL notification, wait 100ms for more
+	// events to arrive before actually reloading. This coalesces rapid-fire changes.
+	var debounceTimer *time.Timer
+	var debounceCh <-chan time.Time
+
+	notify := s.cfg.RouteChangeNotify
 
 	for {
 		select {
 		case <-ctx.Done():
+			if debounceTimer != nil {
+				debounceTimer.Stop()
+			}
 			return
-		case <-ticker.C:
+
+		case <-notify:
+			// WAL change notification received -- start/reset debounce timer
+			if debounceTimer == nil {
+				debounceTimer = time.NewTimer(100 * time.Millisecond)
+				debounceCh = debounceTimer.C
+			} else {
+				debounceTimer.Reset(100 * time.Millisecond)
+			}
+
+		case <-debounceCh:
+			// Debounce period elapsed -- reload routes
 			if err := s.loadRoutes(ctx); err != nil {
-				s.logger.Error("failed to refresh routes", "error", err)
+				s.logger.Error("failed to refresh routes (WAL-triggered)", "error", err)
+			} else {
+				s.logger.Debug("routes refreshed (WAL-triggered)")
+			}
+			debounceTimer = nil
+			debounceCh = nil
+
+		case <-fallbackTicker.C:
+			// Fallback poll
+			if err := s.loadRoutes(ctx); err != nil {
+				s.logger.Error("failed to refresh routes (fallback poll)", "error", err)
 			}
 		}
 	}
@@ -268,12 +309,10 @@ func (s *Service) checkVMHealth(ip string, port int32) bool {
 // Note: With on-demand TLS via TLS-ALPN-01, certificates are obtained automatically
 // during the first HTTPS request. We don't need proactive acquisition loops.
 // Certmagic handles certificate renewal automatically via its maintenance routine.
+// ACME TLS-ALPN-01 challenges are handled automatically by certmagic
+// on the HTTPS port via special TLS handshake, so the HTTP port
+// is only used for redirecting regular traffic to HTTPS.
 func (s *Service) serveHTTP(w http.ResponseWriter, r *http.Request) {
-	// ACME TLS-ALPN-01 challenges are handled automatically by certmagic
-	// on the HTTPS port (8443) via special TLS handshake, so HTTP port
-	// is only used for redirecting regular traffic to HTTPS.
-
-	// Redirect all HTTP traffic to HTTPS
 	target := "https://" + r.Host + r.URL.RequestURI()
 	s.logger.Debug("redirecting to HTTPS", "from", r.URL.String(), "to", target)
 	http.Redirect(w, r, target, http.StatusMovedPermanently)
@@ -306,8 +345,46 @@ func (s *Service) serveHTTPS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var targetURL string
+	// Cross-server forwarding: if the VM is on another server, forward to that server's edge proxy
+	if route.ServerID != s.cfg.ServerID && route.ServerInternalIP != "" {
+		// Prevent forwarding loops
+		if r.Header.Get("X-Zeitwork-Forwarded") != "" {
+			s.logger.Error("forwarding loop detected", "host", host, "server_id", route.ServerID)
+			http.Error(w, "Forwarding Loop Detected", http.StatusLoopDetected)
+			return
+		}
 
+		// Forward to the other server's edge proxy
+		targetURL := fmt.Sprintf("https://%s:443", route.ServerInternalIP)
+		target, err := url.Parse(targetURL)
+		if err != nil {
+			s.logger.Error("invalid forward target URL", "url", targetURL, "error", err)
+			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
+			return
+		}
+
+		proxy := httputil.NewSingleHostReverseProxy(target)
+		proxy.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, // Internal traffic between our own servers
+		}
+		originalDirector := proxy.Director
+		proxy.Director = func(req *http.Request) {
+			originalDirector(req)
+			req.Host = r.Host // Preserve the original Host header so the target server can route
+			req.Header.Set("X-Zeitwork-Forwarded", "true")
+			req.Header.Set("X-Forwarded-For", r.RemoteAddr)
+			req.Header.Set("X-Forwarded-Proto", "https")
+			req.Header.Set("X-Real-IP", r.RemoteAddr)
+		}
+		proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
+			s.logger.Error("cross-server forward failed", "target", targetURL, "error", err)
+			http.Error(w, "Bad Gateway - Remote Server Unavailable", http.StatusBadGateway)
+		}
+		proxy.ServeHTTP(w, r)
+		return
+	}
+
+	// Local VM -- proxy directly
 	if !s.checkVMHealth(route.IP, route.Port) {
 		s.logger.Warn("VM health check failed",
 			"host", host,
@@ -317,7 +394,7 @@ func (s *Service) serveHTTPS(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	targetURL = fmt.Sprintf("http://%s:%d", route.IP, route.Port)
+	targetURL := fmt.Sprintf("http://%s:%d", route.IP, route.Port)
 
 	target, err := url.Parse(targetURL)
 	if err != nil {

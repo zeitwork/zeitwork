@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  cidr,
   inet,
   integer,
   jsonb,
@@ -225,6 +226,23 @@ export const certmagicLocks = pgTable("certmagic_locks", {
 
 // PLATFORM
 
+export const serverStatusEnum = pgEnum("server_status", [
+  "active",
+  "draining",
+  "drained",
+  "dead",
+]);
+
+export const servers = pgTable("servers", {
+  id: uuid().primaryKey().$defaultFn(uuidv7),
+  hostname: text().notNull(),
+  internalIp: text().notNull(),
+  ipRange: cidr().notNull(), // dedicated VM IP range (e.g., 10.1.0.0/16)
+  status: serverStatusEnum().notNull().default("active"),
+  lastHeartbeatAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  ...timestamps,
+});
+
 export const vmStatusEnum = pgEnum("vm_status", [
   "pending",
   "starting",
@@ -242,6 +260,7 @@ export const vms = pgTable("vms", {
   imageId: uuid()
     .references(() => images.id)
     .notNull(),
+  serverId: uuid().references(() => servers.id),
   port: integer(),
   ipAddress: inet().notNull(),
   envVariables: text(),

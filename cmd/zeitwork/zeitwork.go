@@ -13,12 +13,14 @@ import (
 	"github.com/lmittmann/tint"
 	"github.com/zeitwork/zeitwork/internal/database"
 	"github.com/zeitwork/zeitwork/internal/edgeproxy"
+	"github.com/zeitwork/zeitwork/internal/storage"
 	"github.com/zeitwork/zeitwork/internal/zeitwork"
 )
 
 type Config struct {
 	IPAdress               string `env:"LOAD_BALANCER_IP,required"`
-	DatabaseURL            string `env:"DATABASE_URL,required"`
+	DatabaseURL            string `env:"DATABASE_URL,required"`        // Pooled connection (PgBouncer)
+	DatabaseDirectURL      string `env:"DATABASE_DIRECT_URL,required"` // Direct PostgreSQL (for WAL replication)
 	DockerRegistryURL      string `env:"DOCKER_REGISTRY_URL,required"`
 	DockerRegistryUsername string `env:"DOCKER_REGISTRY_USERNAME,required"`
 	DockerRegistryPAT      string `env:"DOCKER_REGISTRY_PAT,required"` // GitHub PAT with write:packages scope
@@ -33,6 +35,16 @@ type Config struct {
 
 	// Metadata server config (serves env vars to VMs via HTTP)
 	MetadataServerAddr string `env:"METADATA_SERVER_ADDR" envDefault:"0.0.0.0:8111"`
+
+	// Multi-server config
+	InternalIP string `env:"INTERNAL_IP,required"` // This server's internal IP for inter-server communication
+
+	// S3 shared image storage (optional -- if not set, images stay local only)
+	S3Endpoint  string `env:"S3_ENDPOINT" envDefault:""`
+	S3Bucket    string `env:"S3_BUCKET" envDefault:"zeitwork-images"`
+	S3AccessKey string `env:"S3_ACCESS_KEY" envDefault:""`
+	S3SecretKey string `env:"S3_SECRET_KEY" envDefault:""`
+	S3UseSSL    bool   `env:"S3_USE_SSL" envDefault:"false"`
 }
 
 func main() {
@@ -53,21 +65,58 @@ func main() {
 		panic("failed to parse config" + err.Error())
 	}
 
+	// Create the shared database connection pool (may go through PgBouncer)
 	db, err := database.New(cfg.DatabaseURL)
 	if err != nil {
 		panic("failed to init database")
 	}
 
+	// Load or create a stable server identity
+	serverID, err := zeitwork.LoadOrCreateServerID()
+	if err != nil {
+		panic("failed to load/create server ID: " + err.Error())
+	}
+
+	internalIP := cfg.InternalIP
+	if internalIP == "" {
+		panic("INTERNAL_IP is required for multi-server communication")
+	}
+
+	// Initialize S3 storage if configured
+	var s3Client *storage.S3
+	if cfg.S3Endpoint != "" {
+		s3Client, err = storage.New(storage.Config{
+			Endpoint:  cfg.S3Endpoint,
+			Bucket:    cfg.S3Bucket,
+			AccessKey: cfg.S3AccessKey,
+			SecretKey: cfg.S3SecretKey,
+			UseSSL:    cfg.S3UseSSL,
+		})
+		if err != nil {
+			slog.Error("failed to create S3 client, running without shared image storage", "err", err)
+		} else {
+			slog.Info("S3 shared image storage enabled", "endpoint", cfg.S3Endpoint, "bucket", cfg.S3Bucket)
+		}
+	}
+
+	// Channel for the WAL listener to notify the edge proxy of route changes.
+	// Buffered with 1 so sends never block (acts as a "pending reload" flag).
+	routeChangeNotify := make(chan struct{}, 1)
+
 	service, err := zeitwork.New(zeitwork.Config{
 		DB:                     db,
 		IPAdress:               cfg.IPAdress,
-		DatabaseURL:            cfg.DatabaseURL,
+		DatabaseDirectURL:      cfg.DatabaseDirectURL,
 		DockerRegistryURL:      cfg.DockerRegistryURL,
 		DockerRegistryUsername: cfg.DockerRegistryUsername,
 		DockerRegistryPAT:      cfg.DockerRegistryPAT,
 		GitHubAppID:            cfg.GitHubAppID,
 		GitHubAppPrivateKey:    cfg.GitHubAppPrivateKey,
 		MetadataServerAddr:     cfg.MetadataServerAddr,
+		ServerID:               serverID,
+		InternalIP:             internalIP,
+		S3:                     s3Client,
+		RouteChangeNotify:      routeChangeNotify,
 	})
 	if err != nil {
 		panic(err)
@@ -80,14 +129,15 @@ func main() {
 		}
 	}()
 
-	// Edge proxy
+	// Edge proxy (shares the same DB connection pool)
 	edgeProxy, err := edgeproxy.NewService(edgeproxy.Config{
-		HTTPAddr:       cfg.EdgeProxyHTTPAddr,
-		HTTPSAddr:      cfg.EdgeProxyHTTPSAddr,
-		DatabaseURL:    cfg.DatabaseURL,
-		UpdateInterval: 10 * time.Second,
-		ACMEEmail:      cfg.EdgeProxyACMEEmail,
-		ACMEStaging:    cfg.EdgeProxyACMEStaging,
+		HTTPAddr:          cfg.EdgeProxyHTTPAddr,
+		HTTPSAddr:         cfg.EdgeProxyHTTPSAddr,
+		ACMEEmail:         cfg.EdgeProxyACMEEmail,
+		ACMEStaging:       cfg.EdgeProxyACMEStaging,
+		ServerID:          serverID,
+		DB:                db,
+		RouteChangeNotify: routeChangeNotify,
 	}, logger)
 	if err != nil {
 		slog.Error("failed to create edge proxy", "err", err)
