@@ -65,24 +65,24 @@ func (s *Service) reconcileDomain(ctx context.Context, objectID uuid.UUID) error
 		return nil
 	}
 
-	// Step 3: If TXT verification passed and there are conflicting domains, soft-delete them
-	if domain.TxtVerificationRequired {
-		conflicts, err := s.db.DomainFindActiveByName(ctx, queries.DomainFindActiveByNameParams{
-			Name: domainName,
-			ID:   domain.ID,
-		})
-		if err != nil {
+	// Step 3: Soft-delete any other active domains with the same name.
+	// This runs unconditionally — there should never be two active verified
+	// domains with the same name on the platform.
+	conflicts, err := s.db.DomainFindActiveByName(ctx, queries.DomainFindActiveByNameParams{
+		Name: domainName,
+		ID:   domain.ID,
+	})
+	if err != nil {
+		return err
+	}
+	for _, conflict := range conflicts {
+		slog.Info("soft-deleting conflicting domain",
+			"verified_domain_id", domain.ID,
+			"conflicting_domain_id", conflict.ID,
+			"domain_name", domainName,
+		)
+		if err := s.db.DomainSoftDelete(ctx, conflict.ID); err != nil {
 			return err
-		}
-		for _, conflict := range conflicts {
-			slog.Info("soft-deleting conflicting domain after TXT verification",
-				"verified_domain_id", domain.ID,
-				"conflicting_domain_id", conflict.ID,
-				"domain_name", domainName,
-			)
-			if err := s.db.DomainSoftDelete(ctx, conflict.ID); err != nil {
-				return err
-			}
 		}
 	}
 
