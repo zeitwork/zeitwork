@@ -1,15 +1,5 @@
 <script setup lang="ts">
 import { EyeIcon, EyeOffIcon, PencilIcon, TrashIcon } from "lucide-vue-next";
-import {
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogOverlay,
-  DialogPortal,
-  DialogRoot,
-  DialogTitle,
-  DialogTrigger,
-} from "reka-ui";
 
 const route = useRoute();
 const projectSlug = route.params.project as string;
@@ -170,52 +160,52 @@ async function deleteEnvVar() {
 
 <template>
   <div class="flex flex-col">
-    <!-- Header -->
-    <div class="border-neutral-subtle flex items-center justify-between border-b p-4">
-      <div class="text-neutral-strong text-sm">Environment Variables</div>
-      <DDialog>
-        <template #trigger>
-          <d-button>Add Variable</d-button>
-        </template>
-        <template #title>Add Environment Variable</template>
-        <template #description>
-          Add a new environment variable to your project. Values are encrypted at rest.
-        </template>
-        <template #content>
-          <div class="flex flex-col gap-4">
-            <div class="flex flex-col gap-1">
-              <label class="text-neutral-strong text-sm font-medium">Name</label>
-              <DInput v-model="newEnvName" placeholder="e.g. DATABASE_URL" :disabled="isAdding" />
+    <DHeader title="Environment Variables" description="Encrypted and securely stored.">
+      <template #trailing>
+        <DDialog>
+          <template #trigger>
+            <d-button>Add Variable</d-button>
+          </template>
+          <template #title>Add Environment Variable</template>
+          <template #description>
+            Add a new environment variable to your project. Values are encrypted at rest.
+          </template>
+          <template #content>
+            <div class="flex flex-col gap-4">
+              <div class="flex flex-col gap-1">
+                <label class="text-primary text-sm font-medium">Name</label>
+                <DInput v-model="newEnvName" placeholder="e.g. DATABASE_URL" :disabled="isAdding" />
+              </div>
+              <div class="flex flex-col gap-1">
+                <label class="text-primary text-sm font-medium">Value</label>
+                <DInput
+                  v-model="newEnvValue"
+                  type="password"
+                  placeholder="Enter value"
+                  :disabled="isAdding"
+                />
+              </div>
             </div>
-            <div class="flex flex-col gap-1">
-              <label class="text-neutral-strong text-sm font-medium">Value</label>
-              <DInput
-                v-model="newEnvValue"
-                type="password"
-                placeholder="Enter value"
-                :disabled="isAdding"
-              />
-            </div>
-          </div>
-        </template>
-        <template #cancel>
-          <d-button variant="secondary">Cancel</d-button>
-        </template>
-        <template #submit>
-          <d-button @click="addEnvVar" :loading="isAdding" :disabled="!newEnvName.trim()">
-            Add Variable
-          </d-button>
-        </template>
-      </DDialog>
-    </div>
+          </template>
+          <template #cancel>
+            <d-button variant="secondary">Cancel</d-button>
+          </template>
+          <template #submit>
+            <d-button @click="addEnvVar" :loading="isAdding" :disabled="!newEnvName.trim()">
+              Add Variable
+            </d-button>
+          </template>
+        </DDialog>
+      </template>
+    </DHeader>
 
     <!-- Empty state -->
     <div
       v-if="!envVars || envVars.length === 0"
       class="flex flex-col items-center justify-center gap-2 p-12 text-center"
     >
-      <div class="text-neutral-moderate text-sm">No environment variables</div>
-      <div class="text-neutral-subtle text-xs">
+      <div class="text-secondary text-sm">No environment variables</div>
+      <div class="text-secondary text-xs">
         Environment variables are encrypted and securely stored.
       </div>
     </div>
@@ -225,11 +215,11 @@ async function deleteEnvVar() {
       <div
         v-for="envVar in envVars"
         :key="envVar.id"
-        class="border-neutral-subtle flex items-center justify-between border-b px-4 py-3"
+        class="border-edge-subtle flex items-center justify-between border-b px-4 py-3"
       >
         <div class="flex flex-col gap-1">
-          <div class="text-neutral-strong text-sm font-mono">{{ envVar.name }}</div>
-          <div class="text-neutral-moderate flex items-center gap-2 text-xs font-mono">
+          <div class="text-primary text-sm font-mono">{{ envVar.name }}</div>
+          <div class="text-secondary flex items-center gap-2 text-xs font-mono">
             <span v-if="revealedValues[envVar.id]" class="max-w-md truncate">
               {{ revealedValues[envVar.id] }}
             </span>
@@ -251,8 +241,8 @@ async function deleteEnvVar() {
           </d-button>
 
           <!-- Edit Dialog -->
-          <DialogRoot v-model:open="showEditDialog">
-            <DialogTrigger as-child>
+          <DDialog v-model="showEditDialog">
+            <template #trigger>
               <d-button
                 variant="transparent"
                 size="sm"
@@ -263,56 +253,49 @@ async function deleteEnvVar() {
                   <PencilIcon class="size-4" />
                 </template>
               </d-button>
-            </DialogTrigger>
-            <DialogPortal>
-              <DialogOverlay class="fixed inset-0 z-30 bg-black/10" />
-              <DialogContent
-                class="bg-surface border-neutral-subtle fixed top-[50%] left-[50%] z-[100] max-h-[85vh] w-[90vw] max-w-[450px] translate-x-[-50%] translate-y-[-50%] rounded-[6px] border p-[25px] shadow-[hsl(206_22%_7%_/_35%)_0px_10px_38px_-10px,_hsl(206_22%_7%_/_20%)_0px_10px_20px_-15px] focus:outline-none"
+            </template>
+            <template #title>Edit Environment Variable</template>
+            <template #description>
+              Update the name and/or value. Leave value empty to keep the current value.
+            </template>
+            <template #content>
+              <div class="flex flex-col gap-4">
+                <div class="flex flex-col gap-1">
+                  <label class="text-primary text-sm font-medium">Name</label>
+                  <DInput
+                    v-model="editEnvName"
+                    placeholder="e.g. DATABASE_URL"
+                    :disabled="isEditing"
+                  />
+                </div>
+                <div class="flex flex-col gap-1">
+                  <label class="text-primary text-sm font-medium">Value</label>
+                  <DInput
+                    v-model="editEnvValue"
+                    type="password"
+                    placeholder="Enter new value (leave empty to keep current)"
+                    :disabled="isEditing"
+                  />
+                </div>
+              </div>
+            </template>
+            <template #cancel>
+              <d-button variant="secondary">Cancel</d-button>
+            </template>
+            <template #submit>
+              <d-button
+                @click="updateEnvVar"
+                :loading="isEditing"
+                :disabled="!editEnvName.trim()"
               >
-                <DialogTitle class="text-neutral-strong m-0 text-[17px] font-semibold">
-                  Edit Environment Variable
-                </DialogTitle>
-                <DialogDescription class="text-neutral-subtle mt-[10px] mb-5 text-sm leading-normal">
-                  Update the name and/or value. Leave value empty to keep the current value.
-                </DialogDescription>
-                <div class="flex flex-col gap-4">
-                  <div class="flex flex-col gap-1">
-                    <label class="text-neutral-strong text-sm font-medium">Name</label>
-                    <DInput
-                      v-model="editEnvName"
-                      placeholder="e.g. DATABASE_URL"
-                      :disabled="isEditing"
-                    />
-                  </div>
-                  <div class="flex flex-col gap-1">
-                    <label class="text-neutral-strong text-sm font-medium">Value</label>
-                    <DInput
-                      v-model="editEnvValue"
-                      type="password"
-                      placeholder="Enter new value (leave empty to keep current)"
-                      :disabled="isEditing"
-                    />
-                  </div>
-                </div>
-                <div class="mt-6 flex justify-between">
-                  <DialogClose as-child>
-                    <d-button variant="secondary">Cancel</d-button>
-                  </DialogClose>
-                  <d-button
-                    @click="updateEnvVar"
-                    :loading="isEditing"
-                    :disabled="!editEnvName.trim()"
-                  >
-                    Save Changes
-                  </d-button>
-                </div>
-              </DialogContent>
-            </DialogPortal>
-          </DialogRoot>
+                Save Changes
+              </d-button>
+            </template>
+          </DDialog>
 
           <!-- Delete Dialog -->
-          <DialogRoot v-model:open="showDeleteDialog">
-            <DialogTrigger as-child>
+          <DAlertDialog v-model="showDeleteDialog">
+            <template #trigger>
               <d-button
                 variant="transparent"
                 size="sm"
@@ -323,31 +306,24 @@ async function deleteEnvVar() {
                   <TrashIcon class="size-4" />
                 </template>
               </d-button>
-            </DialogTrigger>
-            <DialogPortal>
-              <DialogOverlay class="fixed inset-0 z-30 bg-black/10" />
-              <DialogContent
-                class="bg-surface border-neutral-subtle fixed top-[50%] left-[50%] z-[100] max-h-[85vh] w-[90vw] max-w-[450px] translate-x-[-50%] translate-y-[-50%] rounded-[6px] border p-[25px] shadow-[hsl(206_22%_7%_/_35%)_0px_10px_38px_-10px,_hsl(206_22%_7%_/_20%)_0px_10px_20px_-15px] focus:outline-none"
-              >
-                <DialogTitle class="text-neutral-strong m-0 text-[17px] font-semibold">
-                  Delete Environment Variable
-                </DialogTitle>
-                <DialogDescription class="text-neutral-subtle mt-[10px] mb-5 text-sm leading-normal">
-                  Are you sure you want to delete
-                  <strong class="font-mono">{{ deletingEnvVar?.name }}</strong
-                  >? This action cannot be undone.
-                </DialogDescription>
-                <div class="mt-6 flex justify-between">
-                  <DialogClose as-child>
-                    <d-button variant="secondary">Cancel</d-button>
-                  </DialogClose>
-                  <d-button variant="danger" @click="deleteEnvVar" :loading="isDeleting">
-                    Delete Variable
-                  </d-button>
-                </div>
-              </DialogContent>
-            </DialogPortal>
-          </DialogRoot>
+            </template>
+            <template #title>Delete Environment Variable</template>
+            <template #content>
+              <p class="text-secondary text-copy">
+                Are you sure you want to delete
+                <strong class="text-primary font-mono">{{ deletingEnvVar?.name }}</strong>?
+                This action cannot be undone.
+              </p>
+            </template>
+            <template #cancel>
+              <d-button variant="secondary">Cancel</d-button>
+            </template>
+            <template #action>
+              <d-button variant="danger" @click="deleteEnvVar" :loading="isDeleting">
+                Delete Variable
+              </d-button>
+            </template>
+          </DAlertDialog>
         </div>
       </div>
     </div>

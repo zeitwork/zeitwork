@@ -53,21 +53,22 @@ async function saveSettings() {
 </script>
 
 <template>
-  <div class="p-4">
-    <div class="space-y-6">
+  <div class="flex flex-col">
+    <DHeader title="General" description="Manage your project settings." />
+    <div class="space-y-6 p-4">
       <div>
-        <h3 class="text-neutral-strong mb-2 text-sm font-medium">Project Name</h3>
+        <h3 class="text-primary mb-2 text-sm font-medium">Project Name</h3>
         <DInput :model-value="projectSlug" disabled />
       </div>
 
       <div>
-        <h3 class="text-neutral-strong mb-2 text-sm font-medium">Organization</h3>
+        <h3 class="text-primary mb-2 text-sm font-medium">Organization</h3>
         <DInput :model-value="orgId" disabled />
       </div>
 
       <div>
-        <h3 class="text-neutral-strong mb-2 text-sm font-medium">Root Directory</h3>
-        <p class="text-neutral-moderate mb-2 text-xs">
+        <h3 class="text-primary mb-2 text-sm font-medium">Root Directory</h3>
+        <p class="text-secondary mb-2 text-xs">
           The directory where your Dockerfile is located. Use "/" for repository root, or specify a
           subdirectory like "/apps/web" for monorepos.
         </p>
@@ -78,7 +79,7 @@ async function saveSettings() {
         <DButton variant="primary" :loading="isSaving" @click="saveSettings">
           Save Changes
         </DButton>
-        <p v-if="saveMessage" :class="saveMessage.type === 'error' ? 'text-red-500' : 'text-green-500'" class="text-sm">
+        <p v-if="saveMessage" :class="saveMessage.type === 'error' ? 'text-danger' : 'text-success'" class="text-sm">
           {{ saveMessage.text }}
         </p>
       </div>

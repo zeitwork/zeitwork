@@ -19,12 +19,12 @@ const height = computed(() => {
 });
 </script>
 <template>
-  <div class="border-neutral border-b">
+  <div class="border-edge border-b">
     <DPageWrapper :wide>
       <div class="flex items-center justify-between gap-10" :class="[height]">
         <div class="flex-1">
           <div
-            class="text-neutral-strong line-clamp-1"
+            class="text-primary line-clamp-1"
             :class="[size === 'sm' ? 'text-title-sm' : 'text-title']"
           >
             {{ title }}

@@ -15,7 +15,7 @@ type Props = {
 
 const {
   active = false,
-  background = "bg-neutral-subtle",
+  background = "bg-surface-2",
   borderRadius = "rounded-md",
   hoverScale = "group-hover/h:inset-0",
   activeScale = "inset-0",
@@ -30,7 +30,7 @@ const {
 
 <template>
   <div
-    class="text-neutral text-copy group/h relative flex items-center"
+    class="text-primary text-copy group/h relative flex items-center"
     :class="[fullWidth ? 'w-full' : 'w-fit']"
   >
     <div
@@ -43,7 +43,7 @@ const {
         interactive && !disabled ? 'group-active/h:inset-0.5' : '',
         active ? `opacity-100 ${activeScale}` : `opacity-0 ${inactiveScale}`,
         focus && !disabled
-          ? 'group-has-focus-visible/h:inset-0 group-has-focus-visible/h:opacity-100 group-has-focus-visible/h:ring-neutral-strong/10 group-has-focus-visible/h:ring-2'
+          ? 'group-has-focus-visible/h:inset-0 group-has-focus-visible/h:opacity-100 group-has-focus-visible/h:ring-focus/10 group-has-focus-visible/h:ring-2'
           : '',
         innerClass,
       ]"

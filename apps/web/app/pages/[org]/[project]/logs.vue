@@ -10,8 +10,8 @@ const projectId = route.params.project;
 
 <template>
   <div class="flex h-full flex-col overflow-auto">
-    <div class="border-neutral-subtle flex h-16 items-center justify-between border-b p-4">
-      <div class="text-neutral-strong text-sm">Logs</div>
+    <div class="border-edge-subtle flex h-16 items-center justify-between border-b p-4">
+      <div class="text-primary text-sm">Logs</div>
       <!-- <d-button @click="createDeployment">Create Deployment</d-button> -->
     </div>
   </div>

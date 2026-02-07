@@ -46,42 +46,6 @@ const justInstalled = computed(() => route.query.installed === "true");
 
 <template>
   <div class="@container flex flex-col gap-4 p-4">
-    <template v-if="false">
-      <!-- Success message after installation -->
-      <div
-        v-if="justInstalled"
-        style="background: #d4edda; border: 1px solid #c3e6cb; padding: 12px; border-radius: 4px"
-      >
-        GitHub App installed successfully! You can now create projects.
-      </div>
-
-      <!-- GitHub App installation prompt -->
-      <div
-        v-if="!hasGitHubInstallation"
-        style="background: #fff3cd; border: 1px solid #ffeaa7; padding: 16px; border-radius: 4px"
-      >
-        <h3>Install GitHub App Required</h3>
-        <p>
-          To create and deploy projects, you need to install the Zeitwork GitHub App for this
-          organisation.
-        </p>
-        <a
-          :href="githubAppInstallUrl"
-          style="
-            display: inline-block;
-            margin-top: 8px;
-            padding: 8px 16px;
-            background: #24292e;
-            color: white;
-            text-decoration: none;
-            border-radius: 4px;
-          "
-        >
-          Install GitHub App
-        </a>
-      </div>
-    </template>
-
     <div class="flex gap-2">
       <DInput v-model="searchQuery" class="flex-1" placeholder="Search Projects..." />
       <!-- <DButton :to="`/${orgSlug}/new`" :disabled="!hasGitHubInstallation">Add Project</DButton> -->
@@ -96,11 +60,11 @@ const justInstalled = computed(() => route.query.installed === "true");
     </div>
 
     <div v-else-if="projects && projects.length > 0 && filteredProjects.length === 0">
-      <p class="text-neutral-subtle text-copy-sm">No projects match your search.</p>
+      <p class="text-secondary text-copy-sm">No projects match your search.</p>
     </div>
 
     <div v-else-if="!projects || projects.length === 0">
-      <p class="text-neutral-subtle text-copy-sm">No projects yet. Create your first project!</p>
+      <p class="text-secondary text-copy-sm">No projects yet. Create your first project!</p>
     </div>
   </div>
 </template>

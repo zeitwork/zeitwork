@@ -16,10 +16,10 @@ defineProps<Props>();
   <ComboboxItem
     :value="value"
     :disabled="disabled"
-    class="text-copy text-neutral group hover:bg-neutral-subtle data-[highlighted]:bg-neutral-subtle relative flex w-full cursor-pointer items-center rounded-sm px-2 py-1.5 leading-none transition-colors outline-none select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+    class="text-copy text-primary group hover:bg-surface-2 data-[highlighted]:bg-surface-2 relative flex w-full cursor-pointer items-center rounded-sm px-2 py-1.5 leading-none transition-colors outline-none select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
   >
     <div
-      class="bg-neutral-strong absolute inset-2 rounded opacity-0 transition-all group-data-[highlighted]:inset-0 group-data-[highlighted]:opacity-100"
+      class="bg-surface-2 absolute inset-2 rounded opacity-0 transition-all group-data-[highlighted]:inset-0 group-data-[highlighted]:opacity-100"
     ></div>
     <div class="z-10 flex w-full items-center">
       <div class="flex flex-1 items-center gap-2 overflow-hidden whitespace-nowrap">
@@ -30,7 +30,7 @@ defineProps<Props>();
       </div>
       <div class="grid size-5 min-w-5 place-items-center justify-center">
         <ComboboxItemIndicator>
-          <CheckIcon class="text-neutral-weak size-4" />
+          <CheckIcon class="text-tertiary size-4" />
         </ComboboxItemIndicator>
       </div>
     </div>

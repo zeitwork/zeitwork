@@ -26,11 +26,11 @@ async function logout() {
 </script>
 
 <template>
-  <header class="bg-neutral border-neutral w-full border-b">
+  <header class="bg-surface-0 border-edge w-full border-b">
     <div class="flex items-center justify-between px-6 py-4">
       <div class="flex items-center gap-2">
         <NuxtLink :to="`/${orgName}`" class="flex flex-shrink-0 items-center gap-2">
-          <DLogo class="h-5 text-black" />
+          <DLogo class="h-5 text-primary" />
         </NuxtLink>
         <DPageHeaderSeparator />
         <DPageHeaderBreadcrumbLink :name="orgName as string" :to="`/${orgName}`" />
@@ -47,7 +47,7 @@ async function logout() {
         <!-- <DThemeSwitcher /> -->
         <DButton :icon-left="LogOutIcon" variant="secondary" size="md" @click="logout" />
         <div
-          class="bg-neutral-inverse text-neutral-inverse text-copy-sm grid size-8 place-items-center rounded-full font-semibold uppercase"
+          class="bg-inverse text-inverse text-copy-sm grid size-8 place-items-center rounded-full font-semibold uppercase"
         >
           {{ initials }}
         </div>

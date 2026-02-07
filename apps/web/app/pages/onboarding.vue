@@ -48,18 +48,18 @@ async function subscribe(plan: "early-access" | "hobby" | "business") {
 <template>
   <div>
     <div class="mx-auto flex max-w-4xl flex-1 flex-col p-4 pt-24">
-      <h1 class="text-neutral mb-2 text-2xl">Pricing</h1>
-      <p class="text-neutral-subtle mb-8 text-sm">
+      <h1 class="text-primary mb-2 text-2xl">Pricing</h1>
+      <p class="text-secondary mb-8 text-sm">
         During the beta period, we require users to have a valid credit card on file.
       </p>
-      <h2 class="text-neutral mb-2 text-lg">Pick a plan</h2>
+      <h2 class="text-primary mb-2 text-lg">Pick a plan</h2>
       <div class="grid grid-cols-4 gap-4">
         <div
-          class="bg-neutral-subtle border-neutral-subtle flex flex-col gap-2 rounded-sm border p-2"
+          class="bg-surface-1 border-edge-subtle flex flex-col gap-2 rounded-sm border p-2"
         >
-          <h3 class="text-neutral">Early Access</h3>
-          <p class="text-neutral-subtle">$0/month</p>
-          <ul role="list" class="mt-9/12 space-y-2/12 text-neutral text-sm">
+          <h3 class="text-primary">Early Access</h3>
+          <p class="text-secondary">$0/month</p>
+          <ul role="list" class="mt-9/12 space-y-2/12 text-primary text-sm">
             <li class="flex gap-x-1.5"><span>✓</span> Up to 5 projects</li>
             <li class="flex gap-x-1.5"><span>✓</span> One region</li>
             <li class="flex gap-x-1.5"><span>✓</span> Free Zeitwork domain</li>
@@ -75,11 +75,11 @@ async function subscribe(plan: "early-access" | "hobby" | "business") {
           </DButton>
         </div>
         <div
-          class="bg-neutral-subtle border-neutral-subtle flex flex-col gap-2 rounded-sm border p-2"
+          class="bg-surface-1 border-edge-subtle flex flex-col gap-2 rounded-sm border p-2"
         >
-          <h3 class="text-neutral">Hobby</h3>
-          <p class="text-neutral-subtle">$5/month</p>
-          <ul role="list" class="mt-9/12 space-y-2/12 text-neutral text-sm">
+          <h3 class="text-primary">Hobby</h3>
+          <p class="text-secondary">$5/month</p>
+          <ul role="list" class="mt-9/12 space-y-2/12 text-primary text-sm">
             <li class="flex gap-x-1.5"><span>✓</span> Unlimited projects</li>
             <li class="flex gap-x-1.5"><span>✓</span> One region</li>
             <li class="flex gap-x-1.5"><span>✓</span> Free Zeitwork domain</li>
@@ -91,11 +91,11 @@ async function subscribe(plan: "early-access" | "hobby" | "business") {
           </DButton>
         </div>
         <div
-          class="bg-neutral-subtle border-neutral-subtle flex flex-col gap-2 rounded-sm border p-2"
+          class="bg-surface-1 border-edge-subtle flex flex-col gap-2 rounded-sm border p-2"
         >
-          <h3 class="text-neutral">Business</h3>
-          <p class="text-neutral-subtle">$25/month</p>
-          <ul role="list" class="mt-9/12 space-y-2/12 text-neutral text-sm">
+          <h3 class="text-primary">Business</h3>
+          <p class="text-secondary">$25/month</p>
+          <ul role="list" class="mt-9/12 space-y-2/12 text-primary text-sm">
             <li class="flex gap-x-1.5"><span>✓</span> Unlimited projects</li>
             <li class="flex gap-x-1.5"><span>✓</span> Multiple regions</li>
             <li class="flex gap-x-1.5"><span>✓</span> Free Zeitwork domain</li>
@@ -106,10 +106,10 @@ async function subscribe(plan: "early-access" | "hobby" | "business") {
             {{ checkoutLoading === "business" ? "Loading..." : "Get Business" }}
           </DButton>
         </div>
-        <!-- <div class="bg-neutral-subtle border-neutral-subtle flex flex-col gap-2 rounded-sm border p-2">
-          <h3 class="text-neutral">Enterprise</h3>
-          <p class="text-neutral-subtle">Talk to us</p>
-          <ul role="list" class="mt-9/12 space-y-2/12 text-neutral text-sm">
+        <!-- <div class="bg-surface-1 border-edge-subtle flex flex-col gap-2 rounded-sm border p-2">
+          <h3 class="text-primary">Enterprise</h3>
+          <p class="text-secondary">Talk to us</p>
+          <ul role="list" class="mt-9/12 space-y-2/12 text-primary text-sm">
             <li class="flex gap-x-1.5"><span>✓</span> Unlimited projects</li>
             <li class="flex gap-x-1.5"><span>✓</span> All regions</li>
             <li class="flex gap-x-1.5"><span>✓</span> Free Zeitwork domain</li>
@@ -119,10 +119,10 @@ async function subscribe(plan: "early-access" | "hobby" | "business") {
           <DButton variant="primary" to="mailto:sales@zeitwork.com">Talk to us</DButton>
         </div> -->
       </div>
-      <p class="text-neutral-subtle mt-8 text-sm">
+      <p class="text-secondary mt-8 text-sm">
         Our free plan will be available to everyone after our public launch. <br />
         You can request a refund any time by emailing
-        <a href="mailto:support@zeitwork.com" class="text-neutral">support@zeitwork.com</a>.
+        <a href="mailto:support@zeitwork.com" class="text-primary">support@zeitwork.com</a>.
       </p>
     </div>
   </div>

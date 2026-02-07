@@ -13,7 +13,7 @@ const model = defineModel<string>();
 <template>
   <textarea
     v-model="model"
-    class="text-neutral bg-neutral text-copy border-neutral focus:bg-neutral rounded-lg border p-2 ring-offset-0 transition-colors outline-none focus:border-blue-600 focus:ring-2 focus:ring-blue-300"
+    class="text-primary bg-surface-0 text-copy border-edge focus:bg-surface-0 focus:border-edge-strong rounded-lg border p-2 transition-colors outline-none"
     :rows="rows"
     :cols="cols"
     :placeholder="placeholder"
