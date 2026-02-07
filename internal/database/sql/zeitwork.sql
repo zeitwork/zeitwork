@@ -10,5 +10,5 @@ WHERE id = $1;
 
 -- name: DomainSoftDelete :exec
 UPDATE domains
-SET deleted_at = NOW()
+SET deleted_at = NOW(), verified_at = NULL
 WHERE id = $1;

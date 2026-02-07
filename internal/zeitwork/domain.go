@@ -18,6 +18,11 @@ func (s *Service) reconcileDomain(ctx context.Context, objectID uuid.UUID) error
 		return err
 	}
 
+	// Skip soft-deleted domains
+	if domain.DeletedAt.Valid {
+		return nil
+	}
+
 	domainName := domain.Name
 
 	// Step 1: Resolve DNS and check IP

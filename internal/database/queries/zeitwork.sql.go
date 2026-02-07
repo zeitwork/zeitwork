@@ -61,7 +61,7 @@ func (q *Queries) DomainMarkVerified(ctx context.Context, id uuid.UUID) error {
 
 const domainSoftDelete = `-- name: DomainSoftDelete :exec
 UPDATE domains
-SET deleted_at = NOW()
+SET deleted_at = NOW(), verified_at = NULL
 WHERE id = $1
 `
 
