@@ -22,17 +22,25 @@ import (
 )
 
 type VMCreateParams struct {
-	VCPUs        int32
-	Memory       int32
-	ImageID      uuid.UUID
-	Port         int32
-	EnvVariables string // Encrypted JSON array of "KEY=value" strings
+	VCPUs          int32
+	Memory         int32
+	ImageID        uuid.UUID
+	Port           int32
+	EnvVariables   string    // Encrypted JSON array of "KEY=value" strings
+	DeploymentID   uuid.UUID // Deployment this VM belongs to (for log routing)
+	OrganisationID uuid.UUID // Organisation this VM belongs to (for log routing)
+	ServerID       uuid.UUID // Explicit server placement (zero = auto-place via least-loaded)
 }
 
 func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 	vm, err := s.db.VMFirstByID(ctx, objectID)
 	if err != nil {
 		return err
+	}
+
+	// Skip VMs that don't belong to this server
+	if vm.ServerID != s.serverID {
+		return nil
 	}
 
 	if vm.DeletedAt.Valid {
@@ -99,9 +107,17 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 	vmDiskPath := fmt.Sprintf("/data/work/%s.qcow2", vm.ID.String())
 	baseDiskPath := fmt.Sprintf("/data/base/%s.qcow2", vm.ImageID.String())
 
-	// Check if base image exists
+	// Check if base image exists locally; if not, try downloading from S3
 	if _, err := os.Stat(baseDiskPath); os.IsNotExist(err) {
-		return fmt.Errorf("base image does not exist: %s", baseDiskPath)
+		s3Key := fmt.Sprintf("%s.qcow2", vm.ImageID.String())
+		if s.s3 != nil && s.s3.Exists(ctx, s3Key) {
+			slog.Info("base image missing locally, downloading from S3", "vm_id", vm.ID, "image_id", vm.ImageID, "key", s3Key)
+			if err := s.s3.Download(ctx, s3Key, baseDiskPath); err != nil {
+				return fmt.Errorf("failed to download base image from S3: %w", err)
+			}
+		} else {
+			return fmt.Errorf("base image does not exist locally or in S3: %s", baseDiskPath)
+		}
 	}
 
 	// Create VM work disk if it doesn't exist
@@ -127,17 +143,29 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 		}
 	}
 
-	// Generate one-time token and register VM with metadata server
+	// Generate one-time config token and long-lived log token, then register VM with metadata server
 	token := uuid.New().String()
-	s.metadataServer.RegisterVM(vm.ID.String(), token, envVars, vmIp.Addr())
+	logToken := uuid.New().String()
+
+	// Deployment and organisation IDs for log routing (empty for build VMs)
+	deploymentID := ""
+	organisationID := ""
+	if info, ok := s.vmDeployments[vm.ID]; ok {
+		deploymentID = info.DeploymentID.String()
+		organisationID = info.OrganisationID.String()
+	}
+
+	s.metadataServer.RegisterVM(vm.ID.String(), token, logToken, envVars, vmIp.Addr(), deploymentID, organisationID)
 
 	slog.Info("STARTING DA VM", "id", vm.ID, "hostIp", hostIp, "vmIp", vmIp, "vcpus", vm.Vcpus, "memory_mb", vm.Memory, "envVarsCount", len(envVars))
+	metadataBaseURL := fmt.Sprintf("http://%s:8111/v1/vms/%s", hostIp.Addr().String(), vm.ID.String())
 	vmConfig := VMConfig{
 		AppID:         vm.ID.String(),
 		IPAddr:        vmIp.String(),
 		IPGw:          hostIp.Addr().String(),
-		MetadataURL:   fmt.Sprintf("http://%s:8111/v1/vms/%s/config", hostIp.Addr().String(), vm.ID.String()),
+		MetadataURL:   metadataBaseURL + "/config",
 		MetadataToken: token,
+		LogURL:        metadataBaseURL + "/logs",
 	}
 	vmConfigBytes, err := json.Marshal(vmConfig)
 	if err != nil {
@@ -209,6 +237,7 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 		}
 
 		delete(s.vmToCmd, vm.ID)
+		delete(s.vmDeployments, vm.ID)
 		s.vmScheduler.Schedule(vm.ID, time.Now().Add(5*time.Second))
 	}()
 
@@ -216,30 +245,64 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 }
 
 func (s *Service) VMCreate(ctx context.Context, params VMCreateParams) (*queries.Vm, error) {
+	// Determine which server this VM should be placed on
+	targetServerID := params.ServerID
+	targetIPRange := s.server.IpRange
+
+	if targetServerID == (uuid.UUID{}) {
+		// No explicit server -- use placement to find least loaded
+		targetServer, err := s.db.ServerFindLeastLoaded(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("failed to find server for VM placement: %w", err)
+		}
+		targetServerID = targetServer.ID
+		targetIPRange = targetServer.IpRange
+	} else if targetServerID != s.serverID {
+		// Explicit server that's not us -- look up its IP range
+		targetServer, err := s.db.ServerFindByID(ctx, targetServerID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to find target server: %w", err)
+		}
+		targetIPRange = targetServer.IpRange
+	}
+
 	var lastErr error
 
-	// todo: Wrap into TX for pg_advisory_xact_lock to work correctly.
 	for attempt := 0; attempt < 5; attempt++ {
 		if attempt > 0 {
 			slog.Warn("retrying VM IP allocation", "attempt", attempt+1)
 			time.Sleep(100 * time.Millisecond)
 		}
 
-		ipAddress, err := s.nextIpAddress(ctx)
-		if err != nil {
-			return nil, err
-		}
+		// Wrap IP allocation + VM creation in a transaction so that
+		// pg_advisory_xact_lock in VMNextIPAddress holds until the insert commits.
+		var vm queries.Vm
+		err := s.db.WithTx(ctx, func(q *queries.Queries) error {
+			res, err := q.VMNextIPAddress(ctx, queries.VMNextIPAddressParams{
+				ServerID: targetServerID,
+				Column2:  targetIPRange,
+			})
+			if err != nil {
+				return fmt.Errorf("failed to allocate IP: %w", err)
+			}
+			ipAddress, ok := res.(netip.Prefix)
+			if !ok {
+				return fmt.Errorf("unexpected type for next_ip: %T", res)
+			}
 
-		vm, err := s.db.VMCreate(ctx, queries.VMCreateParams{
-			ID:           uuid.New(),
-			Vcpus:        params.VCPUs,
-			Memory:       params.Memory,
-			Status:       queries.VmStatusPending,
-			ImageID:      params.ImageID,
-			Port:         pgtype.Int4{Int32: params.Port, Valid: true},
-			IpAddress:    ipAddress,
-			EnvVariables: pgtype.Text{String: params.EnvVariables, Valid: true},
-			Metadata:     nil,
+			vm, err = q.VMCreate(ctx, queries.VMCreateParams{
+				ID:           uuid.New(),
+				Vcpus:        params.VCPUs,
+				Memory:       params.Memory,
+				Status:       queries.VmStatusPending,
+				ImageID:      params.ImageID,
+				ServerID:     targetServerID,
+				Port:         pgtype.Int4{Int32: params.Port, Valid: true},
+				IpAddress:    ipAddress,
+				EnvVariables: pgtype.Text{String: params.EnvVariables, Valid: true},
+				Metadata:     nil,
+			})
+			return err
 		})
 		if err != nil {
 			if isIPConflictError(err) {
@@ -247,6 +310,14 @@ func (s *Service) VMCreate(ctx context.Context, params VMCreateParams) (*queries
 				continue
 			}
 			return nil, err
+		}
+
+		// Store deployment info for log routing (used by reconcileVM when registering with metadata server)
+		if params.DeploymentID != (uuid.UUID{}) {
+			s.vmDeployments[vm.ID] = vmDeploymentInfo{
+				DeploymentID:   params.DeploymentID,
+				OrganisationID: params.OrganisationID,
+			}
 		}
 
 		return &vm, nil
@@ -260,24 +331,12 @@ func isIPConflictError(err error) bool {
 		strings.Contains(err.Error(), "exclude_overlapping_networks")
 }
 
-func (s *Service) nextIpAddress(ctx context.Context) (netip.Prefix, error) {
-	res, err := s.db.VMNextIPAddress(ctx)
-	if err != nil {
-		return netip.Prefix{}, err
-	}
-	// The inet type comes back as netip.Prefix when scanned into interface{}
-	prefix, ok := res.(netip.Prefix)
-	if !ok {
-		return netip.Prefix{}, fmt.Errorf("unexpected type for next_ip: %T", res)
-	}
-	return prefix, nil
-}
-
 func (s *Service) reconcileVmDelete(ctx context.Context, vm queries.Vm) error {
 	slog.Info("deleting VM", "vm_id", vm.ID.String())
 
-	// Unregister VM from metadata server
+	// Unregister VM from metadata server and clean up deployment mapping
 	s.metadataServer.UnregisterVM(vm.ID.String())
+	delete(s.vmDeployments, vm.ID)
 
 	// If the VM is currently running, kill it
 	if cmd, ok := s.vmToCmd[vm.ID]; ok {
@@ -324,6 +383,7 @@ type VMConfig struct {
 	AppID         string `json:"app_id"`
 	IPAddr        string `json:"ip_addr"`
 	IPGw          string `json:"ip_gw"`
-	MetadataURL   string `json:"metadata_url"`   // URL to fetch env vars from (e.g., "http://10.0.0.0:8111")
+	MetadataURL   string `json:"metadata_url"`   // URL to fetch env vars from (e.g., "http://10.0.0.0:8111/v1/vms/{id}/config")
 	MetadataToken string `json:"metadata_token"` // One-time token for authentication
+	LogURL        string `json:"log_url"`        // URL to send runtime logs to (e.g., "http://10.0.0.0:8111/v1/vms/{id}/logs")
 }

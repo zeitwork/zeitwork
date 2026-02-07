@@ -11,19 +11,22 @@ import (
 	"time"
 
 	"github.com/docker/docker/client"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/zeitwork/zeitwork/internal/database"
+	"github.com/zeitwork/zeitwork/internal/database/queries"
 	"github.com/zeitwork/zeitwork/internal/listener"
 	"github.com/zeitwork/zeitwork/internal/reconciler"
 	dnsresolver "github.com/zeitwork/zeitwork/internal/shared/dns"
 	"github.com/zeitwork/zeitwork/internal/shared/github"
 	"github.com/zeitwork/zeitwork/internal/shared/uuid"
+	"github.com/zeitwork/zeitwork/internal/storage"
 )
 
 type Config struct {
 	IPAdress string
 
-	DB          *database.DB
-	DatabaseURL string // Required for WAL replication listener
+	DB                *database.DB
+	DatabaseDirectURL string // Direct PostgreSQL URL for WAL replication (not through PgBouncer)
 
 	// Docker registry configuration
 	// For GHCR, URL is "ghcr.io" and Username is the org/user (e.g., "zeitwork")
@@ -38,6 +41,23 @@ type Config struct {
 	// Metadata server configuration
 	// Serves env variables to VMs via HTTP (avoids kernel cmdline size limits)
 	MetadataServerAddr string // e.g., "0.0.0.0:8111"
+
+	// Multi-server configuration
+	ServerID   uuid.UUID // Stable server identity (persisted in /data/server-id)
+	InternalIP string    // This server's internal/private IP for inter-server communication
+
+	// S3 storage configuration for shared disk images
+	S3 *storage.S3 // nil = local-only mode (single server, no shared storage)
+
+	// RouteChangeNotify is sent to when routes might have changed (VM/deployment/domain/server changes).
+	// The edge proxy listens on this channel to reload routes in near-realtime.
+	RouteChangeNotify chan<- struct{}
+}
+
+// vmDeploymentInfo maps a VM to its deployment for log routing.
+type vmDeploymentInfo struct {
+	DeploymentID   uuid.UUID
+	OrganisationID uuid.UUID
 }
 
 type Service struct {
@@ -57,6 +77,13 @@ type Service struct {
 	// Metadata server for serving env vars to VMs
 	metadataServer *MetadataServer
 
+	// Server identity
+	serverID uuid.UUID
+	server   queries.Server // populated after registration
+
+	// Shared image storage (nil = local-only mode)
+	s3 *storage.S3
+
 	// Schedulers
 	deploymentScheduler *reconciler.Scheduler
 	buildScheduler      *reconciler.Scheduler
@@ -65,9 +92,10 @@ type Service struct {
 	domainScheduler     *reconciler.Scheduler
 
 	// VM Stuff
-	imageMu sync.Mutex
-	vmToCmd map[uuid.UUID]*exec.Cmd
-	nextTap atomic.Int32
+	imageMu       sync.Mutex
+	vmToCmd       map[uuid.UUID]*exec.Cmd
+	vmDeployments map[uuid.UUID]vmDeploymentInfo // VM ID -> deployment info for log routing
+	nextTap       atomic.Int32
 
 	// Build execution tracking (prevents concurrent execution of the same build)
 	activeBuildsMu sync.Mutex
@@ -76,15 +104,50 @@ type Service struct {
 
 // New creates a new reconciler service
 func New(cfg Config) (*Service, error) {
+	metadataServer := NewMetadataServer()
+
 	s := &Service{
 		cfg:            cfg,
 		db:             cfg.DB,
 		dnsResolver:    dnsresolver.NewResolver(),
-		metadataServer: NewMetadataServer(),
+		metadataServer: metadataServer,
+		serverID:       cfg.ServerID,
+		s3:             cfg.S3,
 		vmToCmd:        make(map[uuid.UUID]*exec.Cmd),
+		vmDeployments:  make(map[uuid.UUID]vmDeploymentInfo),
 		imageMu:        sync.Mutex{},
 		nextTap:        atomic.Int32{},
 		activeBuilds:   make(map[uuid.UUID]bool),
+	}
+
+	// Wire up log ingestion callback: metadata server -> deployment_logs table
+	metadataServer.OnLog = func(ctx context.Context, deploymentID, organisationID string, logs []LogEntry) {
+		if deploymentID == "" || organisationID == "" {
+			return
+		}
+		depID, err := uuid.Parse(deploymentID)
+		if err != nil {
+			slog.Error("invalid deployment ID in log callback", "deploymentID", deploymentID, "err", err)
+			return
+		}
+		orgID, err := uuid.Parse(organisationID)
+		if err != nil {
+			slog.Error("invalid organisation ID in log callback", "organisationID", organisationID, "err", err)
+			return
+		}
+		for _, entry := range logs {
+			level := pgtype.Text{String: entry.Level, Valid: entry.Level != ""}
+			if err := s.db.DeploymentLogCreate(ctx, queries.DeploymentLogCreateParams{
+				ID:             uuid.New(),
+				DeploymentID:   depID,
+				Message:        entry.Message,
+				Level:          level,
+				OrganisationID: orgID,
+			}); err != nil {
+				slog.Error("failed to write deployment log", "deploymentID", deploymentID, "err", err)
+				return
+			}
+		}
 	}
 
 	// Initialize GitHub token service if credentials are provided
@@ -111,7 +174,21 @@ func New(cfg Config) (*Service, error) {
 
 // Start starts the reconciler service
 func (s *Service) Start(ctx context.Context) error {
-	slog.Info("starting Zeitwork reconciler")
+	slog.Info("starting Zeitwork reconciler", "server_id", s.serverID)
+
+	// Register this server
+	if err := s.registerServer(ctx); err != nil {
+		return fmt.Errorf("failed to register server: %w", err)
+	}
+
+	// Start heartbeat loop
+	go s.heartbeatLoop(ctx)
+
+	// Start dead server detection loop
+	go s.deadServerDetectionLoop(ctx)
+
+	// Start drain monitor loop
+	go s.drainMonitorLoop(ctx)
 
 	// Start metadata server (firewall rules are configured via nftables in ansible)
 	if s.cfg.MetadataServerAddr != "" {
@@ -129,8 +206,8 @@ func (s *Service) Start(ctx context.Context) error {
 	s.vmScheduler.Start()
 	s.domainScheduler.Start()
 
-	// Bootstrap: schedule all existing entities once on startup
-	// This ensures we don't miss any changes that happened while we were down
+	// Bootstrap: schedule existing entities for reconciliation on startup
+	// Server-scoped: only VMs on this server, but all images/deployments/builds/domains
 	if err := s.bootstrap(ctx); err != nil {
 		return fmt.Errorf("failed to bootstrap: %w", err)
 	}
@@ -138,11 +215,11 @@ func (s *Service) Start(ctx context.Context) error {
 	// Create WAL listener with callbacks to schedulers
 	// Following K8s pattern: when an entity changes, schedule self + notify parents via reverse lookups
 	walListener := listener.New(listener.Config{
-		DatabaseURL: s.cfg.DatabaseURL,
+		DatabaseURL: s.cfg.DatabaseDirectURL,
 
 		OnDeployment: func(ctx context.Context, id uuid.UUID) {
 			s.deploymentScheduler.Schedule(id, time.Now())
-			// Nothing depends on deployments
+			s.notifyRouteChange()
 		},
 
 		OnBuild: func(ctx context.Context, id uuid.UUID) {
@@ -162,13 +239,15 @@ func (s *Service) Start(ctx context.Context) error {
 		OnImage: func(ctx context.Context, id uuid.UUID) {
 			s.imageScheduler.Schedule(id, time.Now())
 
-			// Notify VMs that use this image
+			// Notify VMs that use this image (only schedule VMs on this server)
 			if vms, err := s.db.VMFindByImageID(ctx, id); err != nil {
 				slog.Error("failed to find VMs by image_id", "image_id", id, "error", err)
 			} else {
 				for _, vm := range vms {
-					slog.Debug("notifying VM of image change", "vm_id", vm.ID, "image_id", id)
-					s.vmScheduler.Schedule(vm.ID, time.Now())
+					if vm.ServerID == s.serverID {
+						slog.Debug("notifying VM of image change", "vm_id", vm.ID, "image_id", id)
+						s.vmScheduler.Schedule(vm.ID, time.Now())
+					}
 				}
 			}
 
@@ -185,9 +264,17 @@ func (s *Service) Start(ctx context.Context) error {
 		},
 
 		OnVM: func(ctx context.Context, id uuid.UUID) {
-			s.vmScheduler.Schedule(id, time.Now())
+			// Only schedule VM reconciliation if the VM belongs to this server
+			vm, err := s.db.VMFirstByID(ctx, id)
+			if err != nil {
+				slog.Error("failed to find VM", "vm_id", id, "error", err)
+				return
+			}
+			if vm.ServerID == s.serverID {
+				s.vmScheduler.Schedule(id, time.Now())
+			}
 
-			// Notify builds that use this VM
+			// Notify builds that use this VM (builds may run on any server)
 			if builds, err := s.db.BuildFindByVMID(ctx, id); err != nil {
 				slog.Error("failed to find builds by vm_id", "vm_id", id, "error", err)
 			} else {
@@ -206,11 +293,20 @@ func (s *Service) Start(ctx context.Context) error {
 					s.deploymentScheduler.Schedule(d.ID, time.Now())
 				}
 			}
+
+			s.notifyRouteChange()
 		},
 
 		OnDomain: func(ctx context.Context, id uuid.UUID) {
 			s.domainScheduler.Schedule(id, time.Now())
-			// Nothing depends on domains
+			s.notifyRouteChange()
+		},
+
+		OnServer: func(ctx context.Context, id uuid.UUID) {
+			// Server changes (e.g., a server marked dead) trigger failover.
+			// The dead server detection loop handles this, so no immediate action needed.
+			slog.Debug("server change detected", "server_id", id)
+			s.notifyRouteChange()
 		},
 	})
 
@@ -219,11 +315,12 @@ func (s *Service) Start(ctx context.Context) error {
 	return walListener.Start(ctx)
 }
 
-// bootstrap schedules all existing entities for reconciliation on startup
+// bootstrap schedules existing entities for reconciliation on startup.
+// Server-scoped: only VMs assigned to this server, but all other entity types.
 func (s *Service) bootstrap(ctx context.Context) error {
-	slog.Info("bootstrapping: scheduling all existing entities")
+	slog.Info("bootstrapping: scheduling existing entities", "server_id", s.serverID)
 
-	// Deployments
+	// Deployments (all -- stateless reconciliation, guarded by advisory locks)
 	deployments, err := s.db.DeploymentFind(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to find deployments: %w", err)
@@ -233,7 +330,7 @@ func (s *Service) bootstrap(ctx context.Context) error {
 	}
 	slog.Info("bootstrapped deployments", "count", len(deployments))
 
-	// Builds
+	// Builds (all -- build reconciler checks if build VM is on this server)
 	builds, err := s.db.BuildFind(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to find builds: %w", err)
@@ -243,7 +340,7 @@ func (s *Service) bootstrap(ctx context.Context) error {
 	}
 	slog.Info("bootstrapped builds", "count", len(builds))
 
-	// Images
+	// Images (all -- every server needs to know about images for local caching)
 	images, err := s.db.ImageFind(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to find images: %w", err)
@@ -253,17 +350,17 @@ func (s *Service) bootstrap(ctx context.Context) error {
 	}
 	slog.Info("bootstrapped images", "count", len(images))
 
-	// VMs
-	vms, err := s.db.VMFind(ctx)
+	// VMs (only this server's VMs)
+	vms, err := s.db.VMFindByServerID(ctx, s.serverID)
 	if err != nil {
-		return fmt.Errorf("failed to find vms: %w", err)
+		return fmt.Errorf("failed to find vms for server: %w", err)
 	}
 	for _, vm := range vms {
 		s.vmScheduler.Schedule(vm.ID, time.Now())
 	}
-	slog.Info("bootstrapped vms", "count", len(vms))
+	slog.Info("bootstrapped vms", "count", len(vms), "server_id", s.serverID)
 
-	// Domains
+	// Domains (all -- stateless DNS checks)
 	domains, err := s.db.DomainFind(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to find domains: %w", err)
@@ -282,4 +379,21 @@ func (s *Service) Stop() error {
 	slog.Info("stopping reconciler")
 
 	return nil
+}
+
+// GetServerID returns the server ID for use by the edge proxy
+func (s *Service) GetServerID() uuid.UUID {
+	return s.serverID
+}
+
+// notifyRouteChange sends a non-blocking signal that routes may have changed.
+func (s *Service) notifyRouteChange() {
+	if s.cfg.RouteChangeNotify == nil {
+		return
+	}
+	select {
+	case s.cfg.RouteChangeNotify <- struct{}{}:
+	default:
+		// Channel full -- a reload is already pending
+	}
 }
