@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import {
+  boolean,
   inet,
   integer,
   jsonb,
@@ -74,6 +75,7 @@ export const domains = pgTable(
       .references(() => projects.id),
     deploymentId: uuid().references(() => deployments.id),
     verifiedAt: timestamp({ withTimezone: true }),
+    txtVerificationRequired: boolean().notNull().default(false),
     ...organisationId,
     ...timestamps,
   },

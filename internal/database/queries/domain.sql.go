@@ -12,7 +12,7 @@ import (
 )
 
 const domainFind = `-- name: DomainFind :many
-SELECT id, name, project_id, deployment_id, verified_at, organisation_id, created_at, updated_at, deleted_at
+SELECT id, name, project_id, deployment_id, verified_at, organisation_id, created_at, updated_at, deleted_at, txt_verification_required
 FROM domains
 `
 
@@ -35,6 +35,50 @@ func (q *Queries) DomainFind(ctx context.Context) ([]Domain, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.TxtVerificationRequired,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const domainFindActiveByName = `-- name: DomainFindActiveByName :many
+SELECT id, name, project_id, deployment_id, verified_at, organisation_id, created_at, updated_at, deleted_at, txt_verification_required
+FROM domains
+WHERE name = $1 AND id != $2 AND deleted_at IS NULL
+`
+
+type DomainFindActiveByNameParams struct {
+	Name string    `json:"name"`
+	ID   uuid.UUID `json:"id"`
+}
+
+// Find all active (non-deleted) domains with a given name, excluding a specific domain ID
+func (q *Queries) DomainFindActiveByName(ctx context.Context, arg DomainFindActiveByNameParams) ([]Domain, error) {
+	rows, err := q.db.Query(ctx, domainFindActiveByName, arg.Name, arg.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Domain{}
+	for rows.Next() {
+		var i Domain
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.ProjectID,
+			&i.DeploymentID,
+			&i.VerifiedAt,
+			&i.OrganisationID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.TxtVerificationRequired,
 		); err != nil {
 			return nil, err
 		}
@@ -47,7 +91,7 @@ func (q *Queries) DomainFind(ctx context.Context) ([]Domain, error) {
 }
 
 const domainFirstByID = `-- name: DomainFirstByID :one
-SELECT id, name, project_id, deployment_id, verified_at, organisation_id, created_at, updated_at, deleted_at
+SELECT id, name, project_id, deployment_id, verified_at, organisation_id, created_at, updated_at, deleted_at, txt_verification_required
 FROM domains
 WHERE id = $1
 LIMIT 1
@@ -66,6 +110,7 @@ func (q *Queries) DomainFirstByID(ctx context.Context, id uuid.UUID) (Domain, er
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.TxtVerificationRequired,
 	)
 	return i, err
 }

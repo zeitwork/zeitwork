@@ -12,6 +12,7 @@ type Domain = {
   name: string;
   target?: string;
   verifiedAt?: string | null;
+  txtVerificationRequired?: boolean;
 };
 
 type Props = {

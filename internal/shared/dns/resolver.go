@@ -23,12 +23,14 @@ type Resolution struct {
 // Resolver resolves hostnames, following CNAMEs up to a fixed depth.
 type Resolver interface {
 	Resolve(ctx context.Context, host string) (*Resolution, error)
+	LookupTXT(ctx context.Context, name string) ([]string, error)
 }
 
 type netResolver struct {
 	maxDepth    int
 	lookupIP    func(ctx context.Context, host string) ([]net.IPAddr, error)
 	lookupCNAME func(ctx context.Context, host string) (string, error)
+	lookupTXT   func(ctx context.Context, name string) ([]string, error)
 }
 
 // NewResolver returns a Resolver backed by Go's default net.Resolver.
@@ -40,6 +42,7 @@ func NewResolver() Resolver {
 		lookupCNAME: func(ctx context.Context, host string) (string, error) {
 			return resolver.LookupCNAME(ctx, host)
 		},
+		lookupTXT: resolver.LookupTXT,
 	}
 }
 
@@ -95,6 +98,14 @@ func (r *netResolver) Resolve(ctx context.Context, host string) (*Resolution, er
 	}
 
 	return nil, fmt.Errorf("max DNS depth (%d) exceeded while resolving %s", r.maxDepth, host)
+}
+
+func (r *netResolver) LookupTXT(ctx context.Context, name string) ([]string, error) {
+	name = NormalizeHostname(name)
+	if name == "" {
+		return nil, fmt.Errorf("cannot lookup TXT for empty name")
+	}
+	return r.lookupTXT(ctx, name)
 }
 
 func appendUnique(list []string, value string) []string {

@@ -1,0 +1,1 @@
+ALTER TABLE "domains" ADD COLUMN "txt_verification_required" boolean DEFAULT false NOT NULL;
