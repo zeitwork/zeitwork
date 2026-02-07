@@ -104,13 +104,15 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 			return fmt.Errorf("failed to prepare environment variables: %w", err)
 		}
 
-		// create a build vm for this deployment
+		// create a vm for this deployment
 		vm, err := s.VMCreate(ctx, VMCreateParams{
-			VCPUs:        1,
-			Memory:       2 * 1024,
-			ImageID:      deployment.ImageID,
-			Port:         3000,
-			EnvVariables: encryptedEnvVars,
+			VCPUs:          1,
+			Memory:         2 * 1024,
+			ImageID:        deployment.ImageID,
+			Port:           3000,
+			EnvVariables:   encryptedEnvVars,
+			DeploymentID:   deployment.ID,
+			OrganisationID: deployment.OrganisationID,
 		})
 		if err != nil {
 			return err
