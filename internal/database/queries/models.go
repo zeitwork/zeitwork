@@ -219,15 +219,16 @@ type DeploymentLog struct {
 }
 
 type Domain struct {
-	ID             uuid.UUID          `json:"id"`
-	Name           string             `json:"name"`
-	ProjectID      uuid.UUID          `json:"project_id"`
-	DeploymentID   uuid.UUID          `json:"deployment_id"`
-	VerifiedAt     pgtype.Timestamptz `json:"verified_at"`
-	OrganisationID uuid.UUID          `json:"organisation_id"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
+	ID                      uuid.UUID          `json:"id"`
+	Name                    string             `json:"name"`
+	ProjectID               uuid.UUID          `json:"project_id"`
+	DeploymentID            uuid.UUID          `json:"deployment_id"`
+	VerifiedAt              pgtype.Timestamptz `json:"verified_at"`
+	OrganisationID          uuid.UUID          `json:"organisation_id"`
+	CreatedAt               pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt               pgtype.Timestamptz `json:"deleted_at"`
+	TxtVerificationRequired bool               `json:"txt_verification_required"`
 }
 
 type EnvironmentVariable struct {

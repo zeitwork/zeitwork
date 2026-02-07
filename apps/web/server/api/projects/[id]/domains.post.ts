@@ -1,5 +1,5 @@
 import { domains, projects } from "@zeitwork/database/schema";
-import { eq, and, isNull } from "@zeitwork/database/utils/drizzle";
+import { eq, and, ne, isNull } from "@zeitwork/database/utils/drizzle";
 import { z } from "zod";
 
 const paramsSchema = z.object({
@@ -15,6 +15,27 @@ const bodySchema = z.object({
       "Invalid domain format",
     ),
 });
+
+/**
+ * Check if a domain name is already in use by another active (non-deleted)
+ * domain on any project across the platform. If so, TXT verification will
+ * be required (Vercel-style ownership proof).
+ */
+async function isDomainClaimedElsewhere(name: string, excludeProjectId: string): Promise<boolean> {
+  const [conflict] = await useDrizzle()
+    .select({ id: domains.id })
+    .from(domains)
+    .where(
+      and(
+        eq(domains.name, name),
+        ne(domains.projectId, excludeProjectId),
+        isNull(domains.deletedAt),
+      ),
+    )
+    .limit(1);
+
+  return !!conflict;
+}
 
 export default defineEventHandler(async (event) => {
   const { secure, verified } = await requireVerifiedUser(event);
@@ -45,15 +66,25 @@ export default defineEventHandler(async (event) => {
       throw createError({ statusCode: 400, message: "Domain already exists" });
     }
 
-    // Resurrect soft-deleted domain
+    // Resurrect soft-deleted domain — re-check if TXT verification is needed
+    const txtRequired = await isDomainClaimedElsewhere(body.name, project.id);
+
     const [resurrected] = await useDrizzle()
       .update(domains)
-      .set({ deletedAt: null, verifiedAt: null, updatedAt: new Date() })
+      .set({
+        deletedAt: null,
+        verifiedAt: null,
+        txtVerificationRequired: txtRequired,
+        updatedAt: new Date(),
+      })
       .where(eq(domains.id, existingDomain.id))
       .returning();
 
     return resurrected;
   }
+
+  // Check if domain is claimed by another project on the platform
+  const txtRequired = await isDomainClaimedElsewhere(body.name, project.id);
 
   const [newDomain] = await useDrizzle()
     .insert(domains)
@@ -61,6 +92,7 @@ export default defineEventHandler(async (event) => {
       name: body.name,
       projectId: project.id,
       organisationId: secure.organisationId,
+      txtVerificationRequired: txtRequired,
     })
     .returning();
 

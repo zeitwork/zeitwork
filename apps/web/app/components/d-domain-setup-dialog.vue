@@ -8,6 +8,7 @@ type Domain = {
   name: string;
   target?: string;
   verifiedAt?: string | null;
+  txtVerificationRequired?: boolean;
 };
 
 type Props = {
@@ -81,8 +82,9 @@ const dnsRecord = computed(() => {
   };
 });
 
-const txtName = computed(() => `zeitwork_verify_${domain.name}`);
+const txtName = computed(() => `_zeitwork.${domain.name}`);
 const txtValue = computed(() => uuidToBase58(domain.id));
+const showTxtRecord = computed(() => !!domain.txtVerificationRequired);
 
 const copied = ref<string | null>(null);
 
@@ -131,7 +133,7 @@ async function copyToClipboard(text: string, field: string) {
             <div class="text-neutral-subtle flex-1 px-3 py-2 text-sm font-medium">Value</div>
           </div>
 
-          <div class="border-neutral flex items-center border-b">
+          <div class="flex items-center">
             <div class="text-neutral w-[100px] px-3 py-2 text-sm font-medium">
               {{ dnsRecord.type }}
             </div>
@@ -165,7 +167,7 @@ async function copyToClipboard(text: string, field: string) {
             </div>
           </div>
 
-          <div class="flex items-center">
+          <div v-if="showTxtRecord" class="border-neutral flex items-center border-t">
             <div class="text-neutral w-[100px] px-3 py-2 text-sm font-medium">TXT</div>
             <div class="flex w-[135px] items-center gap-2 px-3 py-2">
               <input

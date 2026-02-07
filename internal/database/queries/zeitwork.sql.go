@@ -12,7 +12,7 @@ import (
 )
 
 const domainListUnverified = `-- name: DomainListUnverified :many
-SELECT id, name, project_id, deployment_id, verified_at, organisation_id, created_at, updated_at, deleted_at
+SELECT id, name, project_id, deployment_id, verified_at, organisation_id, created_at, updated_at, deleted_at, txt_verification_required
 FROM domains
 WHERE verified_at IS NULL AND deleted_at IS NULL
 `
@@ -36,6 +36,7 @@ func (q *Queries) DomainListUnverified(ctx context.Context) ([]Domain, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.TxtVerificationRequired,
 		); err != nil {
 			return nil, err
 		}
@@ -55,5 +56,16 @@ WHERE id = $1
 
 func (q *Queries) DomainMarkVerified(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, domainMarkVerified, id)
+	return err
+}
+
+const domainSoftDelete = `-- name: DomainSoftDelete :exec
+UPDATE domains
+SET deleted_at = NOW()
+WHERE id = $1
+`
+
+func (q *Queries) DomainSoftDelete(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, domainSoftDelete, id)
 	return err
 }
