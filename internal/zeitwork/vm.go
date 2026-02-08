@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/exec"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -26,13 +25,19 @@ type VMCreateParams struct {
 	Memory       int32
 	ImageID      uuid.UUID
 	Port         int32
-	EnvVariables string // Encrypted JSON array of "KEY=value" strings
+	EnvVariables string    // Encrypted JSON array of "KEY=value" strings
+	ServerID     uuid.UUID // Explicit server placement (zero value = auto-place)
 }
 
 func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 	vm, err := s.db.VMFirstByID(ctx, objectID)
 	if err != nil {
 		return err
+	}
+
+	// Only reconcile VMs belonging to this server
+	if vm.ServerID != s.serverID {
+		return nil
 	}
 
 	if vm.DeletedAt.Valid {
@@ -99,9 +104,13 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 	vmDiskPath := fmt.Sprintf("/data/work/%s.qcow2", vm.ID.String())
 	baseDiskPath := fmt.Sprintf("/data/base/%s.qcow2", vm.ImageID.String())
 
-	// Check if base image exists
+	// Check if base image exists locally; if not, download from S3
 	if _, err := os.Stat(baseDiskPath); os.IsNotExist(err) {
-		return fmt.Errorf("base image does not exist: %s", baseDiskPath)
+		s3Key := fmt.Sprintf("images/%s.qcow2", vm.ImageID.String())
+		slog.Info("base image not found locally, downloading from S3", "image_id", vm.ImageID, "s3_key", s3Key)
+		if err := s.s3.Download(ctx, s3Key, baseDiskPath); err != nil {
+			return fmt.Errorf("failed to download base image from S3: %w", err)
+		}
 	}
 
 	// Create VM work disk if it doesn't exist
@@ -131,6 +140,7 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 	token := uuid.New().String()
 	s.metadataServer.RegisterVM(vm.ID.String(), token, envVars, vmIp.Addr())
 
+	// NOTE: Do not change this log message. It stays.
 	slog.Info("STARTING DA VM", "id", vm.ID, "hostIp", hostIp, "vmIp", vmIp, "vcpus", vm.Vcpus, "memory_mb", vm.Memory, "envVarsCount", len(envVars))
 	vmConfig := VMConfig{
 		AppID:         vm.ID.String(),
@@ -152,7 +162,7 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 			base64.StdEncoding.EncodeToString(vmConfigBytes)),
 		"--cpus", fmt.Sprintf("boot=%d", vm.Vcpus),
 		"--memory", fmt.Sprintf("size=%dM", vm.Memory),
-		"--net", fmt.Sprintf("tap=tap%d,mac=,ip=%s,mask=255.255.255.254", s.nextTap.Add(1), hostIp.Addr())) // todo mask might not be /31 theoretically but who cares
+		"--net", fmt.Sprintf("tap=tap%d,mac=,ip=%s,mask=255.255.255.254", s.nextTap.Add(1), hostIp.Addr()))
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	slog.Info("Starting VM", "cmd", cmd)
@@ -216,61 +226,62 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 }
 
 func (s *Service) VMCreate(ctx context.Context, params VMCreateParams) (*queries.Vm, error) {
-	var lastErr error
+	// Determine target server for placement
+	targetServerID := params.ServerID
+	var targetIPRange netip.Prefix
 
-	// todo: Wrap into TX for pg_advisory_xact_lock to work correctly.
-	for attempt := 0; attempt < 5; attempt++ {
-		if attempt > 0 {
-			slog.Warn("retrying VM IP allocation", "attempt", attempt+1)
-			time.Sleep(100 * time.Millisecond)
-		}
-
-		ipAddress, err := s.nextIpAddress(ctx)
+	if targetServerID == (uuid.UUID{}) {
+		// Auto-place on least loaded server
+		target, err := s.db.ServerFindLeastLoaded(ctx)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("failed to find server for VM placement: %w", err)
+		}
+		targetServerID = target.ID
+		targetIPRange = target.IpRange
+	} else {
+		// Explicit placement — look up the server's IP range
+		server, err := s.db.ServerFindByID(ctx, targetServerID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to find target server: %w", err)
+		}
+		targetIPRange = server.IpRange
+	}
+
+	// Allocate IP and create VM in a single transaction so the
+	// pg_advisory_xact_lock in VMNextIPAddress serializes correctly.
+	var vm queries.Vm
+	err := s.db.WithTx(ctx, func(q *queries.Queries) error {
+		res, err := q.VMNextIPAddress(ctx, queries.VMNextIPAddressParams{
+			ServerID: targetServerID,
+			IpRange:  targetIPRange,
+		})
+		if err != nil {
+			return fmt.Errorf("failed to allocate IP: %w", err)
+		}
+		ipAddress, ok := res.(netip.Prefix)
+		if !ok {
+			return fmt.Errorf("unexpected type for next_ip: %T", res)
 		}
 
-		vm, err := s.db.VMCreate(ctx, queries.VMCreateParams{
+		vm, err = q.VMCreate(ctx, queries.VMCreateParams{
 			ID:           uuid.New(),
 			Vcpus:        params.VCPUs,
 			Memory:       params.Memory,
 			Status:       queries.VmStatusPending,
 			ImageID:      params.ImageID,
+			ServerID:     targetServerID,
 			Port:         pgtype.Int4{Int32: params.Port, Valid: true},
 			IpAddress:    ipAddress,
 			EnvVariables: pgtype.Text{String: params.EnvVariables, Valid: true},
 			Metadata:     nil,
 		})
-		if err != nil {
-			if isIPConflictError(err) {
-				lastErr = err
-				continue
-			}
-			return nil, err
-		}
-
-		return &vm, nil
-	}
-	return nil, fmt.Errorf("failed to allocate IP after 5 attempts: %w", lastErr)
-}
-
-// isIPConflictError checks if the error is an exclusion constraint violation (SQLSTATE 23P01)
-func isIPConflictError(err error) bool {
-	return strings.Contains(err.Error(), "23P01") ||
-		strings.Contains(err.Error(), "exclude_overlapping_networks")
-}
-
-func (s *Service) nextIpAddress(ctx context.Context) (netip.Prefix, error) {
-	res, err := s.db.VMNextIPAddress(ctx)
+		return err
+	})
 	if err != nil {
-		return netip.Prefix{}, err
+		return nil, err
 	}
-	// The inet type comes back as netip.Prefix when scanned into interface{}
-	prefix, ok := res.(netip.Prefix)
-	if !ok {
-		return netip.Prefix{}, fmt.Errorf("unexpected type for next_ip: %T", res)
-	}
-	return prefix, nil
+
+	return &vm, nil
 }
 
 func (s *Service) reconcileVmDelete(ctx context.Context, vm queries.Vm) error {

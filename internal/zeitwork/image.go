@@ -101,6 +101,16 @@ func (s *Service) reconcileImage(ctx context.Context, objectID uuid.UUID) error 
 		return err
 	}
 
+	// Upload to S3 for cross-server sharing
+	s3Key := fmt.Sprintf("images/%s.qcow2", image.ID.String())
+	if err := s.s3.Upload(ctx, s3Key, baseImagePath); err != nil {
+		slog.Error("failed to upload image to S3", "image_id", image.ID, "err", err)
+		// Don't fail — the image is still available locally. Other servers
+		// will retry the download or build the image themselves.
+	} else {
+		slog.Info("uploaded image to S3", "image_id", image.ID, "s3_key", s3Key)
+	}
+
 	err = s.db.ImageUpdateDiskImage(ctx, queries.ImageUpdateDiskImageParams{
 		ID:           image.ID,
 		DiskImageKey: pgtype.Text{String: diskImageKey, Valid: true},

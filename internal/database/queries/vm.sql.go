@@ -14,9 +14,9 @@ import (
 )
 
 const vMCreate = `-- name: VMCreate :one
-INSERT INTO vms (id, vcpus, memory, status, image_id, port, ip_address, env_variables, metadata)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-RETURNING id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at, pending_at, starting_at, running_at, stopping_at, stopped_at, failed_at, env_variables
+INSERT INTO vms (id, vcpus, memory, status, image_id, server_id, port, ip_address, env_variables, metadata)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+RETURNING id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at, pending_at, starting_at, running_at, stopping_at, stopped_at, failed_at, env_variables, server_id
 `
 
 type VMCreateParams struct {
@@ -25,6 +25,7 @@ type VMCreateParams struct {
 	Memory       int32        `json:"memory"`
 	Status       VmStatus     `json:"status"`
 	ImageID      uuid.UUID    `json:"image_id"`
+	ServerID     uuid.UUID    `json:"server_id"`
 	Port         pgtype.Int4  `json:"port"`
 	IpAddress    netip.Prefix `json:"ip_address"`
 	EnvVariables pgtype.Text  `json:"env_variables"`
@@ -38,6 +39,7 @@ func (q *Queries) VMCreate(ctx context.Context, arg VMCreateParams) (Vm, error) 
 		arg.Memory,
 		arg.Status,
 		arg.ImageID,
+		arg.ServerID,
 		arg.Port,
 		arg.IpAddress,
 		arg.EnvVariables,
@@ -63,12 +65,13 @@ func (q *Queries) VMCreate(ctx context.Context, arg VMCreateParams) (Vm, error) 
 		&i.StoppedAt,
 		&i.FailedAt,
 		&i.EnvVariables,
+		&i.ServerID,
 	)
 	return i, err
 }
 
 const vMFind = `-- name: VMFind :many
-SELECT id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at, pending_at, starting_at, running_at, stopping_at, stopped_at, failed_at, env_variables
+SELECT id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at, pending_at, starting_at, running_at, stopping_at, stopped_at, failed_at, env_variables, server_id
 FROM vms
 `
 
@@ -100,6 +103,7 @@ func (q *Queries) VMFind(ctx context.Context) ([]Vm, error) {
 			&i.StoppedAt,
 			&i.FailedAt,
 			&i.EnvVariables,
+			&i.ServerID,
 		); err != nil {
 			return nil, err
 		}
@@ -112,7 +116,7 @@ func (q *Queries) VMFind(ctx context.Context) ([]Vm, error) {
 }
 
 const vMFindByImageID = `-- name: VMFindByImageID :many
-SELECT id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at, pending_at, starting_at, running_at, stopping_at, stopped_at, failed_at, env_variables FROM vms WHERE image_id = $1
+SELECT id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at, pending_at, starting_at, running_at, stopping_at, stopped_at, failed_at, env_variables, server_id FROM vms WHERE image_id = $1
 `
 
 func (q *Queries) VMFindByImageID(ctx context.Context, imageID uuid.UUID) ([]Vm, error) {
@@ -143,6 +147,51 @@ func (q *Queries) VMFindByImageID(ctx context.Context, imageID uuid.UUID) ([]Vm,
 			&i.StoppedAt,
 			&i.FailedAt,
 			&i.EnvVariables,
+			&i.ServerID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const vMFindByServerID = `-- name: VMFindByServerID :many
+SELECT id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at, pending_at, starting_at, running_at, stopping_at, stopped_at, failed_at, env_variables, server_id FROM vms WHERE server_id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) VMFindByServerID(ctx context.Context, serverID uuid.UUID) ([]Vm, error) {
+	rows, err := q.db.Query(ctx, vMFindByServerID, serverID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Vm{}
+	for rows.Next() {
+		var i Vm
+		if err := rows.Scan(
+			&i.ID,
+			&i.Vcpus,
+			&i.Memory,
+			&i.Status,
+			&i.ImageID,
+			&i.Port,
+			&i.IpAddress,
+			&i.Metadata,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+			&i.PendingAt,
+			&i.StartingAt,
+			&i.RunningAt,
+			&i.StoppingAt,
+			&i.StoppedAt,
+			&i.FailedAt,
+			&i.EnvVariables,
+			&i.ServerID,
 		); err != nil {
 			return nil, err
 		}
@@ -155,7 +204,7 @@ func (q *Queries) VMFindByImageID(ctx context.Context, imageID uuid.UUID) ([]Vm,
 }
 
 const vMFirstByID = `-- name: VMFirstByID :one
-SELECT id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at, pending_at, starting_at, running_at, stopping_at, stopped_at, failed_at, env_variables
+SELECT id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at, pending_at, starting_at, running_at, stopping_at, stopped_at, failed_at, env_variables, server_id
 FROM vms
 WHERE id = $1
 LIMIT 1
@@ -183,6 +232,7 @@ func (q *Queries) VMFirstByID(ctx context.Context, id uuid.UUID) (Vm, error) {
 		&i.StoppedAt,
 		&i.FailedAt,
 		&i.EnvVariables,
+		&i.ServerID,
 	)
 	return i, err
 }
@@ -194,23 +244,69 @@ WITH lock AS (
 SELECT COALESCE(
                (SELECT set_masklen((ip_address + 2)::inet, 31)
                 FROM vms
-                WHERE deleted_at IS NULL
+                WHERE server_id = $1
+                  AND deleted_at IS NULL
                 ORDER BY ip_address DESC
                 LIMIT 1),
-               '10.0.0.1/31'::inet  -- First VM gets 10.0.0.1, host side is 10.0.0.0
+               set_masklen((host($2::cidr)::inet + 1), 31)  -- First VM: base+1/31
        ) AS next_ip
 FROM lock
 `
 
-// Each VM needs its own /31 subnet, so we increment by 2 to skip to the next block
-// Block 1: 10.0.0.0/31 -> host=10.0.0.0, vm=10.0.0.1
-// Block 2: 10.0.0.2/31 -> host=10.0.0.2, vm=10.0.0.3
-// etc.
-func (q *Queries) VMNextIPAddress(ctx context.Context) (interface{}, error) {
-	row := q.db.QueryRow(ctx, vMNextIPAddress)
+type VMNextIPAddressParams struct {
+	ServerID uuid.UUID    `json:"server_id"`
+	IpRange  netip.Prefix `json:"ip_range"`
+}
+
+// Allocate the next /31 subnet within a server's IP range.
+// Each VM needs its own /31 subnet, so we increment by 2 to skip to the next block.
+// The first VM in a range gets base+1 (e.g., 10.1.0.1/31), host side is base+0.
+func (q *Queries) VMNextIPAddress(ctx context.Context, arg VMNextIPAddressParams) (interface{}, error) {
+	row := q.db.QueryRow(ctx, vMNextIPAddress, arg.ServerID, arg.IpRange)
 	var next_ip interface{}
 	err := row.Scan(&next_ip)
 	return next_ip, err
+}
+
+const vMReassign = `-- name: VMReassign :one
+UPDATE vms
+SET server_id = $2, ip_address = $3, status = 'pending', updated_at = now()
+WHERE id = $1
+RETURNING id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at, pending_at, starting_at, running_at, stopping_at, stopped_at, failed_at, env_variables, server_id
+`
+
+type VMReassignParams struct {
+	ID        uuid.UUID    `json:"id"`
+	ServerID  uuid.UUID    `json:"server_id"`
+	IpAddress netip.Prefix `json:"ip_address"`
+}
+
+// Reassign a VM to a different server with a new IP address.
+func (q *Queries) VMReassign(ctx context.Context, arg VMReassignParams) (Vm, error) {
+	row := q.db.QueryRow(ctx, vMReassign, arg.ID, arg.ServerID, arg.IpAddress)
+	var i Vm
+	err := row.Scan(
+		&i.ID,
+		&i.Vcpus,
+		&i.Memory,
+		&i.Status,
+		&i.ImageID,
+		&i.Port,
+		&i.IpAddress,
+		&i.Metadata,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.PendingAt,
+		&i.StartingAt,
+		&i.RunningAt,
+		&i.StoppingAt,
+		&i.StoppedAt,
+		&i.FailedAt,
+		&i.EnvVariables,
+		&i.ServerID,
+	)
+	return i, err
 }
 
 const vMSoftDelete = `-- name: VMSoftDelete :exec
@@ -225,7 +321,7 @@ func (q *Queries) VMSoftDelete(ctx context.Context, id uuid.UUID) error {
 }
 
 const vMUpdateStatus = `-- name: VMUpdateStatus :one
-update vms set status = $1 where id=$2 returning id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at, pending_at, starting_at, running_at, stopping_at, stopped_at, failed_at, env_variables
+update vms set status = $1 where id=$2 returning id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at, pending_at, starting_at, running_at, stopping_at, stopped_at, failed_at, env_variables, server_id
 `
 
 type VMUpdateStatusParams struct {
@@ -255,6 +351,7 @@ func (q *Queries) VMUpdateStatus(ctx context.Context, arg VMUpdateStatusParams) 
 		&i.StoppedAt,
 		&i.FailedAt,
 		&i.EnvVariables,
+		&i.ServerID,
 	)
 	return i, err
 }

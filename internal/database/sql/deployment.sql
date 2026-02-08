@@ -58,3 +58,11 @@ WHERE project_id = $1
 UPDATE deployments
 SET status = 'stopped', stopped_at = now()
 WHERE id = $1;
+
+-- name: DeploymentFindRunningByServerID :many
+-- Find all running deployments whose VM is on a specific server.
+SELECT d.* FROM deployments d
+INNER JOIN vms v ON d.vm_id = v.id
+WHERE v.server_id = $1
+  AND d.status = 'running'
+  AND d.deleted_at IS NULL;
