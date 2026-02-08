@@ -2,7 +2,6 @@ package zeitwork
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -127,32 +126,23 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 		}
 	}
 
-	// Generate one-time token and register VM with metadata server
-	token := uuid.New().String()
-	s.metadataServer.RegisterVM(vm.ID.String(), token, envVars, vmIp.Addr())
+	// Register VM with VSOCK manager (sets up UDS listener for guest-initiated connections)
+	vsockPath := VSocketPath(vm.ID)
+	hostname := fmt.Sprintf("zeit-%s", vm.ID.String())
+	if err := s.vsockManager.RegisterVM(vm.ID, envVars, vmIp.String(), hostIp.Addr().String(), hostname); err != nil {
+		return fmt.Errorf("failed to register VM with VSOCK manager: %w", err)
+	}
 
-	slog.Info("STARTING DA VM", "id", vm.ID, "hostIp", hostIp, "vmIp", vmIp, "vcpus", vm.Vcpus, "memory_mb", vm.Memory, "envVarsCount", len(envVars))
-	vmConfig := VMConfig{
-		AppID:         vm.ID.String(),
-		IPAddr:        vmIp.String(),
-		IPGw:          hostIp.Addr().String(),
-		MetadataURL:   fmt.Sprintf("http://%s:8111/v1/vms/%s/config", hostIp.Addr().String(), vm.ID.String()),
-		MetadataToken: token,
-	}
-	vmConfigBytes, err := json.Marshal(vmConfig)
-	if err != nil {
-		return err
-	}
+	slog.Info("starting DA VM", "id", vm.ID, "hostIp", hostIp, "vmIp", vmIp, "vcpus", vm.Vcpus, "memory_mb", vm.Memory, "envVarsCount", len(envVars))
 
 	cmd := exec.Command("/data/cloud-hypervisor", "--kernel", "/data/vmlinuz.bin",
 		"--disk", fmt.Sprintf("path=%s,direct=on,queue_size=256", vmDiskPath),
 		"--initramfs", "/data/initramfs.cpio.gz",
-		"--cmdline", fmt.Sprintf(
-			"console=hvc0 config=%s",
-			base64.StdEncoding.EncodeToString(vmConfigBytes)),
+		"--cmdline", "console=hvc0",
 		"--cpus", fmt.Sprintf("boot=%d", vm.Vcpus),
 		"--memory", fmt.Sprintf("size=%dM", vm.Memory),
-		"--net", fmt.Sprintf("tap=tap%d,mac=,ip=%s,mask=255.255.255.254", s.nextTap.Add(1), hostIp.Addr())) // todo mask might not be /31 theoretically but who cares
+		"--net", fmt.Sprintf("tap=tap%d,mac=,ip=%s,mask=255.255.255.254", s.nextTap.Add(1), hostIp.Addr()), // todo mask might not be /31 theoretically but who cares
+		"--vsock", fmt.Sprintf("cid=3,socket=%s", vsockPath))
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	slog.Info("Starting VM", "cmd", cmd)
@@ -207,6 +197,9 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 				}
 			}
 		}
+
+		// Unregister from VSOCK manager (connection is dead when VM exits)
+		s.vsockManager.UnregisterVM(vm.ID)
 
 		delete(s.vmToCmd, vm.ID)
 		s.vmScheduler.Schedule(vm.ID, time.Now().Add(5*time.Second))
@@ -276,8 +269,8 @@ func (s *Service) nextIpAddress(ctx context.Context) (netip.Prefix, error) {
 func (s *Service) reconcileVmDelete(ctx context.Context, vm queries.Vm) error {
 	slog.Info("deleting VM", "vm_id", vm.ID.String())
 
-	// Unregister VM from metadata server
-	s.metadataServer.UnregisterVM(vm.ID.String())
+	// Unregister VM from VSOCK manager (stops gRPC listener, cleans up UDS sockets)
+	s.vsockManager.UnregisterVM(vm.ID)
 
 	// If the VM is currently running, kill it
 	if cmd, ok := s.vmToCmd[vm.ID]; ok {
@@ -318,12 +311,4 @@ func (s *Service) reconcileVMUpdateStatusIf(ctx context.Context, vm queries.Vm, 
 		})
 	}
 	return vm, nil
-}
-
-type VMConfig struct {
-	AppID         string `json:"app_id"`
-	IPAddr        string `json:"ip_addr"`
-	IPGw          string `json:"ip_gw"`
-	MetadataURL   string `json:"metadata_url"`   // URL to fetch env vars from (e.g., "http://10.0.0.0:8111")
-	MetadataToken string `json:"metadata_token"` // One-time token for authentication
 }

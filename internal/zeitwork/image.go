@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -59,8 +60,13 @@ func (s *Service) reconcileImage(ctx context.Context, objectID uuid.UUID) error 
 	ociPath := filepath.Join(tmpdir, "oci")
 	slog.Info("pulling container image", "ref", imageRef)
 
-	srcCreds := fmt.Sprintf("%s:%s", s.cfg.DockerRegistryUsername, s.cfg.DockerRegistryPAT)
-	err = s.runCommand("skopeo", "copy", "--src-creds", srcCreds, fmt.Sprintf("docker://%s", imageRef), fmt.Sprintf("oci:%s:latest", ociPath))
+	if strings.Index(imageRef, "ghcr.io/zeitwork") == 0 {
+		srcCreds := fmt.Sprintf("%s:%s", s.cfg.DockerRegistryUsername, s.cfg.DockerRegistryPAT)
+		err = s.runCommand("skopeo", "copy", "--src-creds", srcCreds, fmt.Sprintf("docker://%s", imageRef), fmt.Sprintf("oci:%s:latest", ociPath))
+	} else {
+		err = s.runCommand("skopeo", "copy", fmt.Sprintf("docker://%s", imageRef), fmt.Sprintf("oci:%s:latest", ociPath))
+	}
+
 	if err != nil {
 		return fmt.Errorf("failed to pull image: %w", err)
 	}

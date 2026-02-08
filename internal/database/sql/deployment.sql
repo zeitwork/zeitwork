@@ -43,8 +43,8 @@ WHERE id = $1;
 -- name: DeploymentFindByBuildID :many
 SELECT * FROM deployments WHERE build_id = $1;
 
--- name: DeploymentFindByVMID :many
-SELECT * FROM deployments WHERE vm_id = $1;
+-- name: DeploymentFindByVMID :one
+SELECT * FROM deployments WHERE vm_id = $1 LIMIT 1;
 
 -- name: DeploymentFindOtherRunningByProjectID :many
 -- Find all running deployments for a project, excluding a specific deployment
@@ -58,3 +58,7 @@ WHERE project_id = $1
 UPDATE deployments
 SET status = 'stopped', stopped_at = now()
 WHERE id = $1;
+
+-- name: VMLogCreate :exec
+INSERT INTO vm_logs (id, vm_id, message, level, created_at)
+VALUES ($1, $2, $3, $4, NOW());

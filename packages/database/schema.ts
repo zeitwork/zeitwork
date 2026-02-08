@@ -133,7 +133,7 @@ export const deployments = pgTable("deployments", {
     .references(() => projects.id),
   buildId: uuid().references(() => builds.id),
   imageId: uuid().references(() => images.id),
-  vmId: uuid().references(() => vms.id),
+  vmId: uuid().references(() => vms.id).unique(),
   //
   pendingAt: timestamp({ withTimezone: true }),
   buildingAt: timestamp({ withTimezone: true }),
@@ -147,14 +147,13 @@ export const deployments = pgTable("deployments", {
   ...timestamps,
 });
 
-export const deploymentLogs = pgTable("deployment_logs", {
+export const vmLogs = pgTable("vm_logs", {
   id: uuid().primaryKey().$defaultFn(uuidv7),
-  deploymentId: uuid()
+  vmId: uuid()
     .notNull()
-    .references(() => deployments.id),
+    .references(() => vms.id),
   message: text().notNull(),
   level: text(),
-  ...organisationId,
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
 });
 

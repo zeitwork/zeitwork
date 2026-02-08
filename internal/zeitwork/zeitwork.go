@@ -34,10 +34,6 @@ type Config struct {
 	// GitHub App credentials for fetching source code
 	GitHubAppID         string
 	GitHubAppPrivateKey string // base64-encoded
-
-	// Metadata server configuration
-	// Serves env variables to VMs via HTTP (avoids kernel cmdline size limits)
-	MetadataServerAddr string // e.g., "0.0.0.0:8111"
 }
 
 type Service struct {
@@ -54,8 +50,8 @@ type Service struct {
 	// GitHub token service for fetching source code
 	githubTokenService *github.Service
 
-	// Metadata server for serving env vars to VMs
-	metadataServer *MetadataServer
+	// VSOCK manager for HTTP communication with VMs
+	vsockManager *VSockManager
 
 	// Schedulers
 	deploymentScheduler *reconciler.Scheduler
@@ -77,14 +73,14 @@ type Service struct {
 // New creates a new reconciler service
 func New(cfg Config) (*Service, error) {
 	s := &Service{
-		cfg:            cfg,
-		db:             cfg.DB,
-		dnsResolver:    dnsresolver.NewResolver(),
-		metadataServer: NewMetadataServer(),
-		vmToCmd:        make(map[uuid.UUID]*exec.Cmd),
-		imageMu:        sync.Mutex{},
-		nextTap:        atomic.Int32{},
-		activeBuilds:   make(map[uuid.UUID]bool),
+		cfg:          cfg,
+		db:           cfg.DB,
+		dnsResolver:  dnsresolver.NewResolver(),
+		vsockManager: NewVSockManager(cfg.DB),
+		vmToCmd:      make(map[uuid.UUID]*exec.Cmd),
+		imageMu:      sync.Mutex{},
+		nextTap:      atomic.Int32{},
+		activeBuilds: make(map[uuid.UUID]bool),
 	}
 
 	// Initialize GitHub token service if credentials are provided
@@ -112,15 +108,6 @@ func New(cfg Config) (*Service, error) {
 // Start starts the reconciler service
 func (s *Service) Start(ctx context.Context) error {
 	slog.Info("starting Zeitwork reconciler")
-
-	// Start metadata server (firewall rules are configured via nftables in ansible)
-	if s.cfg.MetadataServerAddr != "" {
-		go func() {
-			if err := s.metadataServer.Start(ctx, s.cfg.MetadataServerAddr); err != nil {
-				slog.Error("metadata server error", "err", err)
-			}
-		}()
-	}
 
 	// Start all schedulers
 	s.deploymentScheduler.Start()
@@ -197,14 +184,12 @@ func (s *Service) Start(ctx context.Context) error {
 				}
 			}
 
-			// Notify deployments that use this VM
-			if deployments, err := s.db.DeploymentFindByVMID(ctx, id); err != nil {
-				slog.Error("failed to find deployments by vm_id", "vm_id", id, "error", err)
+			// Notify the deployment that uses this VM
+			if deployment, err := s.db.DeploymentFindByVMID(ctx, id); err != nil {
+				slog.Debug("no deployment found for vm", "vm_id", id, "error", err)
 			} else {
-				for _, d := range deployments {
-					slog.Debug("notifying deployment of VM change", "deployment_id", d.ID, "vm_id", id)
-					s.deploymentScheduler.Schedule(d.ID, time.Now())
-				}
+				slog.Debug("notifying deployment of VM change", "deployment_id", deployment.ID, "vm_id", id)
+				s.deploymentScheduler.Schedule(deployment.ID, time.Now())
 			}
 		},
 
@@ -280,6 +265,8 @@ func (s *Service) bootstrap(ctx context.Context) error {
 // Stop gracefully stops the reconciler service
 func (s *Service) Stop() error {
 	slog.Info("stopping reconciler")
+
+	s.vsockManager.Stop()
 
 	return nil
 }

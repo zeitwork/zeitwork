@@ -8,6 +8,7 @@ package queries
 import (
 	"context"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 )
 
@@ -98,47 +99,34 @@ func (q *Queries) DeploymentFindByBuildID(ctx context.Context, buildID uuid.UUID
 	return items, nil
 }
 
-const deploymentFindByVMID = `-- name: DeploymentFindByVMID :many
-SELECT id, status, github_commit, project_id, build_id, image_id, vm_id, pending_at, building_at, starting_at, running_at, stopping_at, stopped_at, failed_at, organisation_id, created_at, updated_at, deleted_at FROM deployments WHERE vm_id = $1
+const deploymentFindByVMID = `-- name: DeploymentFindByVMID :one
+SELECT id, status, github_commit, project_id, build_id, image_id, vm_id, pending_at, building_at, starting_at, running_at, stopping_at, stopped_at, failed_at, organisation_id, created_at, updated_at, deleted_at FROM deployments WHERE vm_id = $1 LIMIT 1
 `
 
-func (q *Queries) DeploymentFindByVMID(ctx context.Context, vmID uuid.UUID) ([]Deployment, error) {
-	rows, err := q.db.Query(ctx, deploymentFindByVMID, vmID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []Deployment{}
-	for rows.Next() {
-		var i Deployment
-		if err := rows.Scan(
-			&i.ID,
-			&i.Status,
-			&i.GithubCommit,
-			&i.ProjectID,
-			&i.BuildID,
-			&i.ImageID,
-			&i.VmID,
-			&i.PendingAt,
-			&i.BuildingAt,
-			&i.StartingAt,
-			&i.RunningAt,
-			&i.StoppingAt,
-			&i.StoppedAt,
-			&i.FailedAt,
-			&i.OrganisationID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+func (q *Queries) DeploymentFindByVMID(ctx context.Context, vmID uuid.UUID) (Deployment, error) {
+	row := q.db.QueryRow(ctx, deploymentFindByVMID, vmID)
+	var i Deployment
+	err := row.Scan(
+		&i.ID,
+		&i.Status,
+		&i.GithubCommit,
+		&i.ProjectID,
+		&i.BuildID,
+		&i.ImageID,
+		&i.VmID,
+		&i.PendingAt,
+		&i.BuildingAt,
+		&i.StartingAt,
+		&i.RunningAt,
+		&i.StoppingAt,
+		&i.StoppedAt,
+		&i.FailedAt,
+		&i.OrganisationID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
 }
 
 const deploymentFindOtherRunningByProjectID = `-- name: DeploymentFindOtherRunningByProjectID :many
@@ -360,5 +348,27 @@ type DeploymentUpdateVMIDParams struct {
 
 func (q *Queries) DeploymentUpdateVMID(ctx context.Context, arg DeploymentUpdateVMIDParams) error {
 	_, err := q.db.Exec(ctx, deploymentUpdateVMID, arg.ID, arg.VmID)
+	return err
+}
+
+const vMLogCreate = `-- name: VMLogCreate :exec
+INSERT INTO vm_logs (id, vm_id, message, level, created_at)
+VALUES ($1, $2, $3, $4, NOW())
+`
+
+type VMLogCreateParams struct {
+	ID      uuid.UUID   `json:"id"`
+	VmID    uuid.UUID   `json:"vm_id"`
+	Message string      `json:"message"`
+	Level   pgtype.Text `json:"level"`
+}
+
+func (q *Queries) VMLogCreate(ctx context.Context, arg VMLogCreateParams) error {
+	_, err := q.db.Exec(ctx, vMLogCreate,
+		arg.ID,
+		arg.VmID,
+		arg.Message,
+		arg.Level,
+	)
 	return err
 }

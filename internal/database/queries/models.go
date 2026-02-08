@@ -209,15 +209,6 @@ type Deployment struct {
 	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
 }
 
-type DeploymentLog struct {
-	ID             uuid.UUID          `json:"id"`
-	DeploymentID   uuid.UUID          `json:"deployment_id"`
-	Message        string             `json:"message"`
-	Level          pgtype.Text        `json:"level"`
-	OrganisationID uuid.UUID          `json:"organisation_id"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-}
-
 type Domain struct {
 	ID                      uuid.UUID          `json:"id"`
 	Name                    string             `json:"name"`
@@ -327,4 +318,12 @@ type Vm struct {
 	StoppedAt    pgtype.Timestamptz `json:"stopped_at"`
 	FailedAt     pgtype.Timestamptz `json:"failed_at"`
 	EnvVariables pgtype.Text        `json:"env_variables"`
+}
+
+type VmLog struct {
+	ID        uuid.UUID          `json:"id"`
+	Message   string             `json:"message"`
+	Level     pgtype.Text        `json:"level"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	VmID      uuid.UUID          `json:"vm_id"`
 }

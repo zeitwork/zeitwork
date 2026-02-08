@@ -7,7 +7,7 @@
 - name: Build the main go app locally
   delegate_to: localhost
   command:
-    cmd: go build -o /tmp/zeitwork cmd/zeitwork/zeitwork.go
+    cmd: go build -o /tmp/zeitwork ./cmd/zeitwork/
     chdir: "../"
   environment:
     CGO_ENABLED: "0"
