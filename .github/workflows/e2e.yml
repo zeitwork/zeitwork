@@ -1,0 +1,134 @@
+name: E2E Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_filter:
+        description: "Go test -run filter (e.g. TestServerRegistration)"
+        required: false
+        default: ""
+      skip_teardown:
+        description: "Skip infrastructure teardown (for debugging)"
+        required: false
+        type: boolean
+        default: false
+
+# Only allow one E2E run at a time (Latitude servers are expensive)
+concurrency:
+  group: e2e
+  cancel-in-progress: false
+
+env:
+  GO_VERSION: "1.24"
+  NODE_VERSION: "22"
+  LATITUDE_PROJECT_ID: ${{ secrets.LATITUDE_PROJECT_ID }}
+  LATITUDE_API_KEY: ${{ secrets.LATITUDE_API_KEY }}
+  E2E_GITHUB_APP_ID: ${{ secrets.E2E_GITHUB_APP_ID }}
+  E2E_GITHUB_APP_PRIVATE_KEY: ${{ secrets.E2E_GITHUB_APP_PRIVATE_KEY }}
+  E2E_DOCKER_REGISTRY_URL: ghcr.io
+  E2E_DOCKER_REGISTRY_USERNAME: zeitwork
+  E2E_DOCKER_REGISTRY_PAT: ${{ secrets.E2E_DOCKER_REGISTRY_PAT }}
+  E2E_ENCRYPTION_KEY: ${{ secrets.E2E_ENCRYPTION_KEY }}
+
+jobs:
+  e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install bun
+        run: npm install -g bun
+
+      - name: Install dependencies
+        run: bun install
+        working-directory: packages/database
+
+      - name: Install Ansible
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ansible
+
+      - name: Start local services (PG, PgBouncer, MinIO)
+        run: docker compose -f e2e/docker-compose.yml up -d --wait
+        env:
+          COMPOSE_PROJECT_NAME: zeitwork-e2e
+
+      - name: Run database migrations
+        run: bun drizzle-kit migrate
+        working-directory: packages/database
+        env:
+          DATABASE_URL: postgresql://zeitwork:zeitwork@127.0.0.1:15432/zeitwork
+
+      - name: Provision Latitude infrastructure
+        id: infra
+        run: |
+          go run ./cmd/e2e/ infra up
+        env:
+          LATITUDE_API_KEY: ${{ secrets.LATITUDE_API_KEY }}
+          LATITUDE_PROJECT_ID: ${{ secrets.LATITUDE_PROJECT_ID }}
+
+      - name: Cross-compile zeitwork binary
+        run: CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o .e2e/zeitwork ./cmd/zeitwork/
+
+      - name: Deploy zeitwork to servers
+        run: go run ./cmd/e2e/ run --deploy-only
+
+      - name: Run E2E tests
+        run: |
+          TEST_ARGS="-v -timeout 45m"
+          if [ -n "${{ inputs.test_filter }}" ]; then
+            TEST_ARGS="$TEST_ARGS -run ${{ inputs.test_filter }}"
+          fi
+          go test ./e2e/ $TEST_ARGS
+        env:
+          E2E_SERVER1_IP: ${{ steps.infra.outputs.server1_ip }}
+          E2E_SERVER2_IP: ${{ steps.infra.outputs.server2_ip }}
+          E2E_SERVER1_INTERNAL_IP: ${{ steps.infra.outputs.server1_internal_ip }}
+          E2E_SERVER2_INTERNAL_IP: ${{ steps.infra.outputs.server2_internal_ip }}
+          E2E_SSH_KEY: ${{ steps.infra.outputs.ssh_key_path }}
+          E2E_DATABASE_URL: postgresql://zeitwork:zeitwork@127.0.0.1:15432/zeitwork?sslmode=disable
+
+      - name: Collect server logs
+        if: always()
+        run: |
+          for server in 1 2; do
+            IP_VAR="E2E_SERVER${server}_IP"
+            IP="${!IP_VAR}"
+            if [ -n "$IP" ]; then
+              echo "=== Server $server ($IP) zeitwork logs ==="
+              ssh -i "$E2E_SSH_KEY" -o StrictHostKeyChecking=no -o LogLevel=ERROR \
+                "root@$IP" "journalctl -u zeitwork --no-pager -n 200" 2>/dev/null || echo "(failed to collect)"
+            fi
+          done
+        env:
+          E2E_SERVER1_IP: ${{ steps.infra.outputs.server1_ip }}
+          E2E_SERVER2_IP: ${{ steps.infra.outputs.server2_ip }}
+          E2E_SSH_KEY: ${{ steps.infra.outputs.ssh_key_path }}
+
+      - name: Teardown infrastructure
+        if: ${{ always() && inputs.skip_teardown != true }}
+        run: go run ./cmd/e2e/ infra down
+        env:
+          LATITUDE_API_KEY: ${{ secrets.LATITUDE_API_KEY }}
+          LATITUDE_PROJECT_ID: ${{ secrets.LATITUDE_PROJECT_ID }}
+
+      - name: Stop local services
+        if: always()
+        run: docker compose -f e2e/docker-compose.yml down -v
+        env:
+          COMPOSE_PROJECT_NAME: zeitwork-e2e

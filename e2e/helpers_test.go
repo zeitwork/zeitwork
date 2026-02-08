@@ -191,9 +191,9 @@ func (c *Cluster) SeedTestData(t *testing.T) string {
 
 	var userID string
 	err = c.DB.QueryRow(ctx, `
-		INSERT INTO users (name, email, github_id, avatar_url, email_verified_at)
-		VALUES ('E2E User', 'e2e@zeitwork.dev', 12345, '', now())
-		ON CONFLICT (github_id) DO UPDATE SET name = EXCLUDED.name
+		INSERT INTO users (name, email, username, github_account_id, verified_at)
+		VALUES ('E2E User', 'e2e@zeitwork.dev', 'e2e-user', 12345, now())
+		ON CONFLICT (email) DO UPDATE SET name = EXCLUDED.name
 		RETURNING id::text
 	`).Scan(&userID)
 	if err != nil {
@@ -201,23 +201,25 @@ func (c *Cluster) SeedTestData(t *testing.T) string {
 	}
 
 	_, err = c.DB.Exec(ctx, `
-		INSERT INTO organisation_members (user_id, organisation_id, role)
-		VALUES ($1::uuid, $2::uuid, 'owner')
+		INSERT INTO organisation_members (user_id, organisation_id)
+		VALUES ($1::uuid, $2::uuid)
 		ON CONFLICT DO NOTHING
 	`, userID, orgID)
 	if err != nil {
 		t.Fatalf("failed to seed org membership: %v", err)
 	}
 
-	installationID := os.Getenv("E2E_GITHUB_INSTALLATION_ID")
-	if installationID == "" {
-		installationID = "99999"
+	githubInstallationID := os.Getenv("E2E_GITHUB_INSTALLATION_ID")
+	if githubInstallationID == "" {
+		githubInstallationID = "99999"
 	}
-	_, err = c.DB.Exec(ctx, `
-		INSERT INTO github_installations (installation_id, organisation_id)
-		VALUES ($1, $2::uuid)
-		ON CONFLICT (installation_id) DO NOTHING
-	`, installationID, orgID)
+	var ghInstallUUID string
+	err = c.DB.QueryRow(ctx, `
+		INSERT INTO github_installations (user_id, github_account_id, github_installation_id, organisation_id)
+		VALUES ($1::uuid, 12345, $2::int, $3::uuid)
+		ON CONFLICT (github_installation_id) DO UPDATE SET user_id = EXCLUDED.user_id
+		RETURNING id::text
+	`, userID, githubInstallationID, orgID).Scan(&ghInstallUUID)
 	if err != nil {
 		t.Fatalf("failed to seed github installation: %v", err)
 	}
@@ -229,16 +231,104 @@ func (c *Cluster) SeedTestData(t *testing.T) string {
 	var projectID string
 	err = c.DB.QueryRow(ctx, `
 		INSERT INTO projects (name, slug, github_repository, github_installation_id, organisation_id, root_directory)
-		VALUES ('E2E Test App', 'e2e-test-app', $1, $2, $3::uuid, '/')
+		VALUES ('E2E Test App', 'e2e-test-app', $1, $2::uuid, $3::uuid, '/')
 		ON CONFLICT (slug, organisation_id) DO UPDATE SET name = EXCLUDED.name
 		RETURNING id::text
-	`, githubRepo, installationID, orgID).Scan(&projectID)
+	`, githubRepo, ghInstallUUID, orgID).Scan(&projectID)
 	if err != nil {
 		t.Fatalf("failed to seed project: %v", err)
 	}
 
 	t.Logf("seeded test data: org=%s user=%s project=%s", orgID, userID, projectID)
 	return projectID
+}
+
+// WaitForQueryInt polls a SQL query until it returns the expected int value.
+func (c *Cluster) WaitForQueryInt(t *testing.T, description string, timeout time.Duration, expected int, query string, args ...any) {
+	t.Helper()
+	WaitFor(t, description, timeout, 2*time.Second, func() bool {
+		var result int
+		err := c.DB.QueryRow(context.Background(), query, args...).Scan(&result)
+		if err != nil {
+			return false
+		}
+		return result == expected
+	})
+}
+
+// SSHNoFail executes a command on the specified server and returns stdout.
+// Unlike SSH, it does not fail the test on error — it returns ("", err) instead.
+func (c *Cluster) SSHNoFail(serverIP string, command string) (string, error) {
+	cmd := exec.Command("ssh",
+		"-i", c.SSHKeyPath,
+		"-o", "StrictHostKeyChecking=no",
+		"-o", "UserKnownHostsFile=/dev/null",
+		"-o", "LogLevel=ERROR",
+		"root@"+serverIP,
+		command,
+	)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("%v: %s", err, stderr.String())
+	}
+	return strings.TrimSpace(stdout.String()), nil
+}
+
+// DeploymentStatus returns the status of a deployment.
+func (c *Cluster) DeploymentStatus(t *testing.T, deploymentID string) string {
+	t.Helper()
+	return c.QueryRow(t, "SELECT status FROM deployments WHERE id = $1::uuid", deploymentID)
+}
+
+// CreateDeployment inserts a pending deployment for the given project and commit.
+// Returns the deployment ID.
+func (c *Cluster) CreateDeployment(t *testing.T, projectID string, commit string, orgID string) string {
+	t.Helper()
+	var id string
+	err := c.DB.QueryRow(context.Background(), `
+		INSERT INTO deployments (github_commit, project_id, organisation_id, status, pending_at)
+		VALUES ($1, $2::uuid, $3::uuid, 'pending', now())
+		RETURNING id::text
+	`, commit, projectID, orgID).Scan(&id)
+	if err != nil {
+		t.Fatalf("failed to create deployment: %v", err)
+	}
+	return id
+}
+
+// OrgIDForProject returns the organisation_id for a project.
+func (c *Cluster) OrgIDForProject(t *testing.T, projectID string) string {
+	t.Helper()
+	return c.QueryRow(t, "SELECT organisation_id::text FROM projects WHERE id = $1::uuid", projectID)
+}
+
+// VMForDeployment returns the VM ID associated with a deployment, or empty string if none.
+func (c *Cluster) VMForDeployment(t *testing.T, deploymentID string) string {
+	t.Helper()
+	var vmID *string
+	err := c.DB.QueryRow(context.Background(),
+		"SELECT vm_id::text FROM deployments WHERE id = $1::uuid", deploymentID).Scan(&vmID)
+	if err != nil {
+		t.Fatalf("failed to query deployment VM: %v", err)
+	}
+	if vmID == nil {
+		return ""
+	}
+	return *vmID
+}
+
+// VMStatus returns the status of a VM.
+func (c *Cluster) VMStatus(t *testing.T, vmID string) string {
+	t.Helper()
+	return c.QueryRow(t, "SELECT status FROM vms WHERE id = $1::uuid", vmID)
+}
+
+// VMServerID returns the server_id of a VM.
+func (c *Cluster) VMServerID(t *testing.T, vmID string) string {
+	t.Helper()
+	return c.QueryRow(t, "SELECT server_id::text FROM vms WHERE id = $1::uuid", vmID)
 }
 
 // prettyJSON formats a value as indented JSON for logging.
