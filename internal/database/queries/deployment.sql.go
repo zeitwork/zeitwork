@@ -182,6 +182,54 @@ func (q *Queries) DeploymentFindOtherRunningByProjectID(ctx context.Context, arg
 	return items, nil
 }
 
+const deploymentFindRunningByServerID = `-- name: DeploymentFindRunningByServerID :many
+SELECT d.id, d.status, d.github_commit, d.project_id, d.build_id, d.image_id, d.vm_id, d.pending_at, d.building_at, d.starting_at, d.running_at, d.stopping_at, d.stopped_at, d.failed_at, d.organisation_id, d.created_at, d.updated_at, d.deleted_at FROM deployments d
+INNER JOIN vms v ON d.vm_id = v.id
+WHERE v.server_id = $1
+  AND d.status = 'running'
+  AND d.deleted_at IS NULL
+`
+
+// Find all running deployments whose VM is on a specific server.
+func (q *Queries) DeploymentFindRunningByServerID(ctx context.Context, serverID uuid.UUID) ([]Deployment, error) {
+	rows, err := q.db.Query(ctx, deploymentFindRunningByServerID, serverID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Deployment{}
+	for rows.Next() {
+		var i Deployment
+		if err := rows.Scan(
+			&i.ID,
+			&i.Status,
+			&i.GithubCommit,
+			&i.ProjectID,
+			&i.BuildID,
+			&i.ImageID,
+			&i.VmID,
+			&i.PendingAt,
+			&i.BuildingAt,
+			&i.StartingAt,
+			&i.RunningAt,
+			&i.StoppingAt,
+			&i.StoppedAt,
+			&i.FailedAt,
+			&i.OrganisationID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const deploymentFirstByID = `-- name: DeploymentFirstByID :one
 SELECT id, status, github_commit, project_id, build_id, image_id, vm_id, pending_at, building_at, starting_at, running_at, stopping_at, stopped_at, failed_at, organisation_id, created_at, updated_at, deleted_at
 FROM deployments

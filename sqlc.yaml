@@ -31,3 +31,5 @@ sql:
             go_type: "encoding/json.RawMessage"
           - db_type: "inet"
             go_type: "net/netip.Prefix"
+          - db_type: "cidr"
+            go_type: "net/netip.Prefix"
