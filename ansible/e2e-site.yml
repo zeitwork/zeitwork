@@ -1,0 +1,17 @@
+---
+# E2E test cluster provisioning playbook.
+# All servers are identical — they run the standard node role.
+# PG, PgBouncer, and MinIO run locally on the developer's machine
+# and are accessed via reverse SSH tunnels (localhost on the server).
+#
+# Run via: ansible-playbook -i <inventory> e2e-site.yml --extra-vars @e2e-vars.yml
+
+- name: Provision E2E servers
+  hosts: nodes
+  become: true
+  vars:
+    db_host: "127.0.0.1"
+    minio_endpoint: "127.0.0.1:9000"
+    public_ip: "{{ ansible_host }}"
+  roles:
+    - node

@@ -11,10 +11,12 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/hetznercloud/hcloud-go/v2 v2.27.0
 	github.com/jackc/pglogrepl v0.0.0-20251213150135-2e8d0df862c1
-	github.com/jackc/pgx/v5 v5.7.2
+	github.com/jackc/pgx/v5 v5.8.0
+	github.com/latitudesh/latitudesh-go-sdk v1.12.12
 	github.com/lmittmann/tint v1.1.2
 	github.com/minio/minio-go/v7 v7.0.98
 	github.com/samber/lo v1.52.0
+	github.com/spf13/cobra v1.10.2
 	github.com/vishvananda/netlink v1.3.1
 )
 
@@ -24,6 +26,7 @@ require (
 	github.com/containerd/log v0.1.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/go-ini/ini v1.67.0 // indirect
+	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/jackc/pgio v1.0.0 // indirect
 	github.com/klauspost/compress v1.18.2 // indirect
 	github.com/klauspost/crc32 v1.3.0 // indirect
@@ -34,6 +37,8 @@ require (
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/rs/xid v1.6.0 // indirect
+	github.com/spf13/pflag v1.0.9 // indirect
+	github.com/spyzhov/ajson v0.8.0 // indirect
 	github.com/tinylib/msgp v1.6.1 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect

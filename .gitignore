@@ -182,3 +182,6 @@ go.work.sum
 
 # Build output
 .build/
+
+# E2E test state (servers, SSH keys, cluster config)
+.e2e/

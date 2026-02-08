@@ -18,6 +18,6 @@ table inet filter {
 table ip nat {
     chain postrouting {
         type nat hook postrouting priority 100; policy accept;
-        oifname "enp35s0" masquerade
+        oifname "{{ primary_nic }}" masquerade
     }
 }

@@ -1,0 +1,76 @@
+name: "zeitwork-e2e"
+
+services:
+  db:
+    image: postgres:18
+    restart: unless-stopped
+    ports:
+      - "15432:5432"
+    environment:
+      POSTGRES_USER: zeitwork
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-zeitwork}
+      POSTGRES_DB: zeitwork
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_replication_slots=10
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zeitwork"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  pgbouncer:
+    image: edoburu/pgbouncer:latest
+    restart: unless-stopped
+    ports:
+      - "16432:6432"
+    environment:
+      DATABASE_URL: postgres://zeitwork:${DB_PASSWORD:-zeitwork}@db:5432/zeitwork
+      POOL_MODE: transaction
+      MAX_CLIENT_CONN: 200
+      DEFAULT_POOL_SIZE: 20
+      SERVER_RESET_QUERY: DISCARD ALL
+    depends_on:
+      db:
+        condition: service_healthy
+
+  s3:
+    image: minio/minio:latest
+    restart: unless-stopped
+    ports:
+      - "19000:9000"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    command: server /data
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      s3:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://s3:9000 $${MINIO_ACCESS_KEY} $${MINIO_SECRET_KEY};
+      mc mb --ignore-existing local/zeitwork-images;
+      exit 0;
+      "
+    environment:
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+
+volumes:
+  pg_data:
+  minio_data:

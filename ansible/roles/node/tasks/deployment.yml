@@ -1,4 +1,4 @@
-- name: Upload sytemd unit
+- name: Upload systemd unit
   notify: systemctl daemonreload
   copy:
     src: zeitwork.service
@@ -19,6 +19,14 @@
     src: /tmp/zeitwork
     dest: /data/zeitwork
     mode: 0755
+  notify: restart zeitwork
+
+- name: Generate zeitwork.env from template
+  template:
+    src: zeitwork.env.j2
+    dest: /data/zeitwork.env
+    mode: '0600'
+  when: db_host is defined
   notify: restart zeitwork
 
 - meta: flush_handlers

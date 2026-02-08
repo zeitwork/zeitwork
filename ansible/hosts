@@ -1,2 +1,2 @@
 [nodes]
-z01 ansible_host=168.119.39.115 ansible_user=root ansible_python_interpreter=python3.13
+z01 ansible_host=168.119.39.115 ansible_user=root ansible_python_interpreter=python3.13 primary_nic=enp35s0
