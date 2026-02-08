@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { GitMergeIcon, GithubIcon } from "lucide-vue-next";
+import { GitCommitHorizontalIcon, GithubIcon } from "lucide-vue-next";
 
 const route = useRoute();
 
@@ -10,12 +10,12 @@ interface Project {
   name: string;
   slug: string;
   githubRepository: string;
-  defaultBranch: string;
-  latestDeploymentId: string;
   organisationId: string;
   createdAt: string;
   updatedAt: string;
   deletedAt: string;
+  latestDeploymentCommit: string | null;
+  latestDeploymentDate: string | null;
 }
 
 type Props = {
@@ -33,16 +33,19 @@ const githubUrl = computed(() => `https://github.com/${githubOwner.value}/${gith
 // GitHub avatar URL
 const githubAvatarUrl = computed(() => `https://github.com/${githubOwner.value}.png`);
 
-// For now, we'll use placeholder data for fields not available in the API
-// These could be fetched from GitHub API or stored separately in the future
-const placeholderData = {
-  commitMessage: "Latest commit",
-  branch: "main",
-  lastDeployDate: new Date(),
-};
+const shortCommitHash = computed(() => {
+  if (!project.latestDeploymentCommit) return null;
+  return project.latestDeploymentCommit.substring(0, 7);
+});
+
+const commitUrl = computed(() => {
+  if (!project.latestDeploymentCommit) return null;
+  return `https://github.com/${project.githubRepository}/commit/${project.latestDeploymentCommit}`;
+});
 
 const formattedDate = computed(() => {
-  const date = placeholderData.lastDeployDate;
+  if (!project.latestDeploymentDate) return null;
+  const date = new Date(project.latestDeploymentDate);
   return date.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
@@ -53,7 +56,7 @@ const formattedDate = computed(() => {
 <template>
   <NuxtLink
     :to="`/${orgName}/${project.slug}`"
-    class="bg-surface-0 border-edge text-copy hover:border-edge-strong flex flex-col items-start gap-2 rounded-lg border p-4 shadow-sm transition-all hover:shadow"
+    class="bg-surface-raised border-edge text-copy hover:border-edge-strong flex flex-col items-start gap-2 rounded-lg border p-4 shadow-sm transition-all hover:shadow"
   >
     <div class="flex items-center gap-2">
       <img
@@ -61,10 +64,7 @@ const formattedDate = computed(() => {
         :alt="`${githubOwner}'s avatar`"
         class="border-edge size-8 rounded-full border object-cover"
       />
-      <div>
-        <h2>{{ project.name }}</h2>
-        <p class="text-secondary text-copy-sm">Port {{ project.latestDeploymentId }}</p>
-      </div>
+      <h2>{{ project.name }}</h2>
     </div>
     <div
       class="bg-surface-1 text-copy-sm inline-flex items-center gap-1 rounded-full py-1 pr-3 pl-2"
@@ -80,12 +80,19 @@ const formattedDate = computed(() => {
         {{ githubOwner }}/{{ githubRepo }}
       </a>
     </div>
-    <p class="text-secondary line-clamp-1 text-sm">{{ placeholderData.commitMessage }}</p>
-    <div class="text-secondary text-copy-sm flex items-center gap-1">
-      <p>{{ formattedDate }}</p>
-      <p>on</p>
-      <GitMergeIcon class="size-4" />
-      <p>{{ placeholderData.branch }}</p>
+    <div v-if="shortCommitHash" class="text-secondary text-copy-sm flex items-center gap-1">
+      <GitCommitHorizontalIcon class="size-4" />
+      <a
+        :href="commitUrl!"
+        target="_blank"
+        rel="noopener noreferrer"
+        class="font-mono hover:underline"
+        @click.stop
+      >
+        {{ shortCommitHash }}
+      </a>
     </div>
+    <p v-else class="text-tertiary text-copy-sm">No deployments yet</p>
+    <p v-if="formattedDate" class="text-secondary text-copy-sm">{{ formattedDate }}</p>
   </NuxtLink>
 </template>
