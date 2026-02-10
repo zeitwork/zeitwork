@@ -1,5 +1,5 @@
 // Package rpc defines the shared wire types for communication between
-// the host (zeitwerk daemon), the guest (initagent), and the CLI (zeitworkctl).
+// the host (zeitwork daemon), the guest (initagent), and the CLI (zeitworkctl).
 package rpc
 
 // ConfigResponse is the JSON response for GET /config (host -> guest).

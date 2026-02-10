@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -23,6 +24,11 @@ const (
 // Used by exec to join the customer's PID namespace via nsenter.
 var customerPID int
 
+// customerUID and customerGID are the UID/GID from the OCI config.
+// Used by exec to run commands as the same user as the customer app.
+var customerUID uint32
+var customerGID uint32
+
 func checkErr(err error) {
 	if err != nil {
 		slog.Error("fatal error", "err", err)
@@ -36,6 +42,10 @@ type OCIConfig struct {
 		Args []string `json:"args"`
 		Env  []string `json:"env"`
 		Cwd  string   `json:"cwd"`
+		User struct {
+			UID uint32 `json:"uid"`
+			GID uint32 `json:"gid"`
+		} `json:"user"`
 	} `json:"process"`
 }
 
@@ -54,7 +64,7 @@ func main() {
 	configRaw, err := os.ReadFile("/mnt/config.json")
 	checkErr(err)
 	checkErr(json.Unmarshal(configRaw, &ociConfig))
-	slog.Info("loaded OCI config", "args", ociConfig.Process.Args, "cwd", ociConfig.Process.Cwd)
+	slog.Info("loaded OCI config", "args", ociConfig.Process.Args, "cwd", ociConfig.Process.Cwd, "uid", ociConfig.Process.User.UID, "gid", ociConfig.Process.User.GID)
 
 	// ── Phase 3: Fetch config from host via VSOCK HTTP ─────────────────
 	configResp := fetchConfig()
@@ -78,9 +88,12 @@ func main() {
 	checkErr(syscall.Mount("/proc", "/mnt/rootfs/proc", "", syscall.MS_MOVE, ""))
 	checkErr(syscall.Mount("cgroup2", "/mnt/rootfs/sys/fs/cgroup", "cgroup2", 0, ""))
 
-	// Bind-mount busybox into the container rootfs for nsenter
-	checkErr(os.WriteFile("/mnt/rootfs/.zeitwork-busybox", nil, 0755))
-	checkErr(syscall.Mount("/usr/bin/busybox", "/mnt/rootfs/.zeitwork-busybox", "", syscall.MS_BIND, ""))
+	// Bind-mount busybox into the container rootfs for nsenter/exec.
+	// The binary must be named "busybox" so the multi-call dispatch works
+	// when invoked directly (e.g., from shell scripts).
+	checkErr(os.MkdirAll("/mnt/rootfs/.zeitwork", 0755))
+	checkErr(os.WriteFile("/mnt/rootfs/.zeitwork/busybox", nil, 0755))
+	checkErr(syscall.Mount("/usr/bin/busybox", "/mnt/rootfs/.zeitwork/busybox", "", syscall.MS_BIND, ""))
 
 	checkErr(os.Chdir("/mnt/rootfs"))
 	checkErr(syscall.Mount(".", "/", "", syscall.MS_MOVE, ""))
@@ -96,10 +109,23 @@ func main() {
 	env := append(ociConfig.Process.Env, configResp.Env...)
 	env = append(env, "ZEITWORK=1")
 
-	script := `mount -t proc proc /proc && cd "$0" && exec "$@"`
+	customerUID = ociConfig.Process.User.UID
+	customerGID = ociConfig.Process.User.GID
+
+	// Two-phase wrapper: mount /proc as root (requires CAP_SYS_ADMIN), then
+	// drop to the target UID/GID before exec'ing the customer command.
+	var script string
+	if customerUID == 0 && customerGID == 0 {
+		script = `/.zeitwork/busybox mount -t proc proc /proc && cd "$0" && exec "$@"`
+	} else {
+		script = fmt.Sprintf(
+			`/.zeitwork/busybox mount -t proc proc /proc && cd "$0" && shift && exec /.zeitwork/busybox setpriv --reuid=%d --regid=%d --clear-groups -- "$@"`,
+			customerUID, customerGID,
+		)
+	}
 	wrapperArgs := append([]string{"sh", "-c", script, ociConfig.Process.Cwd}, ociConfig.Process.Args...)
 	cmd := &exec.Cmd{
-		Path: "/.zeitwork-busybox",
+		Path: "/.zeitwork/busybox",
 		Args: wrapperArgs,
 		Env:  env,
 		SysProcAttr: &syscall.SysProcAttr{

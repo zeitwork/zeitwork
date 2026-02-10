@@ -75,10 +75,19 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 
 	slog.Info("exec session starting", "command", req.Command, "tty", req.TTY)
 
-	// Wrap command with nsenter to join the customer app's PID namespace.
+	// Wrap command with nsenter to join the customer app's PID+mount namespace,
+	// dropping to the same UID/GID as the customer process.
+	nsenterArgs := []string{
+		"nsenter",
+		"--target", strconv.Itoa(customerPID),
+		"--pid", "--mount",
+		"--setuid", strconv.FormatUint(uint64(customerUID), 10),
+		"--setgid", strconv.FormatUint(uint64(customerGID), 10),
+		"--",
+	}
 	cmd := &exec.Cmd{
-		Path: "/.zeitwork-busybox",
-		Args: append([]string{"nsenter", "--target", strconv.Itoa(customerPID), "--pid", "--mount", "--"}, req.Command...),
+		Path: "/.zeitwork/busybox",
+		Args: append(nsenterArgs, req.Command...),
 		Env:  os.Environ(),
 	}
 

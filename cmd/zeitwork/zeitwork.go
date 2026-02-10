@@ -97,6 +97,10 @@ func main() {
 
 	sig := <-sigChan
 	logger.Info("shutdown signal", "signal", sig)
+	
+	// Cancel context first so WAL listener and other ctx-dependent goroutines
+	// start winding down in parallel with the shutdown sequence.
+	cancel()
 
 	// Graceful shutdown with timeout
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 30*time.Second)

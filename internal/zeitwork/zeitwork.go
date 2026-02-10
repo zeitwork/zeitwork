@@ -264,7 +264,15 @@ func (s *Service) bootstrap(ctx context.Context) error {
 
 // Stop gracefully stops the reconciler service
 func (s *Service) Stop() error {
-	slog.Info("stopping reconciler")
+	slog.Info("stopping service")
+
+	// Kill all running Cloud Hypervisor processes so they don't outlive the daemon.
+	for vmID, cmd := range s.vmToCmd {
+		if cmd.Process != nil {
+			slog.Info("killing VM process", "vm_id", vmID)
+			_ = cmd.Process.Kill()
+		}
+	}
 
 	s.vsockManager.Stop()
 

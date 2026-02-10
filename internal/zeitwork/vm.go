@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"slices"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -143,6 +144,9 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 		"--memory", fmt.Sprintf("size=%dM", vm.Memory),
 		"--net", fmt.Sprintf("tap=tap%d,mac=,ip=%s,mask=255.255.255.254", s.nextTap.Add(1), hostIp.Addr()), // todo mask might not be /31 theoretically but who cares
 		"--vsock", fmt.Sprintf("cid=3,socket=%s", vsockPath))
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Pdeathsig: syscall.SIGKILL,
+	}
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	slog.Info("Starting VM", "cmd", cmd)
