@@ -1,4 +1,4 @@
-import { deploymentLogs, deployments } from "@zeitwork/database/schema";
+import { vmLogs, deployments } from "@zeitwork/database/schema";
 import { eq, and } from "@zeitwork/database/utils/drizzle";
 
 export default defineEventHandler(async (event) => {
@@ -24,12 +24,16 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, message: "Deployment not found" });
   }
 
-  // Fetch all deployment logs
+  if (!deployment.vmId) {
+    return [];
+  }
+
+  // Fetch VM logs via the deployment's vmId
   const logs = await useDrizzle()
     .select()
-    .from(deploymentLogs)
-    .where(eq(deploymentLogs.deploymentId, deployment.id))
-    .orderBy(deploymentLogs.createdAt);
+    .from(vmLogs)
+    .where(eq(vmLogs.vmId, deployment.vmId))
+    .orderBy(vmLogs.createdAt);
 
   return logs;
 });

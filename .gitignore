@@ -182,3 +182,7 @@ go.work.sum
 
 # Build output
 .build/
+
+/initagent
+/zeitwork
+/zeitworkctl

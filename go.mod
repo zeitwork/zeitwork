@@ -5,6 +5,8 @@ go 1.25.0
 require (
 	github.com/caarlos0/env/v11 v11.3.1
 	github.com/caddyserver/certmagic v0.21.5
+	github.com/coder/websocket v1.8.14
+	github.com/creack/pty/v2 v2.0.1
 	github.com/docker/docker v28.5.2+incompatible
 	github.com/golang-jwt/jwt/v4 v4.5.1
 	github.com/google/go-github/v67 v67.0.0
@@ -13,8 +15,9 @@ require (
 	github.com/jackc/pglogrepl v0.0.0-20251213150135-2e8d0df862c1
 	github.com/jackc/pgx/v5 v5.7.2
 	github.com/lmittmann/tint v1.1.2
-	github.com/samber/lo v1.52.0
+	github.com/mdlayher/vsock v1.2.1
 	github.com/vishvananda/netlink v1.3.1
+	golang.org/x/term v0.39.0
 )
 
 require (
@@ -23,11 +26,12 @@ require (
 	github.com/containerd/log v0.1.0 // indirect
 	github.com/jackc/pgio v1.0.0 // indirect
 	github.com/klauspost/compress v1.18.1 // indirect
+	github.com/mdlayher/socket v0.4.1 // indirect
 	github.com/moby/sys/atomicwriter v0.1.0 // indirect
 	github.com/morikuni/aec v1.0.0 // indirect
-	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect
 	golang.org/x/crypto v0.44.0 // indirect
+	google.golang.org/grpc v1.78.0 // indirect
 )
 
 require (
@@ -61,7 +65,7 @@ require (
 	github.com/prometheus/common v0.66.1 // indirect
 	github.com/prometheus/procfs v0.16.1 // indirect
 	github.com/zeebo/blake3 v0.2.4 // indirect
-	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
+	go.opentelemetry.io/auto/sdk v1.2.1 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.63.0 // indirect
 	go.opentelemetry.io/otel v1.38.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp v1.38.0 // indirect
@@ -74,10 +78,10 @@ require (
 	golang.org/x/mod v0.30.0 // indirect
 	golang.org/x/net v0.47.0 // indirect
 	golang.org/x/sync v0.18.0 // indirect
-	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/sys v0.40.0 // indirect
 	golang.org/x/text v0.31.0 // indirect
 	golang.org/x/time v0.14.0 // indirect
 	golang.org/x/tools v0.39.0 // indirect
-	google.golang.org/protobuf v1.36.8 // indirect
+	google.golang.org/protobuf v1.36.11 // indirect
 	gotest.tools/v3 v3.5.2 // indirect
 )

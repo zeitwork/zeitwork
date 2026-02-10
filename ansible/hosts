@@ -1,2 +1,4 @@
 [nodes]
 z01 ansible_host=168.119.39.115 ansible_user=root ansible_python_interpreter=python3.13
+
+zeitwork-test ansible_user=root

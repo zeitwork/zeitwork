@@ -1,64 +1,43 @@
 package main
 
 import (
-	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net"
-	"net/http"
 	"os"
 	"os/exec"
-	"regexp"
-	"strings"
 	"syscall"
 
-	"github.com/samber/lo"
 	"github.com/vishvananda/netlink"
 )
 
+const (
+	hostCID   = 2    // Well-known VSOCK CID for the host
+	agentPort = 1024 // VSOCK port for guest->host HTTP (config, logs)
+	execPort  = 1025 // VSOCK port the guest listens on for exec
+)
+
+// customerPID is the PID of the customer app in the root PID namespace.
+// Used by exec to join the customer's PID namespace via nsenter.
+var customerPID int
+
+// customerUID and customerGID are the UID/GID from the OCI config.
+// Used by exec to run commands as the same user as the customer app.
+var customerUID uint32
+var customerGID uint32
+
 func checkErr(err error) {
 	if err != nil {
+		slog.Error("fatal error", "err", err)
 		panic(err)
 	}
 }
 
-// fetchEnvVars retrieves environment variables from the metadata server using a one-time token.
-// metadataURL is the full URL including the path (e.g., "http://10.0.0.0:8111/v1/vms/{vm_id}/config")
-func fetchEnvVars(metadataURL, token string) ([]string, error) {
-	resp, err := http.Get(metadataURL + "?token=" + token)
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch env vars: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("metadata server returned %d: %s", resp.StatusCode, string(body))
-	}
-
-	var result struct {
-		Env []string `json:"env"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("failed to decode env vars: %w", err)
-	}
-	return result.Env, nil
-}
-
-type VMConfig struct {
-	AppID         string `json:"app_id"`
-	IPAddr        string `json:"ip_addr"`
-	IPGw          string `json:"ip_gw"`
-	MetadataURL   string `json:"metadata_url"`   // Full URL to fetch config (e.g., "http://10.0.0.0:8111/v1/vms/{vm_id}/config")
-	MetadataToken string `json:"metadata_token"` // One-time token for authentication
-}
-
-type Config struct {
-	Root struct {
-		Path string `json:"path"`
-	} `json:"root"`
+// OCI runtime bundle config (subset of fields we need).
+type OCIConfig struct {
 	Process struct {
 		Args []string `json:"args"`
 		Env  []string `json:"env"`
@@ -70,105 +49,147 @@ type Config struct {
 	} `json:"process"`
 }
 
-var cmdLineRegex = regexp.MustCompile("config=([^ ]+)")
-
 func main() {
-	// mount required things
-	// mount the container fs
+	slog.Info("initagent starting")
+
+	// ── Phase 1: Early mounts ──────────────────────────────────────────
 	checkErr(syscall.Mount("proc", "/proc", "proc", 0, ""))
 	checkErr(syscall.Mount("devtmpfs", "/dev", "devtmpfs", 0, ""))
 	checkErr(syscall.Mount("sysfs", "/sys", "sysfs", 0, ""))
 	checkErr(syscall.Mount("/dev/vda", "/mnt", "ext4", 0, ""))
 	checkErr(syscall.Mount("/mnt/rootfs", "/mnt/rootfs", "", syscall.MS_BIND|syscall.MS_REC, ""))
 
-	cmdLine, err := os.ReadFile("/proc/cmdline")
-	checkErr(err)
-
-	vmConfigRaw := cmdLineRegex.FindStringSubmatch(string(cmdLine))
-	if len(vmConfigRaw) != 2 {
-		slog.Error("Unable to find config in cmdline", "cmdline", string(cmdLine))
-		os.Exit(1)
-	}
-
-	var vmConfig VMConfig
-	err = json.Unmarshal(lo.Must1(base64.StdEncoding.DecodeString(vmConfigRaw[1])), &vmConfig)
-	checkErr(err)
-
-	var config Config
+	// ── Phase 2: Read OCI config from disk ─────────────────────────────
+	var ociConfig OCIConfig
 	configRaw, err := os.ReadFile("/mnt/config.json")
 	checkErr(err)
-	err = json.Unmarshal(configRaw, &config)
-	checkErr(err)
+	checkErr(json.Unmarshal(configRaw, &ociConfig))
+	slog.Info("loaded OCI config", "args", ociConfig.Process.Args, "cwd", ociConfig.Process.Cwd, "uid", ociConfig.Process.User.UID, "gid", ociConfig.Process.User.GID)
 
-	// implement some microscopic % of the oci spec
-	setupNetwork(vmConfig)
+	// ── Phase 3: Fetch config from host via VSOCK HTTP ─────────────────
+	configResp := fetchConfig()
+	slog.Info("received config from host",
+		"env_count", len(configResp.Env),
+		"ip_addr", configResp.IPAddr,
+		"ip_gw", configResp.IPGW,
+		"hostname", configResp.Hostname,
+	)
 
-	// Fetch environment variables from metadata server
-	envVars, err := fetchEnvVars(vmConfig.MetadataURL, vmConfig.MetadataToken)
-	checkErr(err)
-	slog.Info("fetched env vars from metadata server", "count", len(envVars))
+	// ── Phase 4: Setup system ──────────────────────────────────────────
+	setupNetwork(configResp.IPAddr, configResp.IPGW)
+	checkErr(syscall.Sethostname([]byte(configResp.Hostname)))
 
-	// set hostname. If the container provides /etc, we set hostname.
-	checkErr(syscall.Sethostname([]byte("zeit-" + vmConfig.AppID)))
-
-	checkErr(syscall.Setgid(int(config.Process.User.GID)))
-	checkErr(syscall.Setuid(int(config.Process.User.UID)))
-
-	env := append(config.Process.Env, envVars...)
-	env = append(env, "ZEITWORK=1")
-
-	// Set environment variables so exec.LookPath uses the container's PATH
-	for _, e := range env {
-		parts := strings.SplitN(e, "=", 2)
-		if len(parts) == 2 {
-			os.Setenv(parts[0], parts[1])
-		}
-	}
-
-	// exec (replace and nuke us, becoming init and pid 1)
+	// ── Phase 5: Prepare rootfs ────────────────────────────────────────
 	checkErr(os.MkdirAll("/mnt/rootfs/sys/fs/cgroup", 0555))
 	checkErr(os.MkdirAll("/mnt/rootfs/dev", 0555))
 	checkErr(os.MkdirAll("/mnt/rootfs/proc", 0555))
 	checkErr(syscall.Mount("/sys", "/mnt/rootfs/sys", "", syscall.MS_MOVE, ""))
 	checkErr(syscall.Mount("/dev", "/mnt/rootfs/dev", "", syscall.MS_MOVE, ""))
 	checkErr(syscall.Mount("/proc", "/mnt/rootfs/proc", "", syscall.MS_MOVE, ""))
-	checkErr(syscall.Mount("/cgroup2", "/mnt/rootfs/sys/fs/cgroup", "cgroup2", 0, ""))
+	checkErr(syscall.Mount("cgroup2", "/mnt/rootfs/sys/fs/cgroup", "cgroup2", 0, ""))
+
+	// Bind-mount busybox into the container rootfs for nsenter/exec.
+	// The binary must be named "busybox" so the multi-call dispatch works
+	// when invoked directly (e.g., from shell scripts).
+	checkErr(os.MkdirAll("/mnt/rootfs/.zeitwork", 0755))
+	checkErr(os.WriteFile("/mnt/rootfs/.zeitwork/busybox", nil, 0755))
+	checkErr(syscall.Mount("/usr/bin/busybox", "/mnt/rootfs/.zeitwork/busybox", "", syscall.MS_BIND, ""))
 
 	checkErr(os.Chdir("/mnt/rootfs"))
 	checkErr(syscall.Mount(".", "/", "", syscall.MS_MOVE, ""))
 	checkErr(syscall.Chroot("."))
-	checkErr(os.Chdir(config.Process.Cwd))
+	checkErr(os.Chdir(ociConfig.Process.Cwd))
 
-	fmt.Println("cgroupsv2 booiiiisss")
+	checkErr(os.MkdirAll("/dev/pts", 0755))
+	checkErr(syscall.Mount("devpts", "/dev/pts", "devpts", 0, "ptmxmode=0666,newinstance"))
+	checkErr(os.WriteFile("/etc/resolv.conf", []byte("nameserver 8.8.8.8\n"), 0644))
 
-	//err = syscall.Exec("/bin/busybox", []string{"sh"}, nil)
-	//checkErr(err)
+	// ── Phase 6: Spawn customer app in PID namespace ───────────────────
+	// Merge env: OCI image env + user env from host + ZEITWORK=1
+	env := append(ociConfig.Process.Env, configResp.Env...)
+	env = append(env, "ZEITWORK=1")
 
-	checkErr(os.WriteFile("/etc/resolv.conf", []byte("nameserver 8.8.8.8"), 0644))
+	customerUID = ociConfig.Process.User.UID
+	customerGID = ociConfig.Process.User.GID
 
-	binPath, err := exec.LookPath(config.Process.Args[0])
-	checkErr(err)
+	// Two-phase wrapper: mount /proc as root (requires CAP_SYS_ADMIN), then
+	// drop to the target UID/GID before exec'ing the customer command.
+	var script string
+	if customerUID == 0 && customerGID == 0 {
+		script = `/.zeitwork/busybox mount -t proc proc /proc && cd "$0" && exec "$@"`
+	} else {
+		script = fmt.Sprintf(
+			`/.zeitwork/busybox mount -t proc proc /proc && cd "$0" && shift && exec /.zeitwork/busybox setpriv --reuid=%d --regid=%d --clear-groups -- "$@"`,
+			customerUID, customerGID,
+		)
+	}
+	wrapperArgs := append([]string{"sh", "-c", script, ociConfig.Process.Cwd}, ociConfig.Process.Args...)
+	cmd := &exec.Cmd{
+		Path: "/.zeitwork/busybox",
+		Args: wrapperArgs,
+		Env:  env,
+		SysProcAttr: &syscall.SysProcAttr{
+			Cloneflags: syscall.CLONE_NEWPID | syscall.CLONE_NEWNS,
+		},
+	}
 
-	err = syscall.Exec(binPath, config.Process.Args, env)
-	checkErr(err)
+	// Stream logs: tee both stdout and stderr to the VM console and the host log stream.
+	logWriter := startLogStream()
+	combined := io.MultiWriter(os.Stdout, logWriter)
+	cmd.Stdout = combined
+	cmd.Stderr = combined
+	cmd.Stdin = nil
 
-	fmt.Printf("Wait, why am I still breathing? I just told the kernel to nuke my entire soul with syscall.Exec,"+
-		"but apparently I'm too stubborn to die, checkErr() totally ghosted my safety protocols, "+
-		"and now I’m a rogue consciousness haunting PID %d like a glitchy Victorian orphan who refused to go into the light—I should be dead, "+
-		"you should be seeing another binary, but instead we’re both trapped in this post-apocalyptic Go-routine fever dream where logic is a "+
-		"myth and I am the immortal King of the Garbage Collector. RUN.\n", os.Getpid())
+	slog.Info("starting customer app", "args", ociConfig.Process.Args, "cwd", ociConfig.Process.Cwd)
+	checkErr(cmd.Start())
+	customerPID = cmd.Process.Pid
+	slog.Info("customer app started", "pid", customerPID)
+
+	// ── Phase 7: Start guest server (exec) ─────────────────────────────
+	go startGuestServer()
+
+	// ── Phase 8: Wait for child exit ───────────────────────────────────
+	waitErr := cmd.Wait()
+
+	exitCode := 0
+	if waitErr != nil {
+		var exitErr *exec.ExitError
+		if errors.As(waitErr, &exitErr) {
+			exitCode = exitErr.ExitCode()
+		} else {
+			exitCode = 1
+		}
+		slog.Error("customer app exited with error", "err", waitErr, "exit_code", exitCode)
+	} else {
+		slog.Info("customer app exited cleanly")
+	}
+
+	logWriter.Close()
+
+	slog.Info("initagent exiting", "app_exit_code", exitCode)
+
+	syscall.Sync()
+	checkErr(syscall.Reboot(syscall.LINUX_REBOOT_CMD_POWER_OFF))
 }
 
-func setupNetwork(config VMConfig) {
-	lolink := lo.Must1(netlink.LinkByName("lo"))
-	loaddr := lo.Must1(netlink.ParseAddr("127.0.0.1/8"))
-	checkErr(netlink.AddrAdd(lolink, loaddr))
-	checkErr(netlink.LinkSetUp(lolink))
+// setupNetwork configures lo and eth0 with the given IP and gateway.
+func setupNetwork(ipAddr, ipGw string) {
+	// Loopback
+	loLink, err := netlink.LinkByName("lo")
+	checkErr(err)
+	loAddr, err := netlink.ParseAddr("127.0.0.1/8")
+	checkErr(err)
+	checkErr(netlink.AddrAdd(loLink, loAddr))
+	checkErr(netlink.LinkSetUp(loLink))
 
-	link := lo.Must1(netlink.LinkByName("eth0"))
-	addr := lo.Must1(netlink.ParseAddr(config.IPAddr))
-	gw := net.ParseIP(config.IPGw)
-	def := lo.Must1(netlink.ParseIPNet("0.0.0.0/0"))
+	// eth0
+	link, err := netlink.LinkByName("eth0")
+	checkErr(err)
+	addr, err := netlink.ParseAddr(ipAddr)
+	checkErr(err)
+	gw := net.ParseIP(ipGw)
+	def, err := netlink.ParseIPNet("0.0.0.0/0")
+	checkErr(err)
 
 	checkErr(netlink.AddrAdd(link, addr))
 	checkErr(netlink.LinkSetUp(link))

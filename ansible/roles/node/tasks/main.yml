@@ -50,7 +50,19 @@
     mode: 0644
 
 
+- name: Ensure vhost_vsock kernel module is loaded (required for VSOCK)
+  modprobe:
+    name: vhost_vsock
+    state: present
+
+- name: Persist vhost_vsock module across reboots
+  copy:
+    content: "vhost_vsock\n"
+    dest: /etc/modules-load.d/vhost_vsock.conf
+    mode: 0644
+
 - include_tasks: ./linux.yml
 - include_tasks: ./initramfs.yml
+- include_tasks: ./zeitworkctl.yml
 - include_tasks: ./routing.yml
 - include_tasks: ./deployment.yml

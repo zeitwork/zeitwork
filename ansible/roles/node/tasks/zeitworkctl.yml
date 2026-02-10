@@ -1,0 +1,15 @@
+- name: Build zeitworkctl locally
+  delegate_to: localhost
+  command:
+    cmd: go build -o /tmp/zeitworkctl ./cmd/zeitworkctl/
+    chdir: "../"
+  environment:
+    CGO_ENABLED: "0"
+    GOOS: linux
+    GOARCH: amd64
+
+- name: Upload zeitworkctl to the remote host
+  copy:
+    src: /tmp/zeitworkctl
+    dest: /data/zeitworkctl
+    mode: 0755
