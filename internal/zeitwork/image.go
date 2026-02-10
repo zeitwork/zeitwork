@@ -83,27 +83,9 @@ func (s *Service) reconcileImage(ctx context.Context, objectID uuid.UUID) error 
 	baseImagePath := fmt.Sprintf("/data/base/%s.qcow2", image.ID.String())
 	_ = os.Remove(baseImagePath)
 
-	// pack the bundle as a raw ext4 image first, then repair and convert to qcow2.
-	// virt-make-fs is known to produce ext4 images with dirty metadata (orphan inode
-	// bad checksums), so we run e2fsck before converting to qcow2.
-	rawImagePath := baseImagePath + ".raw"
-	defer os.Remove(rawImagePath)
-
-	err = s.runCommand("virt-make-fs", "--format=raw", "--type=ext4", bundlePath, "--size=+5G", rawImagePath)
+	err = s.runCommand("virt-make-fs", "--format=qcow2", "--type=ext4", bundlePath, "--size=+5G", baseImagePath)
 	if err != nil {
 		slog.Error("virt-make-fs failed", "err", err)
-		return err
-	}
-
-	err = s.runCommand("e2fsck", "-fy", rawImagePath)
-	if err != nil {
-		slog.Error("e2fsck failed", "err", err)
-		return err
-	}
-
-	err = s.runCommand("qemu-img", "convert", "-f", "raw", "-O", "qcow2", rawImagePath, baseImagePath)
-	if err != nil {
-		slog.Error("qemu-img convert failed", "err", err)
 		return err
 	}
 

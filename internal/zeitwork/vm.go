@@ -72,11 +72,7 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 
 	// if the vm already has a running cloud-hypervisor, skip
 	if _, ok := s.vmToCmd[vm.ID]; ok {
-		vm, err = s.reconcileVMUpdateStatusIf(ctx, vm, queries.VmStatusRunning, queries.VmStatusStarting)
-		if err != nil {
-			return err
-		}
-		vm, err = s.reconcileVMUpdateStatusIf(ctx, vm, queries.VmStatusRunning, queries.VmStatusPending)
+		vm, err = s.reconcileVMUpdateStatusIf(ctx, vm, queries.VmStatusRunning, queries.VmStatusStarting, queries.VmStatusPending)
 		if err != nil {
 			return err
 		}
@@ -104,12 +100,13 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 		return fmt.Errorf("base image does not exist: %s", baseDiskPath)
 	}
 
-	// Create VM work disk if it doesn't exist
-	if _, err := os.Stat(vmDiskPath); os.IsNotExist(err) {
-		err = s.runCommand("qemu-img", "create", "-f", "qcow2", "-b", baseDiskPath, "-F", "qcow2", vmDiskPath)
-		if err != nil {
-			return fmt.Errorf("failed to create VM disk: %w", err)
-		}
+	// Always recreate the CoW disk from the clean base image.
+	// If the disk exists from a previous run, it may have a dirty ext4 journal
+	// from an unclean shutdown (SIGKILL). A fresh CoW snapshot is instant and guaranteed clean.
+	_ = os.Remove(vmDiskPath)
+	err = s.runCommand("qemu-img", "create", "-f", "qcow2", "-b", baseDiskPath, "-F", "qcow2", vmDiskPath)
+	if err != nil {
+		return fmt.Errorf("failed to create VM disk: %w", err)
 	}
 
 	vmIp := vm.IpAddress
