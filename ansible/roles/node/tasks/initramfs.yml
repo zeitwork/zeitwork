@@ -13,10 +13,26 @@
     GOOS: linux
     GOARCH: amd64
 
+- name: Build initexec locally
+  delegate_to: localhost
+  command:
+    cmd: go build -o /tmp/initexec ./cmd/initexec/
+    chdir: "../"
+  environment:
+    CGO_ENABLED: "0"
+    GOOS: linux
+    GOARCH: amd64
+
 - name: Copy initagent
   copy:
     src: /tmp/initagent
     dest: /tmp/initramfs/init
+    mode: 0755
+
+- name: Copy initexec
+  copy:
+    src: /tmp/initexec
+    dest: /tmp/initramfs/usr/bin/initexec
     mode: 0755
 
 - name: Create some important directories
@@ -42,6 +58,7 @@
     url: https://busybox.net/downloads/binaries/1.35.0-x86_64-linux-musl/busybox
     dest: /data/busybox
     mode: 0755
+    timeout: 60
 
 - name: Copy busybox into initramfs
   copy:

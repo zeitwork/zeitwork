@@ -77,12 +77,13 @@ func handleExec(w http.ResponseWriter, r *http.Request) {
 
 	// Wrap command with nsenter to join the customer app's PID+mount namespace,
 	// dropping to the same UID/GID as the customer process.
+	// Busybox nsenter uses -S/-G for uid/gid (not --setuid/--setgid which are util-linux).
 	nsenterArgs := []string{
 		"nsenter",
-		"--target", strconv.Itoa(customerPID),
-		"--pid", "--mount",
-		"--setuid", strconv.FormatUint(uint64(customerUID), 10),
-		"--setgid", strconv.FormatUint(uint64(customerGID), 10),
+		"-t", strconv.Itoa(customerPID),
+		"-p", "-m",
+		"-S", strconv.FormatUint(uint64(customerUID), 10),
+		"-G", strconv.FormatUint(uint64(customerGID), 10),
 		"--",
 	}
 	cmd := &exec.Cmd{

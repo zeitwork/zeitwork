@@ -3,12 +3,12 @@ package main
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"log/slog"
 	"net"
 	"os"
 	"os/exec"
+	"strconv"
 	"syscall"
 
 	"github.com/vishvananda/netlink"
@@ -88,12 +88,15 @@ func main() {
 	checkErr(syscall.Mount("/proc", "/mnt/rootfs/proc", "", syscall.MS_MOVE, ""))
 	checkErr(syscall.Mount("cgroup2", "/mnt/rootfs/sys/fs/cgroup", "cgroup2", 0, ""))
 
-	// Bind-mount busybox into the container rootfs for nsenter/exec.
-	// The binary must be named "busybox" so the multi-call dispatch works
-	// when invoked directly (e.g., from shell scripts).
+	// Bind-mount helper binaries into the container rootfs.
 	checkErr(os.MkdirAll("/mnt/rootfs/.zeitwork", 0755))
+	// busybox — needed for nsenter in exec sessions. Must be named "busybox"
+	// so the multi-call dispatch works when invoked directly.
 	checkErr(os.WriteFile("/mnt/rootfs/.zeitwork/busybox", nil, 0755))
 	checkErr(syscall.Mount("/usr/bin/busybox", "/mnt/rootfs/.zeitwork/busybox", "", syscall.MS_BIND, ""))
+	// initexec — mounts /proc, drops to target UID/GID, execs customer command.
+	checkErr(os.WriteFile("/mnt/rootfs/.zeitwork/initexec", nil, 0755))
+	checkErr(syscall.Mount("/usr/bin/initexec", "/mnt/rootfs/.zeitwork/initexec", "", syscall.MS_BIND, ""))
 
 	checkErr(os.Chdir("/mnt/rootfs"))
 	checkErr(syscall.Mount(".", "/", "", syscall.MS_MOVE, ""))
@@ -112,21 +115,18 @@ func main() {
 	customerUID = ociConfig.Process.User.UID
 	customerGID = ociConfig.Process.User.GID
 
-	// Two-phase wrapper: mount /proc as root (requires CAP_SYS_ADMIN), then
-	// drop to the target UID/GID before exec'ing the customer command.
-	var script string
-	if customerUID == 0 && customerGID == 0 {
-		script = `/.zeitwork/busybox mount -t proc proc /proc && cd "$0" && exec "$@"`
-	} else {
-		script = fmt.Sprintf(
-			`/.zeitwork/busybox mount -t proc proc /proc && cd "$0" && shift && exec /.zeitwork/busybox setpriv --reuid=%d --regid=%d --clear-groups -- "$@"`,
-			customerUID, customerGID,
-		)
+	// initexec handles mount /proc, privilege drop, and exec in pure Go syscalls.
+	// Usage: initexec <uid> <gid> <cwd> -- <command> [args...]
+	initexecArgs := []string{
+		"initexec",
+		strconv.FormatUint(uint64(customerUID), 10),
+		strconv.FormatUint(uint64(customerGID), 10),
+		ociConfig.Process.Cwd,
+		"--",
 	}
-	wrapperArgs := append([]string{"sh", "-c", script, ociConfig.Process.Cwd}, ociConfig.Process.Args...)
 	cmd := &exec.Cmd{
-		Path: "/.zeitwork/busybox",
-		Args: wrapperArgs,
+		Path: "/.zeitwork/initexec",
+		Args: append(initexecArgs, ociConfig.Process.Args...),
 		Env:  env,
 		SysProcAttr: &syscall.SysProcAttr{
 			Cloneflags: syscall.CLONE_NEWPID | syscall.CLONE_NEWNS,
