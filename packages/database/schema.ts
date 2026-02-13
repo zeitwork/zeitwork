@@ -207,6 +207,9 @@ export const images = pgTable(
     // digest: text().notNull(), // e.g. sha256:1234567890abcdef
     // output
     diskImageKey: text(), // if this is null we haven't created the disk image yet
+    // build coordination — prevents multiple servers from building the same image
+    buildingBy: uuid().references(() => servers.id), // server currently building this image (null = not building)
+    buildingStartedAt: timestamp({ withTimezone: true }), // when the build started (used to detect stale claims)
     //
     ...timestamps,
   },

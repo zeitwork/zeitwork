@@ -824,6 +824,19 @@
       "table": "domains"
     },
     {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "txt_verification_required",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "domains"
+    },
+    {
       "type": "uuid",
       "typeSchema": null,
       "notNull": true,

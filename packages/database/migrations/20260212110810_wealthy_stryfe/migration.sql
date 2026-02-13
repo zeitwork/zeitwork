@@ -11,5 +11,8 @@ CREATE TABLE "servers" (
 	"deleted_at" timestamp with time zone
 );
 --> statement-breakpoint
+ALTER TABLE "images" ADD COLUMN "building_by" uuid;--> statement-breakpoint
+ALTER TABLE "images" ADD COLUMN "building_started_at" timestamp with time zone;--> statement-breakpoint
 ALTER TABLE "vms" ADD COLUMN "server_id" uuid;--> statement-breakpoint
+ALTER TABLE "images" ADD CONSTRAINT "images_building_by_servers_id_fkey" FOREIGN KEY ("building_by") REFERENCES "servers"("id");--> statement-breakpoint
 ALTER TABLE "vms" ADD CONSTRAINT "vms_server_id_servers_id_fkey" FOREIGN KEY ("server_id") REFERENCES "servers"("id");

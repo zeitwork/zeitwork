@@ -1,9 +1,9 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "22f2545d-f650-4a07-a08f-6845209a01b2",
+  "id": "47b18a26-5e8f-412f-b9b5-38b5e1740797",
   "prevIds": [
-    "11fd1d0d-109b-4909-b738-98c423cfd8cf"
+    "100231bf-5b51-487a-8a20-c74b171c45e6"
   ],
   "ddl": [
     {
@@ -81,12 +81,6 @@
     },
     {
       "isRlsEnabled": false,
-      "name": "deployment_logs",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
-      "isRlsEnabled": false,
       "name": "deployments",
       "entityType": "tables",
       "schema": "public"
@@ -142,6 +136,12 @@
     {
       "isRlsEnabled": false,
       "name": "users",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "vm_logs",
       "entityType": "tables",
       "schema": "public"
     },
@@ -488,84 +488,6 @@
       "entityType": "columns",
       "schema": "public",
       "table": "certmagic_locks"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "deployment_logs"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "deployment_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "deployment_logs"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "message",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "deployment_logs"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "level",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "deployment_logs"
-    },
-    {
-      "type": "uuid",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "organisation_id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "deployment_logs"
-    },
-    {
-      "type": "timestamp with time zone",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "now()",
-      "generated": null,
-      "identity": null,
-      "name": "created_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "deployment_logs"
     },
     {
       "type": "uuid",
@@ -1205,6 +1127,32 @@
       "table": "images"
     },
     {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "building_by",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "images"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "building_started_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "images"
+    },
+    {
       "type": "timestamp with time zone",
       "typeSchema": null,
       "notNull": true,
@@ -1787,6 +1735,71 @@
       "name": "id",
       "entityType": "columns",
       "schema": "public",
+      "table": "vm_logs"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "vm_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "vm_logs"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "message",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "vm_logs"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "level",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "vm_logs"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "vm_logs"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
       "table": "vms"
     },
     {
@@ -2128,40 +2141,6 @@
     {
       "nameExplicit": false,
       "columns": [
-        "deployment_id"
-      ],
-      "schemaTo": "public",
-      "tableTo": "deployments",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "NO ACTION",
-      "name": "deployment_logs_deployment_id_deployments_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "deployment_logs"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
-        "organisation_id"
-      ],
-      "schemaTo": "public",
-      "tableTo": "organisations",
-      "columnsTo": [
-        "id"
-      ],
-      "onUpdate": "NO ACTION",
-      "onDelete": "NO ACTION",
-      "name": "deployment_logs_organisation_id_organisations_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "deployment_logs"
-    },
-    {
-      "nameExplicit": false,
-      "columns": [
         "project_id"
       ],
       "schemaTo": "public",
@@ -2366,6 +2345,23 @@
     {
       "nameExplicit": false,
       "columns": [
+        "building_by"
+      ],
+      "schemaTo": "public",
+      "tableTo": "servers",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "images_building_by_servers_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "images"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
         "user_id"
       ],
       "schemaTo": "public",
@@ -2430,6 +2426,23 @@
       "entityType": "fks",
       "schema": "public",
       "table": "projects"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "vm_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "vms",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "vm_logs_vm_id_vms_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "vm_logs"
     },
     {
       "nameExplicit": false,
@@ -2503,16 +2516,6 @@
       "name": "certmagic_locks_pkey",
       "schema": "public",
       "table": "certmagic_locks",
-      "entityType": "pks"
-    },
-    {
-      "columns": [
-        "id"
-      ],
-      "nameExplicit": false,
-      "name": "deployment_logs_pkey",
-      "schema": "public",
-      "table": "deployment_logs",
       "entityType": "pks"
     },
     {
@@ -2620,6 +2623,16 @@
         "id"
       ],
       "nameExplicit": false,
+      "name": "deployment_logs_pkey",
+      "schema": "public",
+      "table": "vm_logs",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
       "name": "vms_pkey",
       "schema": "public",
       "table": "vms",
@@ -2673,6 +2686,17 @@
       "entityType": "uniques",
       "schema": "public",
       "table": "projects"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "vm_id"
+      ],
+      "nullsNotDistinct": false,
+      "name": "deployments_vm_id_key",
+      "schema": "public",
+      "table": "deployments",
+      "entityType": "uniques"
     },
     {
       "nameExplicit": false,

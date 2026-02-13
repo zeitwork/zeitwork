@@ -289,14 +289,16 @@ type GithubInstallation struct {
 }
 
 type Image struct {
-	ID           uuid.UUID          `json:"id"`
-	Registry     string             `json:"registry"`
-	Repository   string             `json:"repository"`
-	Tag          string             `json:"tag"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
-	DiskImageKey pgtype.Text        `json:"disk_image_key"`
+	ID                uuid.UUID          `json:"id"`
+	Registry          string             `json:"registry"`
+	Repository        string             `json:"repository"`
+	Tag               string             `json:"tag"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt         pgtype.Timestamptz `json:"deleted_at"`
+	DiskImageKey      pgtype.Text        `json:"disk_image_key"`
+	BuildingBy        uuid.UUID          `json:"building_by"`
+	BuildingStartedAt pgtype.Timestamptz `json:"building_started_at"`
 }
 
 type Organisation struct {
