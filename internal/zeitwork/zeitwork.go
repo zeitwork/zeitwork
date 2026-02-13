@@ -15,6 +15,7 @@ import (
 	"github.com/zeitwork/zeitwork/internal/database"
 	"github.com/zeitwork/zeitwork/internal/listener"
 	"github.com/zeitwork/zeitwork/internal/reconciler"
+	"github.com/zeitwork/zeitwork/internal/shared/base58"
 	dnsresolver "github.com/zeitwork/zeitwork/internal/shared/dns"
 	"github.com/zeitwork/zeitwork/internal/shared/github"
 	"github.com/zeitwork/zeitwork/internal/shared/uuid"
@@ -166,7 +167,9 @@ func (s *Service) Start(ctx context.Context) error {
 	// Create WAL listener with callbacks to schedulers.
 	// Following K8s pattern: when an entity changes, schedule self + notify parents via reverse lookups.
 	walListener := listener.New(listener.Config{
-		DatabaseURL: s.cfg.DatabaseDirectURL,
+		DatabaseURL:         s.cfg.DatabaseDirectURL,
+		ReplicationSlotName: base58.Encode(server.ID.Bytes[:]),
+		PublicationName:     base58.Encode(server.ID.Bytes[:]),
 
 		OnDeployment: func(ctx context.Context, id uuid.UUID) {
 			s.deploymentScheduler.Schedule(id, time.Now())

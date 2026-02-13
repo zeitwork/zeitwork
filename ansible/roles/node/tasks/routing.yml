@@ -1,5 +1,5 @@
 - name: Copy nftables configuration
-  copy:
+  template:
     src: nftables.conf
     dest: /etc/nftables.conf
     owner: root

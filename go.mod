@@ -17,7 +17,6 @@ require (
 	github.com/lmittmann/tint v1.1.2
 	github.com/mdlayher/vsock v1.2.1
 	github.com/minio/minio-go/v7 v7.0.98
-	github.com/samber/lo v1.52.0
 	github.com/vishvananda/netlink v1.3.1
 	golang.org/x/term v0.39.0
 )
@@ -37,7 +36,6 @@ require (
 	github.com/moby/sys/atomicwriter v0.1.0 // indirect
 	github.com/morikuni/aec v1.0.0 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
-	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	github.com/rs/xid v1.6.0 // indirect
 	github.com/tinylib/msgp v1.6.1 // indirect
 	github.com/vishvananda/netns v0.0.5 // indirect

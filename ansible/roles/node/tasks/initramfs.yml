@@ -23,18 +23,6 @@
     GOOS: linux
     GOARCH: amd64
 
-- name: Copy initagent
-  copy:
-    src: /tmp/initagent
-    dest: /tmp/initramfs/init
-    mode: 0755
-
-- name: Copy initexec
-  copy:
-    src: /tmp/initexec
-    dest: /tmp/initramfs/usr/bin/initexec
-    mode: 0755
-
 - name: Create some important directories
   file:
     path: /tmp/initramfs/{{item}}
@@ -46,6 +34,18 @@
     - sys
     - dev
     - usr/bin
+
+- name: Copy initagent
+  copy:
+    src: /tmp/initagent
+    dest: /tmp/initramfs/init
+    mode: 0755
+
+- name: Copy initexec
+  copy:
+    src: /tmp/initexec
+    dest: /tmp/initramfs/usr/bin/initexec
+    mode: 0755
 
 - name: Check if static busybox exists
   stat:

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -60,12 +61,6 @@ func main() {
 		panic("failed to parse config: " + err.Error())
 	}
 
-	// Ensure the /data directory exists before any submodule tries to use it.
-	// This is the single place where we create it — submodules trust it's here.
-	if err := os.MkdirAll("/data", 0o755); err != nil {
-		panic("failed to create /data directory: " + err.Error())
-	}
-
 	// Load or create stable server identity
 	serverID, err := zeitwork.LoadOrCreateServerID()
 	if err != nil {
@@ -120,7 +115,7 @@ func main() {
 
 	go func() {
 		err = service.Start(ctx)
-		if err != nil && err != context.Canceled {
+		if err != nil && !errors.Is(context.Canceled, err) {
 			slog.Error("service error", "err", err)
 		}
 	}()
