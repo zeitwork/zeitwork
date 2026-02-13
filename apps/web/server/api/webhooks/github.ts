@@ -143,6 +143,11 @@ async function handleInstallationEvent(payload: any) {
 }
 
 async function handlePushEvent(payload: any) {
+  const ref = payload.ref;
+  if (ref !== "refs/heads/main") {
+    return;
+  }
+
   const installationId = payload.installation?.id;
   const githubOwner = payload.repository?.owner?.login;
   const githubRepo = payload.repository?.name;
