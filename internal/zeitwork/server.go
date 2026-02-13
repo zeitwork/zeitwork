@@ -4,11 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"os"
-	"os/exec"
 	"strings"
 	"time"
 
+	"github.com/vishvananda/netlink"
 	"github.com/zeitwork/zeitwork/internal/database/queries"
 	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 )
@@ -434,6 +435,7 @@ func (s *Service) notifyRouteChange() {
 
 // syncHostRoutes queries the servers table and configures kernel routes
 // so this server can reach VMs on other servers via the VLAN.
+// Uses vishvananda/netlink for direct netlink calls instead of shelling out.
 func (s *Service) syncHostRoutes(ctx context.Context) error {
 	servers, err := s.db.ServerFindActive(ctx)
 	if err != nil {
@@ -446,20 +448,27 @@ func (s *Service) syncHostRoutes(ctx context.Context) error {
 			continue
 		}
 
-		// Add route: ip route replace <server_ip_range> via <server_internal_ip>
-		// Using "replace" is idempotent — safe to call repeatedly.
-		rangeStr := server.IpRange.String()
-		viaIP := server.InternalIp
+		// Convert netip.Prefix to *net.IPNet for the netlink API
+		prefix := server.IpRange.Masked()
+		dst := &net.IPNet{
+			IP:   prefix.Addr().AsSlice(),
+			Mask: net.CIDRMask(prefix.Bits(), prefix.Addr().BitLen()),
+		}
+		gw := net.ParseIP(server.InternalIp)
 
-		err := exec.CommandContext(ctx, "ip", "route", "replace", rangeStr, "via", viaIP).Run()
+		// RouteReplace is idempotent — adds the route or updates if it exists.
+		err := netlink.RouteReplace(&netlink.Route{
+			Dst: dst,
+			Gw:  gw,
+		})
 		if err != nil {
 			slog.Error("failed to add host route",
-				"range", rangeStr,
-				"via", viaIP,
+				"range", server.IpRange,
+				"via", server.InternalIp,
 				"server_id", server.ID,
 				"err", err)
 		} else {
-			slog.Debug("synced host route", "range", rangeStr, "via", viaIP)
+			slog.Debug("synced host route", "range", server.IpRange, "via", server.InternalIp)
 		}
 	}
 
