@@ -152,7 +152,7 @@ func (s *Service) Start(ctx context.Context) error {
 
 	// Start server lifecycle loops
 	go s.heartbeatLoop(ctx)
-	go s.deadServerDetectionLoop(ctx)
+	go s.clusterDutyLoop(ctx)
 	go s.drainMonitorLoop(ctx)
 	go s.hostRouteSyncLoop(ctx)
 

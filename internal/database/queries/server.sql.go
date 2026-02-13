@@ -13,6 +13,18 @@ import (
 	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 )
 
+const releaseSessionAdvisoryLock = `-- name: ReleaseSessionAdvisoryLock :one
+SELECT pg_advisory_unlock(hashtext($1)) as released
+`
+
+// Release a session-scoped advisory lock.
+func (q *Queries) ReleaseSessionAdvisoryLock(ctx context.Context, hashtext string) (bool, error) {
+	row := q.db.QueryRow(ctx, releaseSessionAdvisoryLock, hashtext)
+	var released bool
+	err := row.Scan(&released)
+	return released, err
+}
+
 const serverAllocateIPRange = `-- name: ServerAllocateIPRange :one
 WITH lock AS (
     SELECT pg_advisory_xact_lock(hashtext('server_ip_range_allocation'))
@@ -273,6 +285,20 @@ SELECT pg_try_advisory_xact_lock(hashtext($1)) as acquired
 // Returns true if the lock was acquired, false if another session holds it.
 func (q *Queries) TryAdvisoryLock(ctx context.Context, hashtext string) (bool, error) {
 	row := q.db.QueryRow(ctx, tryAdvisoryLock, hashtext)
+	var acquired bool
+	err := row.Scan(&acquired)
+	return acquired, err
+}
+
+const trySessionAdvisoryLock = `-- name: TrySessionAdvisoryLock :one
+SELECT pg_try_advisory_lock(hashtext($1)) as acquired
+`
+
+// Try to acquire a session-scoped advisory lock (non-blocking).
+// Lock is held until explicitly released or the connection is closed.
+// Used for persistent leader election — run on a dedicated connection.
+func (q *Queries) TrySessionAdvisoryLock(ctx context.Context, hashtext string) (bool, error) {
+	row := q.db.QueryRow(ctx, trySessionAdvisoryLock, hashtext)
 	var acquired bool
 	err := row.Scan(&acquired)
 	return acquired, err

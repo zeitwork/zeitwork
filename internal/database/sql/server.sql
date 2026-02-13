@@ -60,6 +60,16 @@ UPDATE servers SET status = 'drained', updated_at = now() WHERE id = $1;
 -- Returns true if the lock was acquired, false if another session holds it.
 SELECT pg_try_advisory_xact_lock(hashtext($1)) as acquired;
 
+-- name: TrySessionAdvisoryLock :one
+-- Try to acquire a session-scoped advisory lock (non-blocking).
+-- Lock is held until explicitly released or the connection is closed.
+-- Used for persistent leader election — run on a dedicated connection.
+SELECT pg_try_advisory_lock(hashtext($1)) as acquired;
+
+-- name: ReleaseSessionAdvisoryLock :one
+-- Release a session-scoped advisory lock.
+SELECT pg_advisory_unlock(hashtext($1)) as released;
+
 -- name: ServerAllocateIPRange :one
 -- Allocate the next available /20 IP range for a new server.
 -- First server gets 10.1.0.0/20, second gets 10.1.16.0/20, etc.

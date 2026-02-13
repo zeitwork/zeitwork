@@ -22,7 +22,8 @@ const (
 	deadThreshold           = 60 * time.Second
 	drainPollInterval       = 5 * time.Second
 	drainHealthCheckTimeout = 5 * time.Minute
-	routeSyncInterval       = 30 * time.Second
+	routeSyncInterval       = 5 * time.Minute // safety net only — WAL OnServer handles immediate reactivity
+	leaderRetryInterval     = 5 * time.Second
 )
 
 // LoadOrCreateServerID reads the server ID from disk, or generates and persists a new one.
@@ -118,8 +119,57 @@ func (s *Service) heartbeatLoop(ctx context.Context) {
 	}
 }
 
-// deadServerDetectionLoop periodically checks for dead servers and triggers failover.
-func (s *Service) deadServerDetectionLoop(ctx context.Context) {
+// clusterDutyLoop tries to become the cluster leader using a session-scoped
+// advisory lock on a dedicated database connection. If this server becomes the
+// leader, it runs cluster-wide duties (dead server detection, failover) until
+// the context is cancelled or the connection drops. If another server already
+// holds the lock, this server retries periodically until it can acquire it.
+func (s *Service) clusterDutyLoop(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+		}
+
+		s.tryBecomeClusterLeader(ctx)
+
+		// If we get here, we either failed to acquire the lock or lost leadership.
+		// Wait before retrying.
+		select {
+		case <-ctx.Done():
+			return
+		case <-time.After(leaderRetryInterval):
+		}
+	}
+}
+
+// tryBecomeClusterLeader acquires a dedicated connection, tries to become the
+// cluster leader, and runs cluster duties if successful. Returns when leadership
+// is lost (connection error, context cancelled, etc.).
+func (s *Service) tryBecomeClusterLeader(ctx context.Context) {
+	conn, err := s.db.Pool.Acquire(ctx)
+	if err != nil {
+		slog.Error("failed to acquire connection for cluster leader election", "err", err)
+		return
+	}
+	defer conn.Release()
+
+	// Try to acquire a session-scoped advisory lock (non-blocking).
+	// The lock is held as long as this connection stays open.
+	q := queries.New(conn)
+	acquired, err := q.TrySessionAdvisoryLock(ctx, "cluster_leader")
+	if err != nil {
+		slog.Error("failed to try cluster leader lock", "err", err)
+		return
+	}
+	if !acquired {
+		return // Another server is the leader
+	}
+
+	slog.Info("this server is now the cluster leader", "server_id", s.serverID)
+
+	// Run cluster duties until context is cancelled
 	ticker := time.NewTicker(deadDetectionInterval)
 	defer ticker.Stop()
 
@@ -136,9 +186,9 @@ func (s *Service) deadServerDetectionLoop(ctx context.Context) {
 }
 
 // detectAndFailoverDeadServers finds dead servers and replaces their VMs.
-// Uses an advisory lock so only one server runs failover at a time.
-// Everything runs in a single transaction: if any step fails, the whole
-// operation rolls back and will be retried on the next tick.
+// Only called by the cluster leader. Everything runs in a single transaction:
+// if any step fails, the whole operation rolls back and will be retried on
+// the next tick.
 func (s *Service) detectAndFailoverDeadServers(ctx context.Context) error {
 	deadServers, err := s.db.ServerFindDead(ctx)
 	if err != nil {
@@ -149,17 +199,7 @@ func (s *Service) detectAndFailoverDeadServers(ctx context.Context) error {
 		return nil
 	}
 
-	err = s.db.WithTx(ctx, func(q *queries.Queries) error {
-		// Advisory lock — only one server runs failover at a time.
-		// Transaction-scoped: released automatically on commit/rollback.
-		acquired, err := q.TryAdvisoryLock(ctx, "dead_server_failover")
-		if err != nil {
-			return err
-		}
-		if !acquired {
-			return nil // Another server is handling failover
-		}
-
+	return s.db.WithTx(ctx, func(q *queries.Queries) error {
 		for _, deadServer := range deadServers {
 			slog.Warn("detected dead server", "server_id", deadServer.ID, "hostname", deadServer.Hostname,
 				"last_heartbeat", deadServer.LastHeartbeatAt)
@@ -180,11 +220,6 @@ func (s *Service) detectAndFailoverDeadServers(ctx context.Context) error {
 
 		return nil
 	})
-	if err != nil {
-		return err
-	}
-
-	return nil
 }
 
 // replaceDeadServerVMs soft-deletes VMs on a dead server and creates fresh
