@@ -20,6 +20,17 @@ services:
       - MINIO_ACCESS_KEY=minioadmin
       - MINIO_SECRET_KEY=minioadmin
     command: server /data
+  createbuckets:
+    image: minio/mc:latest
+    depends_on:
+      - s3
+    entrypoint: >
+      /bin/sh -c "
+      sleep 2;
+      mc alias set local http://s3:9000 minioadmin minioadmin;
+      mc mb --ignore-existing local/zeitwork;
+      exit 0;
+      "
   # nats:
   #   image: nats:2-alpine
   #   ports:

@@ -25,7 +25,9 @@ type S3 struct {
 	bucket string
 }
 
-// NewS3 creates a new S3 client and ensures the bucket exists.
+// NewS3 creates a new S3 client and verifies the bucket exists. The bucket
+// must be provisioned ahead of time — via infrastructure tooling (Terraform,
+// AWS console, etc.) or docker-compose for local development.
 func NewS3(cfg S3Config) (*S3, error) {
 	client, err := minio.New(cfg.Endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""),
@@ -35,17 +37,15 @@ func NewS3(cfg S3Config) (*S3, error) {
 		return nil, fmt.Errorf("failed to create S3 client: %w", err)
 	}
 
-	// Ensure bucket exists
-	ctx := context.Background()
-	exists, err := client.BucketExists(ctx, cfg.Bucket)
+	// Verify the bucket exists — fail fast rather than breaking later on
+	// upload/download. The application never creates buckets; that's an
+	// infrastructure concern.
+	exists, err := client.BucketExists(context.Background(), cfg.Bucket)
 	if err != nil {
-		return nil, fmt.Errorf("failed to check bucket existence: %w", err)
+		return nil, fmt.Errorf("failed to check S3 bucket: %w", err)
 	}
 	if !exists {
-		if err := client.MakeBucket(ctx, cfg.Bucket, minio.MakeBucketOptions{}); err != nil {
-			return nil, fmt.Errorf("failed to create bucket %s: %w", cfg.Bucket, err)
-		}
-		slog.Info("created S3 bucket", "bucket", cfg.Bucket)
+		return nil, fmt.Errorf("S3 bucket %q does not exist — create it before starting the server", cfg.Bucket)
 	}
 
 	return &S3{
