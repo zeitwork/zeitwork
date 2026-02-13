@@ -304,11 +304,6 @@ func (s *Service) replaceVM(ctx context.Context, q *queries.Queries, oldVM queri
 // - Syncs host routes so this server can reach VMs on the changed server
 // - If the reconciled server is this server and it's draining, starts drain
 func (s *Service) reconcileServer(ctx context.Context, objectID uuid.UUID) error {
-	// Sync host routes - any server change may affect routing
-	if err := s.syncHostRoutes(ctx); err != nil {
-		return fmt.Errorf("failed to sync host routes: %w", err)
-	}
-
 	// Check if this server should drain (only relevant for our own server ID)
 	if objectID == s.serverID {
 		server, err := s.db.ServerFindByID(ctx, s.serverID)
@@ -318,6 +313,11 @@ func (s *Service) reconcileServer(ctx context.Context, objectID uuid.UUID) error
 		if server.Status == queries.ServerStatusDraining {
 			slog.Info("server is draining, starting migration")
 			s.drainServer(ctx)
+		}
+	} else {
+		// Sync host routes - any server change may affect routing
+		if err := s.syncHostRoutes(ctx, objectID); err != nil {
+			return fmt.Errorf("failed to sync host routes: %w", err)
 		}
 	}
 
@@ -460,40 +460,32 @@ func (s *Service) notifyRouteChange() {
 // syncHostRoutes queries the servers table and configures kernel routes
 // so this server can reach VMs on other servers via the VLAN.
 // Uses vishvananda/netlink for direct netlink calls instead of shelling out.
-func (s *Service) syncHostRoutes(ctx context.Context) error {
-	servers, err := s.db.ServerFindActive(ctx)
+func (s *Service) syncHostRoutes(ctx context.Context, objectID uuid.UUID) error {
+	server, err := s.db.ServerFindByID(ctx, objectID)
 	if err != nil {
 		return fmt.Errorf("failed to find active servers: %w", err)
 	}
 
-	for _, server := range servers {
-		// Skip self
-		if server.ID == s.serverID {
-			continue
-		}
+	if server.Status != queries.ServerStatusActive {
+		return nil
+	}
 
-		// Convert netip.Prefix to *net.IPNet for the netlink API
-		prefix := server.IpRange.Masked()
-		dst := &net.IPNet{
-			IP:   prefix.Addr().AsSlice(),
-			Mask: net.CIDRMask(prefix.Bits(), prefix.Addr().BitLen()),
-		}
-		gw := net.ParseIP(server.InternalIp)
+	// Convert netip.Prefix to *net.IPNet for the netlink API
+	prefix := server.IpRange.Masked()
+	dst := &net.IPNet{
+		IP:   prefix.Addr().AsSlice(),
+		Mask: net.CIDRMask(prefix.Bits(), prefix.Addr().BitLen()),
+	}
+	gw := net.ParseIP(server.InternalIp)
 
-		// RouteReplace is idempotent — adds the route or updates if it exists.
-		err := netlink.RouteReplace(&netlink.Route{
-			Dst: dst,
-			Gw:  gw,
-		})
-		if err != nil {
-			slog.Error("failed to add host route",
-				"range", server.IpRange,
-				"via", server.InternalIp,
-				"server_id", server.ID,
-				"err", err)
-		} else {
-			slog.Debug("synced host route", "range", server.IpRange, "via", server.InternalIp)
-		}
+	// RouteReplace is idempotent — adds the route or updates if it exists.
+	slog.Debug("syncing host route", "range", server.IpRange, "via", server.InternalIp)
+	err = netlink.RouteReplace(&netlink.Route{
+		Dst: dst,
+		Gw:  gw,
+	})
+	if err != nil {
+		return err
 	}
 
 	return nil
