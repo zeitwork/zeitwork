@@ -142,9 +142,7 @@ func (q *Queries) ServerFindDead(ctx context.Context) ([]Server, error) {
 }
 
 const serverFindLeastLoaded = `-- name: ServerFindLeastLoaded :one
-SELECT s.id, s.hostname, s.internal_ip, s.ip_range, s.status,
-       s.last_heartbeat_at, s.created_at, s.updated_at, s.deleted_at,
-       COUNT(v.id) as vm_count
+SELECT s.id, s.hostname, s.internal_ip, s.ip_range, s.status, s.last_heartbeat_at, s.created_at, s.updated_at, s.deleted_at, COUNT(v.id) as vm_count
 FROM servers s
 LEFT JOIN vms v ON v.server_id = s.id
     AND v.deleted_at IS NULL

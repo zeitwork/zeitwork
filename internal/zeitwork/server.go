@@ -35,13 +35,13 @@ func LoadOrCreateServerID() (uuid.UUID, error) {
 			slog.Info("loaded server ID from disk", "server_id", id)
 			return id, nil
 		}
-		slog.Warn("corrupt server-id file, generating new one", "err", err)
+		// A corrupt server-id file indicates something is truly wrong with the node.
+		// Do not silently regenerate — fail hard so the operator can investigate.
+		return uuid.UUID{}, fmt.Errorf("corrupt server-id file at %s: %w", serverIDPath, err)
 	}
 
+	// File doesn't exist — first boot, generate a new server ID
 	id := uuid.New()
-	if err := os.MkdirAll("/data", 0o755); err != nil {
-		return uuid.UUID{}, fmt.Errorf("failed to create /data directory: %w", err)
-	}
 	if err := os.WriteFile(serverIDPath, []byte(id.String()), 0o644); err != nil {
 		return uuid.UUID{}, fmt.Errorf("failed to write server-id: %w", err)
 	}

@@ -94,7 +94,7 @@ func (s *S3) Exists(ctx context.Context, key string) (bool, error) {
 	_, err := s.client.StatObject(ctx, s.bucket, key, minio.StatObjectOptions{})
 	if err != nil {
 		errResp := minio.ToErrorResponse(err)
-		if errResp.Code == "NoSuchKey" {
+		if errResp.Code == minio.NoSuchKey {
 			return false, nil
 		}
 		return false, fmt.Errorf("failed to stat S3 object: %w", err)

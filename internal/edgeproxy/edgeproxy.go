@@ -21,7 +21,9 @@ type Config struct {
 	ACMEEmail   string // Email for Let's Encrypt account
 	ACMEStaging bool   // Use Let's Encrypt staging environment
 
-	// Shared database connection (from main process, no longer creates its own)
+	// DB is the shared database connection from the main process.
+	// The edge proxy does not create its own connection because the WAL listener
+	// and zeitwork service coordinate route-change notifications through the same DB.
 	DB *database.DB
 
 	// RouteChangeNotify receives signals when routes may have changed
@@ -91,8 +93,10 @@ func NewService(cfg Config, logger *slog.Logger) (*Service, error) {
 
 	certmagicConfig.Issuers = []certmagic.Issuer{issuer}
 
-	// Enable on-demand TLS for automatic certificate acquisition
+	// Enable on-demand TLS for automatic certificate acquisition.
+	// This is the correct approach for TLS-ALPN-01 challenges.
 	certmagicConfig.OnDemand = &certmagic.OnDemandConfig{
+		// DecisionFunc checks if we should obtain a certificate for this domain
 		DecisionFunc: func(ctx context.Context, name string) error {
 			domainLogger := logger.With("domain", name)
 
@@ -192,8 +196,6 @@ func (s *Service) Stop(ctx context.Context) error {
 		}
 	}
 
-	// Don't close DB — it's shared with the main process
-
 	return nil
 }
 
@@ -205,6 +207,7 @@ func (s *Service) loadRoutes(ctx context.Context) error {
 
 	newRoutes := make(map[string]Route)
 	for _, row := range rows {
+		// Skip routes where VM doesn't have an IP yet
 		if !row.VmIp.IsValid() {
 			continue
 		}

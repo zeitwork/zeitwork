@@ -28,11 +28,12 @@ type Config struct {
 	DatabaseDirectURL string // Direct PG connection for WAL replication listener (NOT PgBouncer)
 
 	// Docker registry configuration
+	// For GHCR, URL is "ghcr.io" and Username is the org/user (e.g., "zeitwork")
 	DockerRegistryURL      string
 	DockerRegistryUsername string
-	DockerRegistryPAT      string
+	DockerRegistryPAT      string // GitHub PAT with write:packages scope for pushing images
 
-	// GitHub App credentials
+	// GitHub App credentials for fetching source code
 	GitHubAppID         string
 	GitHubAppPrivateKey string // base64-encoded
 
@@ -155,12 +156,14 @@ func (s *Service) Start(ctx context.Context) error {
 	go s.drainMonitorLoop(ctx)
 	go s.hostRouteSyncLoop(ctx)
 
-	// Bootstrap: schedule all existing entities once on startup
+	// Bootstrap: schedule all existing entities once on startup.
+	// This ensures we don't miss any changes that happened while we were down.
 	if err := s.bootstrap(ctx); err != nil {
 		return fmt.Errorf("failed to bootstrap: %w", err)
 	}
 
-	// Create WAL listener with callbacks to schedulers
+	// Create WAL listener with callbacks to schedulers.
+	// Following K8s pattern: when an entity changes, schedule self + notify parents via reverse lookups.
 	walListener := listener.New(listener.Config{
 		DatabaseURL: s.cfg.DatabaseDirectURL,
 
@@ -172,10 +175,12 @@ func (s *Service) Start(ctx context.Context) error {
 		OnBuild: func(ctx context.Context, id uuid.UUID) {
 			s.buildScheduler.Schedule(id, time.Now())
 
+			// Notify deployments that reference this build
 			if deployments, err := s.db.DeploymentFindByBuildID(ctx, id); err != nil {
 				slog.Error("failed to find deployments by build_id", "build_id", id, "error", err)
 			} else {
 				for _, d := range deployments {
+					slog.Debug("notifying deployment of build change", "deployment_id", d.ID, "build_id", id)
 					s.deploymentScheduler.Schedule(d.ID, time.Now())
 				}
 			}
@@ -184,18 +189,23 @@ func (s *Service) Start(ctx context.Context) error {
 		OnImage: func(ctx context.Context, id uuid.UUID) {
 			s.imageScheduler.Schedule(id, time.Now())
 
+			// Notify VMs that use this image
 			if vms, err := s.db.VMFindByImageID(ctx, id); err != nil {
 				slog.Error("failed to find VMs by image_id", "image_id", id, "error", err)
 			} else {
 				for _, vm := range vms {
+					slog.Debug("notifying VM of image change", "vm_id", vm.ID, "image_id", id)
 					s.vmScheduler.Schedule(vm.ID, time.Now())
 				}
 			}
 
+			// Notify builds waiting for build image (dind case).
+			// When any image becomes ready, check if pending/building builds can proceed.
 			if builds, err := s.db.BuildFindWaitingForBuildImage(ctx); err != nil {
 				slog.Error("failed to find builds waiting for build image", "error", err)
 			} else {
 				for _, b := range builds {
+					slog.Debug("notifying build of image change", "build_id", b.ID, "image_id", id)
 					s.buildScheduler.Schedule(b.ID, time.Now())
 				}
 			}
@@ -205,10 +215,12 @@ func (s *Service) Start(ctx context.Context) error {
 			s.vmScheduler.Schedule(id, time.Now())
 			s.notifyRouteChange()
 
+			// Notify builds that use this VM
 			if builds, err := s.db.BuildFindByVMID(ctx, id); err != nil {
 				slog.Error("failed to find builds by vm_id", "vm_id", id, "error", err)
 			} else {
 				for _, b := range builds {
+					slog.Debug("notifying build of VM change", "build_id", b.ID, "vm_id", id)
 					s.buildScheduler.Schedule(b.ID, time.Now())
 				}
 			}

@@ -60,6 +60,12 @@ func main() {
 		panic("failed to parse config: " + err.Error())
 	}
 
+	// Ensure the /data directory exists before any submodule tries to use it.
+	// This is the single place where we create it — submodules trust it's here.
+	if err := os.MkdirAll("/data", 0o755); err != nil {
+		panic("failed to create /data directory: " + err.Error())
+	}
+
 	// Load or create stable server identity
 	serverID, err := zeitwork.LoadOrCreateServerID()
 	if err != nil {
@@ -133,7 +139,7 @@ func main() {
 
 	sig := <-sigChan
 	logger.Info("shutdown signal", "signal", sig)
-	
+
 	// Cancel context first so WAL listener and other ctx-dependent goroutines
 	// start winding down in parallel with the shutdown sequence.
 	cancel()
