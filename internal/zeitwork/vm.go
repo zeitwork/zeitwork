@@ -100,8 +100,13 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 	vmDiskPath := fmt.Sprintf("/data/work/%s.qcow2", vm.ID.String())
 	baseDiskPath := fmt.Sprintf("/data/base/%s.qcow2", vm.ImageID.String())
 
-	// Check if base image exists locally; if not, download from S3
+	// Check if base image exists locally; if not, download from S3.
+	// In single-node mode (no S3), the image is always built locally by the
+	// image reconciler before the VM reconciler reaches this point.
 	if _, err := os.Stat(baseDiskPath); os.IsNotExist(err) {
+		if s.s3 == nil {
+			return fmt.Errorf("base image not found locally and S3 not configured (image_id=%s)", vm.ImageID)
+		}
 		s3Key := fmt.Sprintf("images/%s.qcow2", vm.ImageID.String())
 		slog.Info("base image not found locally, downloading from S3", "image_id", vm.ImageID, "s3_key", s3Key)
 		if err := s.s3.Download(ctx, s3Key, baseDiskPath); err != nil {

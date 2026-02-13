@@ -28,11 +28,11 @@ type Config struct {
 	GitHubAppID            string `env:"GITHUB_APP_ID"`
 	GitHubAppPrivateKey    string `env:"GITHUB_APP_PRIVATE_KEY"` // base64-encoded
 
-	// S3/MinIO for shared image storage
-	S3Endpoint  string `env:"S3_ENDPOINT,required"`
-	S3Bucket    string `env:"S3_BUCKET,required"`
-	S3AccessKey string `env:"S3_ACCESS_KEY,required"`
-	S3SecretKey string `env:"S3_SECRET_KEY,required"`
+	// S3/MinIO for shared image storage (optional — only needed for multi-node)
+	S3Endpoint  string `env:"S3_ENDPOINT"`
+	S3Bucket    string `env:"S3_BUCKET"`
+	S3AccessKey string `env:"S3_ACCESS_KEY"`
+	S3SecretKey string `env:"S3_SECRET_KEY"`
 	S3UseSSL    bool   `env:"S3_USE_SSL" envDefault:"false"`
 
 	// Edge proxy config
@@ -78,16 +78,23 @@ func main() {
 		panic("failed to init database: " + err.Error())
 	}
 
-	// Initialize S3 client for shared image storage
-	s3Client, err := storage.NewS3(storage.S3Config{
-		Endpoint:  cfg.S3Endpoint,
-		Bucket:    cfg.S3Bucket,
-		AccessKey: cfg.S3AccessKey,
-		SecretKey: cfg.S3SecretKey,
-		UseSSL:    cfg.S3UseSSL,
-	})
-	if err != nil {
-		panic("failed to init S3 client: " + err.Error())
+	// Initialize S3 client for shared image storage (optional for single-node)
+	var s3Client *storage.S3
+	if cfg.S3Endpoint != "" {
+		var err error
+		s3Client, err = storage.NewS3(storage.S3Config{
+			Endpoint:  cfg.S3Endpoint,
+			Bucket:    cfg.S3Bucket,
+			AccessKey: cfg.S3AccessKey,
+			SecretKey: cfg.S3SecretKey,
+			UseSSL:    cfg.S3UseSSL,
+		})
+		if err != nil {
+			panic("failed to init S3 client: " + err.Error())
+		}
+		slog.Info("S3 storage enabled", "endpoint", cfg.S3Endpoint, "bucket", cfg.S3Bucket)
+	} else {
+		slog.Info("S3 storage not configured — running in single-node mode")
 	}
 
 	// Route change notification channel (shared between zeitwork service and edge proxy)
