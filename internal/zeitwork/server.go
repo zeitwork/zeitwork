@@ -19,10 +19,7 @@ const (
 
 	heartbeatInterval       = 10 * time.Second
 	deadDetectionInterval   = 30 * time.Second
-	deadThreshold           = 60 * time.Second
-	drainPollInterval       = 5 * time.Second
 	drainHealthCheckTimeout = 5 * time.Minute
-	routeSyncInterval       = 5 * time.Minute // safety net only — WAL OnServer handles immediate reactivity
 	leaderRetryInterval     = 5 * time.Second
 )
 
@@ -129,17 +126,8 @@ func (s *Service) clusterDutyLoop(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-		default:
-		}
-
-		s.tryBecomeClusterLeader(ctx)
-
-		// If we get here, we either failed to acquire the lock or lost leadership.
-		// Wait before retrying.
-		select {
-		case <-ctx.Done():
-			return
 		case <-time.After(leaderRetryInterval):
+			s.tryBecomeClusterLeader(ctx)
 		}
 	}
 }
@@ -312,27 +300,28 @@ func (s *Service) replaceVM(ctx context.Context, q *queries.Queries, oldVM queri
 	return nil
 }
 
-// drainMonitorLoop watches for the draining status and orchestrates zero-downtime migration.
-func (s *Service) drainMonitorLoop(ctx context.Context) {
-	ticker := time.NewTicker(drainPollInterval)
-	defer ticker.Stop()
+// reconcileServer handles server-level reconciliation:
+// - Syncs host routes so this server can reach VMs on the changed server
+// - If the reconciled server is this server and it's draining, starts drain
+func (s *Service) reconcileServer(ctx context.Context, objectID uuid.UUID) error {
+	// Sync host routes - any server change may affect routing
+	if err := s.syncHostRoutes(ctx); err != nil {
+		return fmt.Errorf("failed to sync host routes: %w", err)
+	}
 
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			server, err := s.db.ServerFindByID(ctx, s.serverID)
-			if err != nil {
-				slog.Error("failed to check server status for drain", "err", err)
-				continue
-			}
-			if server.Status == queries.ServerStatusDraining {
-				slog.Info("server is draining, starting migration")
-				s.drainServer(ctx)
-			}
+	// Check if this server should drain (only relevant for our own server ID)
+	if objectID == s.serverID {
+		server, err := s.db.ServerFindByID(ctx, s.serverID)
+		if err != nil {
+			return fmt.Errorf("failed to check server status for drain: %w", err)
+		}
+		if server.Status == queries.ServerStatusDraining {
+			slog.Info("server is draining, starting migration")
+			s.drainServer(ctx)
 		}
 	}
+
+	return nil
 }
 
 // drainServer migrates all running deployments to other servers, then marks itself as drained.
@@ -508,26 +497,4 @@ func (s *Service) syncHostRoutes(ctx context.Context) error {
 	}
 
 	return nil
-}
-
-// hostRouteSyncLoop periodically syncs host routes and also reacts to server changes.
-func (s *Service) hostRouteSyncLoop(ctx context.Context) {
-	// Initial sync
-	if err := s.syncHostRoutes(ctx); err != nil {
-		slog.Error("initial host route sync failed", "err", err)
-	}
-
-	ticker := time.NewTicker(routeSyncInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-ticker.C:
-			if err := s.syncHostRoutes(ctx); err != nil {
-				slog.Error("host route sync failed", "err", err)
-			}
-		}
-	}
 }

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -28,18 +29,23 @@ func (s *Service) reconcileImage(ctx context.Context, objectID uuid.UUID) error 
 	baseImagePath := fmt.Sprintf("/data/base/%s.qcow2", image.ID.String())
 	s3Key := fmt.Sprintf("images/%s.qcow2", image.ID.String())
 
-	// Image already marked as built in DB — ensure we have it locally
+	// Image already marked as built in DB -- no need to download here.
+	// The VM reconciler pulls from S3 on demand when it needs the image.
 	if image.DiskImageKey.Valid {
 		if _, err := os.Stat(baseImagePath); err == nil {
 			return nil // Already have it locally, nothing to do
 		}
 
+		// Not local -- verify it's still in S3. If it is, we're fine (VM
+		// reconciler will download when it creates a VM on this server).
 		if s.s3 != nil {
-			err = s.s3.Download(ctx, s3Key, baseImagePath)
-			if err == nil {
+			exists, err := s.s3.Exists(ctx, s3Key)
+			if err != nil {
+				slog.Warn("failed to check image in S3", "image_id", image.ID, "err", err)
+			}
+			if exists {
 				return nil
 			}
-			slog.Warn("failed to recover image from S3, will rebuild", "image_id", image.ID, "err", err)
 		}
 
 		// Neither local nor S3 — clear the DB key and fall through to rebuild
@@ -52,28 +58,17 @@ func (s *Service) reconcileImage(ctx context.Context, objectID uuid.UUID) error 
 		}
 	}
 
-	// Image not yet built. Before doing an expensive build, check if another
-	// server already built it and uploaded to S3. This avoids N servers all
-	// building the same image in parallel.
-	if s.s3 != nil {
-		err = s.s3.Download(ctx, s3Key, baseImagePath)
-		if err == nil {
-			return s.db.ImageReleaseBuild(ctx, queries.ImageReleaseBuildParams{
-				ID:           image.ID,
-				DiskImageKey: pgtype.Text{String: baseImagePath, Valid: true},
-			})
-		}
-	}
-
 	// Claim the build in the DB. If another server already has a fresh claim,
-	// this returns pgx.ErrNoRows — return an error so the reconciler retries
-	// in 5s (by which time the other server may have finished and uploaded to S3).
+	// this returns pgx.ErrNoRows - schedule a retry later to check if the
+	// other server finished (DiskImageKey will be set by then).
 	_, err = s.db.ImageClaimBuild(ctx, queries.ImageClaimBuildParams{
 		ID:         image.ID,
 		BuildingBy: s.serverID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return fmt.Errorf("image build claimed by another server, will retry")
+		slog.Info("image build claimed by another server, scheduling retry", "image_id", image.ID)
+		s.imageScheduler.Schedule(image.ID, time.Now().Add(2*time.Minute))
+		return nil
 	}
 	if err != nil {
 		return fmt.Errorf("failed to claim image build: %w", err)
@@ -138,12 +133,9 @@ func (s *Service) buildImage(ctx context.Context, image queries.Image, baseImage
 	// Upload to S3 so other servers can download instead of rebuilding
 	if s.s3 != nil {
 		if err := s.s3.Upload(ctx, s3Key, baseImagePath); err != nil {
-			slog.Error("failed to upload image to S3", "image_id", image.ID, "err", err)
-			// Don't fail — the image is still available locally. Other servers
-			// will build the image themselves if they can't download it.
-		} else {
-			slog.Info("uploaded image to S3", "image_id", image.ID, "s3_key", s3Key)
+			return "", fmt.Errorf("failed to upload image to S3: %w", err)
 		}
+		slog.Info("uploaded image to S3", "image_id", image.ID, "s3_key", s3Key)
 	}
 
 	return baseImagePath, nil

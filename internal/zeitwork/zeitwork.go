@@ -82,6 +82,7 @@ type Service struct {
 	imageScheduler      *reconciler.Scheduler
 	vmScheduler         *reconciler.Scheduler
 	domainScheduler     *reconciler.Scheduler
+	serverScheduler     *reconciler.Scheduler
 
 	// VM Stuff
 	imageMu sync.Mutex
@@ -127,6 +128,7 @@ func New(cfg Config) (*Service, error) {
 	s.imageScheduler = reconciler.NewWithName("image", s.reconcileImage)
 	s.vmScheduler = reconciler.NewWithName("vm", s.reconcileVM)
 	s.domainScheduler = reconciler.NewWithName("domain", s.reconcileDomain)
+	s.serverScheduler = reconciler.NewWithName("server", s.reconcileServer)
 
 	return s, nil
 }
@@ -149,12 +151,11 @@ func (s *Service) Start(ctx context.Context) error {
 	s.imageScheduler.Start()
 	s.vmScheduler.Start()
 	s.domainScheduler.Start()
+	s.serverScheduler.Start()
 
 	// Start server lifecycle loops
 	go s.heartbeatLoop(ctx)
 	go s.clusterDutyLoop(ctx)
-	go s.drainMonitorLoop(ctx)
-	go s.hostRouteSyncLoop(ctx)
 
 	// Bootstrap: schedule all existing entities once on startup.
 	// This ensures we don't miss any changes that happened while we were down.
@@ -240,12 +241,8 @@ func (s *Service) Start(ctx context.Context) error {
 		},
 
 		OnServer: func(ctx context.Context, id uuid.UUID) {
+			s.serverScheduler.Schedule(id, time.Now())
 			s.notifyRouteChange()
-
-			// Re-sync host routes when any server changes
-			if err := s.syncHostRoutes(ctx); err != nil {
-				slog.Error("failed to sync host routes on server change", "err", err)
-			}
 		},
 	})
 
@@ -307,6 +304,19 @@ func (s *Service) bootstrap(ctx context.Context) error {
 		s.domainScheduler.Schedule(domain.ID, time.Now())
 	}
 	slog.Info("bootstrapped domains", "count", len(domains))
+
+	// Servers -- schedule all active servers for host route sync,
+	// and always schedule this server for drain monitoring.
+	servers, err := s.db.ServerFindActive(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to find active servers: %w", err)
+	}
+	for _, server := range servers {
+		s.serverScheduler.Schedule(server.ID, time.Now())
+	}
+	// Ensure this server is always scheduled (even if not yet in the active set)
+	s.serverScheduler.Schedule(s.serverID, time.Now())
+	slog.Info("bootstrapped servers", "count", len(servers))
 
 	slog.Info("bootstrap complete")
 	return nil
