@@ -31,7 +31,7 @@ SELECT COALESCE(
                 ORDER BY ip_address DESC
                 LIMIT 1),
                set_masklen((host(@ip_range::cidr)::inet + 1), 31)  -- First VM: base+1/31
-       ) AS next_ip
+       )::inet AS next_ip
 FROM lock;
 
 -- name: VMSoftDelete :exec

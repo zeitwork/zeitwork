@@ -244,16 +244,12 @@ func (s *Service) VMCreate(ctx context.Context, params VMCreateParams) (*queries
 	// pg_advisory_xact_lock in VMNextIPAddress serializes correctly.
 	var vm queries.Vm
 	err := s.db.WithTx(ctx, func(q *queries.Queries) error {
-		res, err := q.VMNextIPAddress(ctx, queries.VMNextIPAddressParams{
+		ipAddress, err := q.VMNextIPAddress(ctx, queries.VMNextIPAddressParams{
 			ServerID: targetServerID,
 			IpRange:  targetIPRange,
 		})
 		if err != nil {
 			return fmt.Errorf("failed to allocate IP: %w", err)
-		}
-		ipAddress, ok := res.(netip.Prefix)
-		if !ok {
-			return fmt.Errorf("unexpected type for next_ip: %T", res)
 		}
 
 		vm, err = q.VMCreate(ctx, queries.VMCreateParams{

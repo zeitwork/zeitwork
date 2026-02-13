@@ -249,7 +249,7 @@ SELECT COALESCE(
                 ORDER BY ip_address DESC
                 LIMIT 1),
                set_masklen((host($2::cidr)::inet + 1), 31)  -- First VM: base+1/31
-       ) AS next_ip
+       )::inet AS next_ip
 FROM lock
 `
 
@@ -261,9 +261,9 @@ type VMNextIPAddressParams struct {
 // Allocate the next /31 subnet within a server's IP range.
 // Each VM needs its own /31 subnet, so we increment by 2 to skip to the next block.
 // The first VM in a range gets base+1 (e.g., 10.1.0.1/31), host side is base+0.
-func (q *Queries) VMNextIPAddress(ctx context.Context, arg VMNextIPAddressParams) (interface{}, error) {
+func (q *Queries) VMNextIPAddress(ctx context.Context, arg VMNextIPAddressParams) (netip.Prefix, error) {
 	row := q.db.QueryRow(ctx, vMNextIPAddress, arg.ServerID, arg.IpRange)
-	var next_ip interface{}
+	var next_ip netip.Prefix
 	err := row.Scan(&next_ip)
 	return next_ip, err
 }

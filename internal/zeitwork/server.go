@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"net/netip"
 	"os"
 	"os/exec"
 	"strings"
@@ -76,14 +75,9 @@ func (s *Service) registerServer(ctx context.Context) (queries.Server, error) {
 	var server queries.Server
 	err = s.db.WithTx(ctx, func(q *queries.Queries) error {
 		// Allocate next /20 range
-		rangeResult, err := q.ServerAllocateIPRange(ctx)
+		ipRange, err := q.ServerAllocateIPRange(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to allocate IP range: %w", err)
-		}
-
-		ipRange, ok := rangeResult.(netip.Prefix)
-		if !ok {
-			return fmt.Errorf("unexpected type for ip_range: %T", rangeResult)
 		}
 
 		server, err = q.ServerRegister(ctx, queries.ServerRegisterParams{
@@ -225,18 +219,12 @@ func (s *Service) reassignVMs(ctx context.Context, q *queries.Queries, deadServe
 		}
 
 		// Allocate new IP in the target server's range
-		nextIP, err := q.VMNextIPAddress(ctx, queries.VMNextIPAddressParams{
+		ipAddr, err := q.VMNextIPAddress(ctx, queries.VMNextIPAddressParams{
 			ServerID: target.ID,
 			IpRange:  target.IpRange,
 		})
 		if err != nil {
 			slog.Error("failed to allocate IP for reassigned VM", "vm_id", vm.ID, "err", err)
-			continue
-		}
-
-		ipAddr, ok := nextIP.(netip.Prefix)
-		if !ok {
-			slog.Error("unexpected type for next_ip during reassignment", "vm_id", vm.ID, "type", fmt.Sprintf("%T", nextIP))
 			continue
 		}
 

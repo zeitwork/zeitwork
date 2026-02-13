@@ -29,16 +29,16 @@ SELECT COALESCE(
      ORDER BY ip_range DESC
      LIMIT 1),
     '10.1.0.0/20'::cidr
-) AS next_range
+)::cidr AS next_range
 FROM lock
 `
 
 // Allocate the next available /20 IP range for a new server.
 // First server gets 10.1.0.0/20, second gets 10.1.16.0/20, etc.
 // Each /20 contains 4096 addresses (2048 VMs with /31 pairs).
-func (q *Queries) ServerAllocateIPRange(ctx context.Context) (interface{}, error) {
+func (q *Queries) ServerAllocateIPRange(ctx context.Context) (netip.Prefix, error) {
 	row := q.db.QueryRow(ctx, serverAllocateIPRange)
-	var next_range interface{}
+	var next_range netip.Prefix
 	err := row.Scan(&next_range)
 	return next_range, err
 }

@@ -79,5 +79,5 @@ SELECT COALESCE(
      ORDER BY ip_range DESC
      LIMIT 1),
     '10.1.0.0/20'::cidr
-) AS next_range
+)::cidr AS next_range
 FROM lock;
