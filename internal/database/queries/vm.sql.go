@@ -268,47 +268,6 @@ func (q *Queries) VMNextIPAddress(ctx context.Context, arg VMNextIPAddressParams
 	return next_ip, err
 }
 
-const vMReassign = `-- name: VMReassign :one
-UPDATE vms
-SET server_id = $2, ip_address = $3, status = 'pending', updated_at = now()
-WHERE id = $1
-RETURNING id, vcpus, memory, status, image_id, port, ip_address, metadata, created_at, updated_at, deleted_at, pending_at, starting_at, running_at, stopping_at, stopped_at, failed_at, env_variables, server_id
-`
-
-type VMReassignParams struct {
-	ID        uuid.UUID    `json:"id"`
-	ServerID  uuid.UUID    `json:"server_id"`
-	IpAddress netip.Prefix `json:"ip_address"`
-}
-
-// Reassign a VM to a different server with a new IP address.
-func (q *Queries) VMReassign(ctx context.Context, arg VMReassignParams) (Vm, error) {
-	row := q.db.QueryRow(ctx, vMReassign, arg.ID, arg.ServerID, arg.IpAddress)
-	var i Vm
-	err := row.Scan(
-		&i.ID,
-		&i.Vcpus,
-		&i.Memory,
-		&i.Status,
-		&i.ImageID,
-		&i.Port,
-		&i.IpAddress,
-		&i.Metadata,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.PendingAt,
-		&i.StartingAt,
-		&i.RunningAt,
-		&i.StoppingAt,
-		&i.StoppedAt,
-		&i.FailedAt,
-		&i.EnvVariables,
-		&i.ServerID,
-	)
-	return i, err
-}
-
 const vMSoftDelete = `-- name: VMSoftDelete :exec
 UPDATE vms
 SET deleted_at = now()

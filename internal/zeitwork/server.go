@@ -134,8 +134,10 @@ func (s *Service) deadServerDetectionLoop(ctx context.Context) {
 	}
 }
 
-// detectAndFailoverDeadServers finds dead servers and reassigns their VMs.
+// detectAndFailoverDeadServers finds dead servers and replaces their VMs.
 // Uses an advisory lock so only one server runs failover at a time.
+// Everything runs in a single transaction: if any step fails, the whole
+// operation rolls back and will be retried on the next tick.
 func (s *Service) detectAndFailoverDeadServers(ctx context.Context) error {
 	deadServers, err := s.db.ServerFindDead(ctx)
 	if err != nil {
@@ -146,14 +148,13 @@ func (s *Service) detectAndFailoverDeadServers(ctx context.Context) error {
 		return nil
 	}
 
-	// Try to acquire advisory lock — only one server should run failover
-	var acquired bool
 	err = s.db.WithTx(ctx, func(q *queries.Queries) error {
-		result, err := q.TryAdvisoryLock(ctx, "dead_server_failover")
+		// Advisory lock — only one server runs failover at a time.
+		// Transaction-scoped: released automatically on commit/rollback.
+		acquired, err := q.TryAdvisoryLock(ctx, "dead_server_failover")
 		if err != nil {
 			return err
 		}
-		acquired = result
 		if !acquired {
 			return nil // Another server is handling failover
 		}
@@ -162,7 +163,6 @@ func (s *Service) detectAndFailoverDeadServers(ctx context.Context) error {
 			slog.Warn("detected dead server", "server_id", deadServer.ID, "hostname", deadServer.Hostname,
 				"last_heartbeat", deadServer.LastHeartbeatAt)
 
-			// Mark server as dead
 			if err := q.ServerUpdateStatus(ctx, queries.ServerUpdateStatusParams{
 				ID:     deadServer.ID,
 				Status: queries.ServerStatusDead,
@@ -171,9 +171,9 @@ func (s *Service) detectAndFailoverDeadServers(ctx context.Context) error {
 				continue
 			}
 
-			// Reassign orphaned VMs to healthy servers
-			if err := s.reassignVMs(ctx, q, deadServer.ID); err != nil {
-				slog.Error("failed to reassign VMs from dead server", "server_id", deadServer.ID, "err", err)
+			// Replace VMs from this dead server
+			if err := s.replaceDeadServerVMs(ctx, q, deadServer.ID); err != nil {
+				slog.Error("failed to replace VMs from dead server", "server_id", deadServer.ID, "err", err)
 			}
 		}
 
@@ -183,27 +183,26 @@ func (s *Service) detectAndFailoverDeadServers(ctx context.Context) error {
 		return err
 	}
 
-	if acquired && len(deadServers) > 0 {
-		// Notify route change so edge proxy refreshes
-		s.notifyRouteChange()
-	}
-
 	return nil
 }
 
-// reassignVMs moves VMs from a dead server to healthy servers.
-func (s *Service) reassignVMs(ctx context.Context, q *queries.Queries, deadServerID uuid.UUID) error {
+// replaceDeadServerVMs soft-deletes VMs on a dead server and creates fresh
+// replacements on healthy servers. Following the K8s pod model: VMs are
+// disposable — don't mutate in place, delete and recreate.
+//
+// Runs inside the failover transaction so mark-dead + VM replacement is atomic.
+func (s *Service) replaceDeadServerVMs(ctx context.Context, q *queries.Queries, deadServerID uuid.UUID) error {
 	vms, err := q.VMFindByServerID(ctx, deadServerID)
 	if err != nil {
 		return fmt.Errorf("failed to find VMs on dead server: %w", err)
 	}
 
 	if len(vms) == 0 {
-		slog.Info("no VMs to reassign from dead server", "server_id", deadServerID)
+		slog.Info("no VMs to replace from dead server", "server_id", deadServerID)
 		return nil
 	}
 
-	slog.Info("reassigning VMs from dead server", "server_id", deadServerID, "vm_count", len(vms))
+	slog.Info("replacing VMs from dead server", "server_id", deadServerID, "vm_count", len(vms))
 
 	for _, vm := range vms {
 		// Skip VMs that are already in terminal state
@@ -211,37 +210,69 @@ func (s *Service) reassignVMs(ctx context.Context, q *queries.Queries, deadServe
 			continue
 		}
 
-		// Find least loaded healthy server for placement
-		target, err := q.ServerFindLeastLoaded(ctx)
-		if err != nil {
-			slog.Error("no healthy server available for VM reassignment", "vm_id", vm.ID, "err", err)
-			continue
+		if err := s.replaceVM(ctx, q, vm, deadServerID); err != nil {
+			return fmt.Errorf("failed to replace VM %s: %w", vm.ID, err)
 		}
-
-		// Allocate new IP in the target server's range
-		ipAddr, err := q.VMNextIPAddress(ctx, queries.VMNextIPAddressParams{
-			ServerID: target.ID,
-			IpRange:  target.IpRange,
-		})
-		if err != nil {
-			slog.Error("failed to allocate IP for reassigned VM", "vm_id", vm.ID, "err", err)
-			continue
-		}
-
-		// Reassign: new server, new IP, status back to pending
-		_, err = q.VMReassign(ctx, queries.VMReassignParams{
-			ID:        vm.ID,
-			ServerID:  target.ID,
-			IpAddress: ipAddr,
-		})
-		if err != nil {
-			slog.Error("failed to reassign VM", "vm_id", vm.ID, "target_server", target.ID, "err", err)
-			continue
-		}
-
-		slog.Info("reassigned VM", "vm_id", vm.ID, "from_server", deadServerID, "to_server", target.ID, "new_ip", ipAddr)
 	}
 
+	return nil
+}
+
+// replaceVM soft-deletes an old VM, creates a replacement on the least loaded
+// server, and updates the deployment pointer.
+func (s *Service) replaceVM(ctx context.Context, q *queries.Queries, oldVM queries.Vm, deadServerID uuid.UUID) error {
+	// Soft-delete the old VM
+	if err := q.VMSoftDelete(ctx, oldVM.ID); err != nil {
+		return fmt.Errorf("failed to soft-delete old VM: %w", err)
+	}
+
+	// Find target server
+	target, err := q.ServerFindLeastLoaded(ctx)
+	if err != nil {
+		return fmt.Errorf("no healthy server available: %w", err)
+	}
+
+	// Allocate IP on the target server
+	ipAddress, err := q.VMNextIPAddress(ctx, queries.VMNextIPAddressParams{
+		ServerID: target.ID,
+		IpRange:  target.IpRange,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to allocate IP: %w", err)
+	}
+
+	// Create replacement VM
+	newVM, err := q.VMCreate(ctx, queries.VMCreateParams{
+		ID:           uuid.New(),
+		Vcpus:        oldVM.Vcpus,
+		Memory:       oldVM.Memory,
+		Status:       queries.VmStatusPending,
+		ImageID:      oldVM.ImageID,
+		ServerID:     target.ID,
+		Port:         oldVM.Port,
+		IpAddress:    ipAddress,
+		EnvVariables: oldVM.EnvVariables,
+		Metadata:     nil,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to create replacement VM: %w", err)
+	}
+
+	// Update deployment to point to the new VM (if one exists)
+	if dep, err := q.DeploymentFindByVMID(ctx, oldVM.ID); err == nil {
+		if err := q.DeploymentUpdateVMID(ctx, queries.DeploymentUpdateVMIDParams{
+			ID:   dep.ID,
+			VmID: newVM.ID,
+		}); err != nil {
+			return fmt.Errorf("failed to update deployment: %w", err)
+		}
+	}
+
+	slog.Info("replaced VM from dead server",
+		"old_vm_id", oldVM.ID,
+		"new_vm_id", newVM.ID,
+		"from_server", deadServerID,
+		"to_server", newVM.ServerID)
 	return nil
 }
 

@@ -44,10 +44,3 @@ SELECT * FROM vms WHERE image_id = $1;
 
 -- name: VMFindByServerID :many
 SELECT * FROM vms WHERE server_id = $1 AND deleted_at IS NULL;
-
--- name: VMReassign :one
--- Reassign a VM to a different server with a new IP address.
-UPDATE vms
-SET server_id = $2, ip_address = $3, status = 'pending', updated_at = now()
-WHERE id = $1
-RETURNING *;
