@@ -16,3 +16,8 @@
   command: netplan apply
   async: 30
   poll: 1
+
+- name: restart networking
+  systemd:
+    name: networking
+    state: restarted

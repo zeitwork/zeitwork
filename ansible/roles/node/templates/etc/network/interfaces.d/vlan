@@ -1,0 +1,4 @@
+auto {{uplink_interface}}.{{vlan_id}}
+iface {{uplink_interface}}.{{vlan_id}} inet static
+    address {{vlan_address}}
+    vlan-raw-device {{uplink_interface}}

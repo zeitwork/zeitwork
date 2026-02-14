@@ -1,6 +1,6 @@
 [nodes]
-z01 ansible_host=168.119.39.115 ansible_user=root uplink_interface=enp35s0 vlan_id=4003 vlan_address=192.168.0.1/24
-z02 ansible_host=136.243.56.54 ansible_user=root uplink_interface=enp35s0 vlan_id=4003 vlan_address=192.168.0.2/24
+z01 ansible_host=168.119.39.115 ansible_user=root uplink_interface=enp35s0 vlan_id=4003 vlan_address=192.168.0.1/24 driver=ifupdown
+z02 ansible_host=136.243.56.54 ansible_user=root uplink_interface=enp9s0 vlan_id=4003 vlan_address=192.168.0.2/24 driver=ifupdown
 
-zeitwork-test-1 ansible_user=root uplink_interface=eno1
-zeitwork-test-2 ansible_user=root uplink_interface=eno1
+zeitwork-test-1 ansible_user=root uplink_interface=eno1 driver=netplan
+zeitwork-test-2 ansible_user=root uplink_interface=eno1 driver=netplan

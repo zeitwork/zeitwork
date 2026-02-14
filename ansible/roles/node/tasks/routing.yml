@@ -1,3 +1,8 @@
+- name: Validate driver variable
+  fail:
+    msg: "Host variable 'driver' is required and must be 'netplan' or 'ifupdown'"
+  when: driver is not defined or driver not in ['netplan', 'ifupdown']
+
 - name: Copy nftables configuration
   template:
     src: nftables.conf
@@ -21,8 +26,21 @@
     reload: yes
     sysctl_file: /etc/sysctl.d/99-ip-forward.conf
 
+# netplan driver
 - name: Copy vlan netplan
   template:
     src: etc/netplan/vlan.yml
     dest: /etc/netplan/vlan.yml
   notify: netplan apply
+  when: driver == 'netplan'
+
+# ifupdown driver
+- name: Copy vlan ifupdown config
+  template:
+    src: etc/network/interfaces.d/vlan
+    dest: /etc/network/interfaces.d/vlan
+    owner: root
+    group: root
+    mode: '0644'
+  notify: restart networking
+  when: driver == 'ifupdown'
