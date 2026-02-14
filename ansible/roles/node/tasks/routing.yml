@@ -20,3 +20,9 @@
     state: present
     reload: yes
     sysctl_file: /etc/sysctl.d/99-ip-forward.conf
+
+- name: Copy vlan netplan
+  template:
+    src: etc/netplan/vlan.yml
+    dest: /etc/netplan/vlan.yml
+  notify: netplan apply

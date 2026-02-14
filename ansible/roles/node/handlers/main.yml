@@ -11,3 +11,6 @@
   systemd:
     name: nftables
     state: reloaded
+
+- name: netplan apply
+  command: netplan apply
