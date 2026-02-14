@@ -18,20 +18,30 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 		return nil
 	}
 
+	logger := slog.With("deployment_id", objectID)
+	logger.Info("reconciling deployment")
+
 	deployment, err := s.db.Queries.DeploymentFirstByID(ctx, objectID)
 	if err != nil {
 		return err
 	}
 
-	slog.Info("reconciling deployment", "deployment_id", deployment.ID, "status", deployment.Status)
+	if deployment.DeletedAt.Valid || deployment.FailedAt.Valid || deployment.StoppedAt.Valid {
+		logger.Info("deployment in terminal state, skipping", "status")
 
-	// Skip if deployment is already in a terminal state
-	if deployment.Status == queries.DeploymentStatusFailed || deployment.Status == queries.DeploymentStatusStopped {
-		slog.Info("deployment in terminal state, skipping", "deployment_id", deployment.ID, "status", deployment.Status)
+		// Ensure if the deployment is in a terminal state, the VM is also deleted
+		if deployment.VmID.Valid {
+			err = s.db.VMSoftDelete(ctx, deployment.VmID)
+			if err != nil {
+				return err
+			}
+			logger.Info("deleted VM for terminal deployment", "deployment_id", deployment.ID, "vm_id", deployment.VmID)
+		}
+
 		return nil
 	}
 
-	// ** Deployments should have a build ** //
+	// Deployments should have a build
 	if !deployment.BuildID.Valid {
 		build, err := s.db.BuildCreate(ctx, queries.BuildCreateParams{
 			ID:             uuid.New(),
@@ -44,71 +54,57 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 		if err != nil {
 			return err
 		}
-		_, err = s.db.DeploymentMarkBuilding(ctx, queries.DeploymentMarkBuildingParams{
+		deployment, err = s.db.DeploymentUpdateBuild(ctx, queries.DeploymentUpdateBuildParams{
 			ID:      deployment.ID,
 			BuildID: build.ID,
 		})
 		if err != nil {
 			return err
 		}
-		slog.Info("marked deployment as building", "deployment_id", deployment.ID, "build_id", build.ID)
-		return nil
 	}
 
-	// ** Ensure build has completed ** //
-	if deployment.BuildID.Valid {
-		build, err := s.db.BuildFirstByID(ctx, deployment.BuildID)
+	build, err := s.db.BuildFirstByID(ctx, deployment.BuildID)
+	if err != nil {
+		return err
+	}
+
+	// If build failed, mark the deployment as failed
+	if build.FailedAt.Valid {
+		err = s.db.DeploymentUpdateFailedAt(ctx, deployment.ID)
 		if err != nil {
 			return err
 		}
-
-		// if build failed, mark deployment as failed (only if not already failed)
-		if build.Status == queries.BuildStatusFailed {
-			slog.Info("build failed, marking deployment as failed", "deployment_id", deployment.ID, "build_id", build.ID)
-			if deployment.Status != queries.DeploymentStatusFailed {
-				return s.db.DeploymentMarkFailed(ctx, deployment.ID)
-			}
-			return nil
-		}
-
-		// if build has an image then advance to starting (if not already)
-		if build.ImageID.Valid {
-			if deployment.Status == queries.DeploymentStatusBuilding {
-				err = s.db.DeploymentMarkStarting(ctx, queries.DeploymentMarkStartingParams{
-					ID:      deployment.ID,
-					ImageID: build.ImageID,
-				})
-				if err != nil {
-					return err
-				}
-				slog.Info("marked deployment as starting", "deployment_id", deployment.ID, "image_id", build.ImageID)
-				// Update local state to continue with VM creation
-				deployment.ImageID = build.ImageID
-				deployment.Status = queries.DeploymentStatusStarting
-			}
-			// Fall through to VM creation below
-		} else {
-			return nil
-		}
+		slog.Info("marked deployment as failed", "deployment_id", deployment.ID, "build_id", build.ID)
+		return nil
 	}
 
-	// ** Ensure we have a VM ** //
-	if !deployment.VmID.Valid {
-		// Guard: can't create VM without an image
-		if !deployment.ImageID.Valid {
-			slog.Debug("deployment has no image_id yet, waiting for build to complete", "deployment_id", deployment.ID)
-			return nil
+	if !build.ImageID.Valid {
+		slog.Debug("build has no image_id yet, waiting for build to complete", "deployment_id", deployment.ID, "build_id", build.ID)
+		s.deploymentScheduler.Schedule(deployment.ID, time.Now().Add(10*time.Second))
+		return nil
+	}
+
+	// If the deployment's image_id does not match the build's image_id, update the deployment
+	if deployment.ImageID != build.ImageID {
+		deployment, err = s.db.DeploymentUpdateImage(ctx, queries.DeploymentUpdateImageParams{
+			ID:      deployment.ID,
+			ImageID: build.ImageID,
+		})
+		if err != nil {
+			return err
 		}
+		slog.Info("updated deployment with new image", "deployment_id", deployment.ID, "image_id", build.ImageID, "build_id", build.ID)
+	}
 
-		slog.Info("creating vm for deployment", "deployment_id", deployment.ID, "image_id", deployment.ImageID)
-
+	// If the deployment does not have a VM, create one
+	if !deployment.VmID.Valid {
 		// Fetch and prepare environment variables for the VM
 		encryptedEnvVars, err := s.prepareEnvVariablesForVM(ctx, deployment.ProjectID)
 		if err != nil {
 			return fmt.Errorf("failed to prepare environment variables: %w", err)
 		}
 
-		// create a build vm for this deployment
+		// Create a VM for this deployment
 		vm, err := s.VMCreate(ctx, VMCreateParams{
 			VCPUs:        1,
 			Memory:       2 * 1024,
@@ -119,7 +115,7 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 		if err != nil {
 			return err
 		}
-		err = s.db.DeploymentUpdateVMID(ctx, queries.DeploymentUpdateVMIDParams{
+		deployment, err = s.db.DeploymentUpdateVM(ctx, queries.DeploymentUpdateVMParams{
 			ID:   deployment.ID,
 			VmID: vm.ID,
 		})
@@ -127,73 +123,53 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 			return err
 		}
 		slog.Info("linked vm to deployment", "deployment_id", deployment.ID, "vm_id", vm.ID)
-		return nil
 	}
 
-	if deployment.VmID.Valid {
-		// if deployment has a vm check if that vm is healthy (status = running)
-		vm, err := s.db.VMFirstByID(ctx, deployment.VmID)
+	// If the deployment has a VM, check if it is healthy
+	vm, err := s.db.VMFirstByID(ctx, deployment.VmID)
+	if err != nil {
+		return err
+	}
+
+	// If the VM is deleted, reset the VM of the deployment
+	if vm.DeletedAt.Valid {
+		deployment, err = s.db.DeploymentUpdateVM(ctx, queries.DeploymentUpdateVMParams{
+			ID:   deployment.ID,
+			VmID: uuid.Nil(),
+		})
 		if err != nil {
 			return err
 		}
-
-		if vm.Status == queries.VmStatusRunning {
-			// mark the deployment as running if it isn't already
-			if deployment.Status != queries.DeploymentStatusRunning {
-				// Perform HTTP health check before marking as running
-				if !s.checkDeploymentHealth(vm.IpAddress.Addr().String(), vm.Port.Int32) {
-					slog.Info("deployment health check failed, will retry", "deployment_id", deployment.ID, "vm_id", deployment.VmID)
-					return fmt.Errorf("health check failed, will retry")
-				}
-
-				err = s.db.DeploymentMarkRunning(ctx, deployment.ID)
-				if err != nil {
-					return err
-				}
-				slog.Info("marked deployment as running", "deployment_id", deployment.ID, "vm_id", deployment.VmID)
-
-				// Point custom domains to this new deployment
-				if err := s.pointCustomDomainsToDeployment(ctx, deployment); err != nil {
-					slog.Error("failed to point custom domains to deployment", "deployment_id", deployment.ID, "error", err)
-					// Don't return error - deployment is running, domain update can be retried
-				}
-
-				// Stop older deployments for this project now that the new one is healthy
-				if err := s.stopOldDeployments(ctx, deployment); err != nil {
-					slog.Error("failed to stop old deployments", "deployment_id", deployment.ID, "error", err)
-					// Don't return error - the new deployment is running, stopping old ones can be retried
-				}
-
-				return nil
-			}
-		}
+		slog.Info("reset VM for deleted deployment", "deployment_id", deployment.ID, "vm_id", deployment.VmID)
+		s.deploymentScheduler.Schedule(deployment.ID, time.Now())
+		return nil
 	}
 
-	// switch deployment.Status {
-	// case queries.DeploymentStatusPending:
-	// 	// TODO: create build with `pending` status AND deployment => `building`
+	// Perform HTTP health check before marking as running
+	healthy := s.checkDeploymentHealth(vm.IpAddress.Addr().String(), vm.Port.Int32)
+	if !healthy {
+		slog.Info("deployment health check failed, will retry", "deployment_id", deployment.ID, "vm_id", deployment.VmID)
+		return fmt.Errorf("health check failed, will retry")
+	}
 
-	// 	panic("unimplemented")
-	// case queries.DeploymentStatusBuilding:
-	// 	panic("unimplemented")
-	// 	// -> if build status `pending` or `building` for more than 10 minutes then set deployment status to `failed`
-	// 	// -> if build status `failed` then mark deployment `failed`
-	// 	// -> if build status `succesful` then create vm with `pending` status and update deployment to `starting`
-	// case queries.DeploymentStatusStarting:
-	// 	panic("unimplemented")
-	// 	// -> if vm status `pending` or `starting` for more than 10 minutes set deployment status to `failed`
-	// case queries.DeploymentStatusRunning:
-	// 	panic("unimplemented")
-	// 	// -> if there is a newer deployment with status `running` then mark this one as `stopping`
-	// case queries.DeploymentStatusStopping:
-	// 	panic("unimplemented")
-	// case queries.DeploymentStatusStopped:
-	// 	panic("unimplemented")
-	// 	// -> if vm status is `running` then mark it as stopping
-	// 	// -> if vm status is `stopped` then mark the deployment as `stopped`
-	// case queries.DeploymentStatusFailed:
-	// 	panic("unimplemented")
-	// }
+	// Mark the deployment as running
+	err = s.db.DeploymentMarkRunning(ctx, deployment.ID)
+	if err != nil {
+		return fmt.Errorf("failed to mark deployment as running: %w", err)
+	}
+	slog.Info("marked deployment as running", "deployment_id", deployment.ID)
+
+	// Point custom domains to this new deployment
+	err = s.pointCustomDomainsToDeployment(ctx, deployment)
+	if err != nil {
+		return fmt.Errorf("failed to point custom domains to deployment: %w", err)
+	}
+
+	// Stop older deployments for this project now that the new one is healthy
+	err = s.stopOldDeployments(ctx, deployment)
+	if err != nil {
+		return fmt.Errorf("failed to stop old deployments: %w", err)
+	}
 
 	return nil
 }
@@ -202,7 +178,6 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 // decrypts them, formats as "KEY=value" strings, and re-encrypts as JSON.
 // Returns an encrypted JSON array string suitable for storing in vms.env_variables.
 func (s *Service) prepareEnvVariablesForVM(ctx context.Context, projectID uuid.UUID) (string, error) {
-	// Fetch environment variables for the project
 	envVars, err := s.db.EnvironmentVariableFindByProjectID(ctx, projectID)
 	if err != nil {
 		return "", fmt.Errorf("failed to fetch environment variables: %w", err)
@@ -237,7 +212,7 @@ func (s *Service) prepareEnvVariablesForVM(ctx context.Context, projectID uuid.U
 // checkDeploymentHealth performs an HTTP health check on a deployment's VM
 func (s *Service) checkDeploymentHealth(ip string, port int32) bool {
 	client := &http.Client{
-		Timeout: 2 * time.Second,
+		Timeout: 10 * time.Second,
 	}
 
 	healthURL := fmt.Sprintf("http://%s:%d/", ip, port)
@@ -263,14 +238,12 @@ func (s *Service) pointCustomDomainsToDeployment(ctx context.Context, deployment
 	if err != nil {
 		return fmt.Errorf("failed to update domains: %w", err)
 	}
-	slog.Info("pointed custom domains to deployment", "deployment_id", deployment.ID, "project_id", deployment.ProjectID)
 	return nil
 }
 
 // stopOldDeployments finds and stops all other running deployments for the same project
 func (s *Service) stopOldDeployments(ctx context.Context, currentDeployment queries.Deployment) error {
-	// Find all other running deployments for this project
-	oldDeployments, err := s.db.DeploymentFindOtherRunningByProjectID(ctx, queries.DeploymentFindOtherRunningByProjectIDParams{
+	oldDeployments, err := s.db.DeploymentFindRunningAndOlder(ctx, queries.DeploymentFindRunningAndOlderParams{
 		ProjectID: currentDeployment.ProjectID,
 		ID:        currentDeployment.ID,
 	})
@@ -278,15 +251,14 @@ func (s *Service) stopOldDeployments(ctx context.Context, currentDeployment quer
 		return fmt.Errorf("failed to find old deployments: %w", err)
 	}
 
+	// If there are no old deployments, return
 	if len(oldDeployments) == 0 {
-		slog.Info("no old deployments to stop", "deployment_id", currentDeployment.ID)
 		return nil
 	}
 
 	slog.Info("stopping old deployments", "deployment_id", currentDeployment.ID, "old_deployment_count", len(oldDeployments))
-
 	for _, oldDep := range oldDeployments {
-		// Soft delete the VM (this will trigger the VM reconciler to kill the process)
+		// We deleted the VM, the reconciler will stop the process
 		if oldDep.VmID.Valid {
 			if err := s.db.VMSoftDelete(ctx, oldDep.VmID); err != nil {
 				slog.Error("failed to soft delete VM for old deployment", "deployment_id", oldDep.ID, "vm_id", oldDep.VmID, "error", err)

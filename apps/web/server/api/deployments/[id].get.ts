@@ -1,5 +1,6 @@
 import { deployments } from "@zeitwork/database/schema";
 import { eq, and } from "@zeitwork/database/utils/drizzle";
+import { deploymentStatus } from "~~/server/models/deployment";
 
 export default defineEventHandler(async (event) => {
   const { secure, verified } = await requireVerifiedUser(event);
@@ -22,5 +23,8 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, message: "Deployment not found" });
   }
 
-  return deployment;
+  return {
+    ...deployment,
+    status: deploymentStatus(deployment),
+  };
 });

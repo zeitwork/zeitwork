@@ -308,10 +308,11 @@ func (s *Service) replaceVM(ctx context.Context, q *queries.Queries, oldVM queri
 
 	// Update deployment to point to the new VM (if one exists)
 	if dep, err := q.DeploymentFindByVMID(ctx, oldVM.ID); err == nil {
-		if err := q.DeploymentUpdateVMID(ctx, queries.DeploymentUpdateVMIDParams{
+		_, err = q.DeploymentUpdateVM(ctx, queries.DeploymentUpdateVMParams{
 			ID:   dep.ID,
 			VmID: newVM.ID,
-		}); err != nil {
+		})
+		if err != nil {
 			return fmt.Errorf("failed to update deployment: %w", err)
 		}
 	}
@@ -427,10 +428,11 @@ func (s *Service) drainDeployment(ctx context.Context, dep queries.Deployment) e
 	}
 
 	// Atomic swap: point the deployment to the new VM
-	if err := s.db.DeploymentUpdateVMID(ctx, queries.DeploymentUpdateVMIDParams{
+	_, err = s.db.DeploymentUpdateVM(ctx, queries.DeploymentUpdateVMParams{
 		ID:   dep.ID,
 		VmID: newVM.ID,
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("failed to swap deployment VM: %w", err)
 	}
 

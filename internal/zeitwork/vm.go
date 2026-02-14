@@ -204,7 +204,7 @@ func (s *Service) VMCreate(ctx context.Context, params VMCreateParams) (*queries
 	targetServerID := params.ServerID
 	var targetIPRange netip.Prefix
 
-	if targetServerID == (uuid.UUID{}) {
+	if !targetServerID.Valid {
 		// Auto-place on least loaded server
 		target, err := s.db.ServerFindLeastLoaded(ctx)
 		if err != nil {

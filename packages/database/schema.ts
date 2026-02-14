@@ -1,4 +1,3 @@
-import { sql } from "drizzle-orm";
 import {
   boolean,
   cidr,
@@ -125,6 +124,8 @@ export const deploymentStatusEnum = pgEnum("deployment_status", [
   "failed",
 ]);
 
+export type DeploymentStatus = (typeof deploymentStatusEnum.enumValues)[number];
+
 export const deployments = pgTable("deployments", {
   id: uuid().primaryKey().$defaultFn(uuidv7),
   status: deploymentStatusEnum().notNull().default("pending"),
@@ -134,7 +135,9 @@ export const deployments = pgTable("deployments", {
     .references(() => projects.id),
   buildId: uuid().references(() => builds.id),
   imageId: uuid().references(() => images.id),
-  vmId: uuid().references(() => vms.id).unique(),
+  vmId: uuid()
+    .references(() => vms.id)
+    .unique(),
   //
   pendingAt: timestamp({ withTimezone: true }),
   buildingAt: timestamp({ withTimezone: true }),
@@ -226,12 +229,7 @@ export const certmagicLocks = pgTable("certmagic_locks", {
 
 // PLATFORM
 
-export const serverStatusEnum = pgEnum("server_status", [
-  "active",
-  "draining",
-  "drained",
-  "dead",
-]);
+export const serverStatusEnum = pgEnum("server_status", ["active", "draining", "drained", "dead"]);
 
 export const servers = pgTable("servers", {
   id: uuid().primaryKey().$defaultFn(uuidv7),

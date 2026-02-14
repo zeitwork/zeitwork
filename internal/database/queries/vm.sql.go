@@ -270,7 +270,7 @@ func (q *Queries) VMNextIPAddress(ctx context.Context, arg VMNextIPAddressParams
 
 const vMSoftDelete = `-- name: VMSoftDelete :exec
 UPDATE vms
-SET deleted_at = now()
+SET deleted_at = COALESCE(deleted_at, now())
 WHERE id = $1
 `
 

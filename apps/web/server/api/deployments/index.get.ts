@@ -1,5 +1,6 @@
 import { deployments } from "@zeitwork/database/schema";
 import { eq } from "@zeitwork/database/utils/drizzle";
+import { deploymentStatus } from "~~/server/models/deployment";
 
 export default defineEventHandler(async (event) => {
   const { secure, verified } = await requireVerifiedUser(event);
@@ -11,5 +12,8 @@ export default defineEventHandler(async (event) => {
     .from(deployments)
     .where(eq(deployments.organisationId, secure.organisationId));
 
-  return result;
+  return result.map((deployment) => ({
+    ...deployment,
+    status: deploymentStatus(deployment),
+  }));
 });

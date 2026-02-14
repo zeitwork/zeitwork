@@ -14,30 +14,32 @@ FROM deployments WHERE status = 'pending'
 ORDER BY id DESC
 LIMIT 1;
 
--- name: DeploymentMarkBuilding :one
+-- name: DeploymentUpdateBuild :one
 UPDATE deployments
-SET build_id = $2, status = 'building', building_at = now()
+SET build_id = $2, updated_at = now()
 WHERE id = $1
 RETURNING *;
 
--- name: DeploymentMarkStarting :exec
+-- name: DeploymentUpdateImage :one
 UPDATE deployments
-SET status = 'starting', starting_at = now(), image_id = $2
-WHERE id = $1;
+SET image_id = $2, updated_at = now()
+WHERE id = $1
+RETURNING *;
 
--- name: DeploymentUpdateVMID :exec
+-- name: DeploymentUpdateVM :one
 UPDATE deployments
-SET vm_id = $2
-WHERE id = $1;
+SET vm_id = $2, updated_at = now()
+WHERE id = $1
+RETURNING *;
 
 -- name: DeploymentMarkRunning :exec
 UPDATE deployments
-SET status = 'running', running_at = now()
+SET running_at = COALESCE(running_at, now()), updated_at = now()
 WHERE id = $1;
 
--- name: DeploymentMarkFailed :exec
+-- name: DeploymentUpdateFailedAt :exec
 UPDATE deployments
-SET status = 'failed', failed_at = now()
+SET failed_at = COALESCE(failed_at, now()), updated_at = now()
 WHERE id = $1;
 
 -- name: DeploymentFindByBuildID :many
@@ -46,17 +48,18 @@ SELECT * FROM deployments WHERE build_id = $1;
 -- name: DeploymentFindByVMID :one
 SELECT * FROM deployments WHERE vm_id = $1 LIMIT 1;
 
--- name: DeploymentFindOtherRunningByProjectID :many
--- Find all running deployments for a project, excluding a specific deployment
+-- name: DeploymentFindRunningAndOlder :many
+-- Find all running deployments for a project, older than the specified deployment
 SELECT * FROM deployments
 WHERE project_id = $1
-  AND id != $2
-  AND status = 'running'
+  AND id < $2
+  AND running_at IS NOT NULL
   AND deleted_at IS NULL;
+
 
 -- name: DeploymentMarkStopped :exec
 UPDATE deployments
-SET status = 'stopped', stopped_at = now()
+SET stopped_at = COALESCE(stopped_at, now()), updated_at = now()
 WHERE id = $1;
 
 -- name: VMLogCreate :exec
@@ -70,3 +73,10 @@ INNER JOIN vms v ON d.vm_id = v.id
 WHERE v.server_id = $1
   AND d.status = 'running'
   AND d.deleted_at IS NULL;
+
+-- name: DeploymentFindNewest :one
+SELECT * 
+FROM deployments 
+WHERE project_id = $1 
+ORDER BY id DESC 
+LIMIT 1;

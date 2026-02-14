@@ -36,7 +36,7 @@ FROM lock;
 
 -- name: VMSoftDelete :exec
 UPDATE vms
-SET deleted_at = now()
+SET deleted_at = COALESCE(deleted_at, now())
 WHERE id = $1;
 
 -- name: VMFindByImageID :many

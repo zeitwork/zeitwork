@@ -129,22 +129,56 @@ func (q *Queries) DeploymentFindByVMID(ctx context.Context, vmID uuid.UUID) (Dep
 	return i, err
 }
 
-const deploymentFindOtherRunningByProjectID = `-- name: DeploymentFindOtherRunningByProjectID :many
+const deploymentFindNewest = `-- name: DeploymentFindNewest :one
+SELECT id, status, github_commit, project_id, build_id, image_id, vm_id, pending_at, building_at, starting_at, running_at, stopping_at, stopped_at, failed_at, organisation_id, created_at, updated_at, deleted_at 
+FROM deployments 
+WHERE project_id = $1 
+ORDER BY id DESC 
+LIMIT 1
+`
+
+func (q *Queries) DeploymentFindNewest(ctx context.Context, projectID uuid.UUID) (Deployment, error) {
+	row := q.db.QueryRow(ctx, deploymentFindNewest, projectID)
+	var i Deployment
+	err := row.Scan(
+		&i.ID,
+		&i.Status,
+		&i.GithubCommit,
+		&i.ProjectID,
+		&i.BuildID,
+		&i.ImageID,
+		&i.VmID,
+		&i.PendingAt,
+		&i.BuildingAt,
+		&i.StartingAt,
+		&i.RunningAt,
+		&i.StoppingAt,
+		&i.StoppedAt,
+		&i.FailedAt,
+		&i.OrganisationID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
+}
+
+const deploymentFindRunningAndOlder = `-- name: DeploymentFindRunningAndOlder :many
 SELECT id, status, github_commit, project_id, build_id, image_id, vm_id, pending_at, building_at, starting_at, running_at, stopping_at, stopped_at, failed_at, organisation_id, created_at, updated_at, deleted_at FROM deployments
 WHERE project_id = $1
-  AND id != $2
-  AND status = 'running'
+  AND id < $2
+  AND running_at IS NOT NULL
   AND deleted_at IS NULL
 `
 
-type DeploymentFindOtherRunningByProjectIDParams struct {
+type DeploymentFindRunningAndOlderParams struct {
 	ProjectID uuid.UUID `json:"project_id"`
 	ID        uuid.UUID `json:"id"`
 }
 
-// Find all running deployments for a project, excluding a specific deployment
-func (q *Queries) DeploymentFindOtherRunningByProjectID(ctx context.Context, arg DeploymentFindOtherRunningByProjectIDParams) ([]Deployment, error) {
-	rows, err := q.db.Query(ctx, deploymentFindOtherRunningByProjectID, arg.ProjectID, arg.ID)
+// Find all running deployments for a project, older than the specified deployment
+func (q *Queries) DeploymentFindRunningAndOlder(ctx context.Context, arg DeploymentFindRunningAndOlderParams) ([]Deployment, error) {
+	rows, err := q.db.Query(ctx, deploymentFindRunningAndOlder, arg.ProjectID, arg.ID)
 	if err != nil {
 		return nil, err
 	}
@@ -296,20 +330,42 @@ func (q *Queries) DeploymentFirstPending(ctx context.Context) (Deployment, error
 	return i, err
 }
 
-const deploymentMarkBuilding = `-- name: DeploymentMarkBuilding :one
+const deploymentMarkRunning = `-- name: DeploymentMarkRunning :exec
 UPDATE deployments
-SET build_id = $2, status = 'building', building_at = now()
+SET running_at = COALESCE(running_at, now()), updated_at = now()
+WHERE id = $1
+`
+
+func (q *Queries) DeploymentMarkRunning(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deploymentMarkRunning, id)
+	return err
+}
+
+const deploymentMarkStopped = `-- name: DeploymentMarkStopped :exec
+UPDATE deployments
+SET stopped_at = COALESCE(stopped_at, now()), updated_at = now()
+WHERE id = $1
+`
+
+func (q *Queries) DeploymentMarkStopped(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deploymentMarkStopped, id)
+	return err
+}
+
+const deploymentUpdateBuild = `-- name: DeploymentUpdateBuild :one
+UPDATE deployments
+SET build_id = $2, updated_at = now()
 WHERE id = $1
 RETURNING id, status, github_commit, project_id, build_id, image_id, vm_id, pending_at, building_at, starting_at, running_at, stopping_at, stopped_at, failed_at, organisation_id, created_at, updated_at, deleted_at
 `
 
-type DeploymentMarkBuildingParams struct {
+type DeploymentUpdateBuildParams struct {
 	ID      uuid.UUID `json:"id"`
 	BuildID uuid.UUID `json:"build_id"`
 }
 
-func (q *Queries) DeploymentMarkBuilding(ctx context.Context, arg DeploymentMarkBuildingParams) (Deployment, error) {
-	row := q.db.QueryRow(ctx, deploymentMarkBuilding, arg.ID, arg.BuildID)
+func (q *Queries) DeploymentUpdateBuild(ctx context.Context, arg DeploymentUpdateBuildParams) (Deployment, error) {
+	row := q.db.QueryRow(ctx, deploymentUpdateBuild, arg.ID, arg.BuildID)
 	var i Deployment
 	err := row.Scan(
 		&i.ID,
@@ -334,69 +390,91 @@ func (q *Queries) DeploymentMarkBuilding(ctx context.Context, arg DeploymentMark
 	return i, err
 }
 
-const deploymentMarkFailed = `-- name: DeploymentMarkFailed :exec
+const deploymentUpdateFailedAt = `-- name: DeploymentUpdateFailedAt :exec
 UPDATE deployments
-SET status = 'failed', failed_at = now()
+SET failed_at = COALESCE(failed_at, now()), updated_at = now()
 WHERE id = $1
 `
 
-func (q *Queries) DeploymentMarkFailed(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deploymentMarkFailed, id)
+func (q *Queries) DeploymentUpdateFailedAt(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deploymentUpdateFailedAt, id)
 	return err
 }
 
-const deploymentMarkRunning = `-- name: DeploymentMarkRunning :exec
+const deploymentUpdateImage = `-- name: DeploymentUpdateImage :one
 UPDATE deployments
-SET status = 'running', running_at = now()
+SET image_id = $2, updated_at = now()
 WHERE id = $1
+RETURNING id, status, github_commit, project_id, build_id, image_id, vm_id, pending_at, building_at, starting_at, running_at, stopping_at, stopped_at, failed_at, organisation_id, created_at, updated_at, deleted_at
 `
 
-func (q *Queries) DeploymentMarkRunning(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deploymentMarkRunning, id)
-	return err
-}
-
-const deploymentMarkStarting = `-- name: DeploymentMarkStarting :exec
-UPDATE deployments
-SET status = 'starting', starting_at = now(), image_id = $2
-WHERE id = $1
-`
-
-type DeploymentMarkStartingParams struct {
+type DeploymentUpdateImageParams struct {
 	ID      uuid.UUID `json:"id"`
 	ImageID uuid.UUID `json:"image_id"`
 }
 
-func (q *Queries) DeploymentMarkStarting(ctx context.Context, arg DeploymentMarkStartingParams) error {
-	_, err := q.db.Exec(ctx, deploymentMarkStarting, arg.ID, arg.ImageID)
-	return err
+func (q *Queries) DeploymentUpdateImage(ctx context.Context, arg DeploymentUpdateImageParams) (Deployment, error) {
+	row := q.db.QueryRow(ctx, deploymentUpdateImage, arg.ID, arg.ImageID)
+	var i Deployment
+	err := row.Scan(
+		&i.ID,
+		&i.Status,
+		&i.GithubCommit,
+		&i.ProjectID,
+		&i.BuildID,
+		&i.ImageID,
+		&i.VmID,
+		&i.PendingAt,
+		&i.BuildingAt,
+		&i.StartingAt,
+		&i.RunningAt,
+		&i.StoppingAt,
+		&i.StoppedAt,
+		&i.FailedAt,
+		&i.OrganisationID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
 }
 
-const deploymentMarkStopped = `-- name: DeploymentMarkStopped :exec
+const deploymentUpdateVM = `-- name: DeploymentUpdateVM :one
 UPDATE deployments
-SET status = 'stopped', stopped_at = now()
+SET vm_id = $2, updated_at = now()
 WHERE id = $1
+RETURNING id, status, github_commit, project_id, build_id, image_id, vm_id, pending_at, building_at, starting_at, running_at, stopping_at, stopped_at, failed_at, organisation_id, created_at, updated_at, deleted_at
 `
 
-func (q *Queries) DeploymentMarkStopped(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, deploymentMarkStopped, id)
-	return err
-}
-
-const deploymentUpdateVMID = `-- name: DeploymentUpdateVMID :exec
-UPDATE deployments
-SET vm_id = $2
-WHERE id = $1
-`
-
-type DeploymentUpdateVMIDParams struct {
+type DeploymentUpdateVMParams struct {
 	ID   uuid.UUID `json:"id"`
 	VmID uuid.UUID `json:"vm_id"`
 }
 
-func (q *Queries) DeploymentUpdateVMID(ctx context.Context, arg DeploymentUpdateVMIDParams) error {
-	_, err := q.db.Exec(ctx, deploymentUpdateVMID, arg.ID, arg.VmID)
-	return err
+func (q *Queries) DeploymentUpdateVM(ctx context.Context, arg DeploymentUpdateVMParams) (Deployment, error) {
+	row := q.db.QueryRow(ctx, deploymentUpdateVM, arg.ID, arg.VmID)
+	var i Deployment
+	err := row.Scan(
+		&i.ID,
+		&i.Status,
+		&i.GithubCommit,
+		&i.ProjectID,
+		&i.BuildID,
+		&i.ImageID,
+		&i.VmID,
+		&i.PendingAt,
+		&i.BuildingAt,
+		&i.StartingAt,
+		&i.RunningAt,
+		&i.StoppingAt,
+		&i.StoppedAt,
+		&i.FailedAt,
+		&i.OrganisationID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+	)
+	return i, err
 }
 
 const vMLogCreate = `-- name: VMLogCreate :exec

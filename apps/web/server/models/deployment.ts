@@ -4,6 +4,7 @@ import {
   projects,
   domains,
   githubInstallations,
+  DeploymentStatus,
 } from "@zeitwork/database/schema";
 import { eq } from "../utils/drizzle";
 import { nanoid } from "nanoid";
@@ -84,10 +85,7 @@ export function useDeploymentModel() {
       }
 
       // Create internal domain for the deployment
-      const internalDomainName = generateInternalDomain(
-        project.slug,
-        organisation.slug,
-      );
+      const internalDomainName = generateInternalDomain(project.slug, organisation.slug);
 
       try {
         await useDrizzle().insert(domains).values({
@@ -120,4 +118,23 @@ export function useDeploymentModel() {
 function generateInternalDomain(projectSlug: string, orgSlug: string): string {
   const id = nanoid(6);
   return `${projectSlug}-${id}-${orgSlug}.zeitwork.app`.toLowerCase();
+}
+
+export function deploymentStatus(deployment: typeof deployments.$inferSelect): DeploymentStatus {
+  if (deployment.failedAt) {
+    return "failed";
+  }
+  if (deployment.stoppedAt) {
+    return "stopped";
+  }
+  if (deployment.runningAt) {
+    return "running";
+  }
+  if (deployment.startingAt) {
+    return "starting";
+  }
+  if (deployment.buildingAt) {
+    return "building";
+  }
+  return "pending";
 }
