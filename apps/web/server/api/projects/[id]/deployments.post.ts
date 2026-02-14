@@ -28,10 +28,17 @@ export default defineEventHandler(async (event) => {
 
   // Create a new deployment
   const deploymentModel = useDeploymentModel();
-  const { data: deployment } = await deploymentModel.create({
+  const { data: deployment, error } = await deploymentModel.create({
     projectId: project.id,
     organisationId: secure.organisationId,
   });
+
+  if (error) {
+    throw createError({
+      statusCode: 500,
+      message: error.message,
+    });
+  }
 
   return deployment;
 });

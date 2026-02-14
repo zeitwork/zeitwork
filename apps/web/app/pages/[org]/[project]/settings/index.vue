@@ -12,12 +12,46 @@ const rootDirectory = ref(project.value?.rootDirectory || "/");
 const isSaving = ref(false);
 const saveMessage = ref<{ type: "success" | "error"; text: string } | null>(null);
 
+// GitHub connection status
+const { data: githubStatus, refresh: refreshGithubStatus } = await useFetch(
+  `/api/projects/${projectSlug}/github-status`,
+);
+const isReconnecting = ref(false);
+const reconnectMessage = ref<{ type: "success" | "error"; text: string } | null>(null);
+
+const config = useRuntimeConfig();
+const githubAppInstallUrl = computed(() => {
+  const appName = config.public.appName;
+  const redirectUri = `${config.public.appUrl}/auth/github`;
+  return `https://github.com/apps/${appName}/installations/new?redirect_uri=${redirectUri}`;
+});
+
+async function reconnectGithub() {
+  isReconnecting.value = true;
+  reconnectMessage.value = null;
+  try {
+    await $fetch(`/api/projects/${projectSlug}/reconnect-github`, {
+      method: "POST",
+    });
+    reconnectMessage.value = { type: "success", text: "GitHub connection restored" };
+    await refreshGithubStatus();
+  } catch (error: any) {
+    console.error("Failed to reconnect GitHub:", error);
+    reconnectMessage.value = {
+      type: "error",
+      text: error?.data?.message || "Failed to reconnect GitHub",
+    };
+  } finally {
+    isReconnecting.value = false;
+  }
+}
+
 // Update rootDirectory when project data loads
 watch(
   () => project.value?.rootDirectory,
   (newVal) => {
     if (newVal) rootDirectory.value = newVal;
-  }
+  },
 );
 
 async function saveSettings() {
@@ -64,6 +98,68 @@ async function saveSettings() {
       <div>
         <h3 class="text-primary mb-2 text-sm font-medium">Organization</h3>
         <DInput :model-value="orgId" disabled />
+      </div>
+
+      <div>
+        <h3 class="text-primary mb-2 text-sm font-medium">Git Repository</h3>
+        <div class="border-edge rounded-lg border p-3">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <Icon name="mdi:github" class="size-4" />
+              <a
+                v-if="githubStatus?.repository"
+                :href="`https://github.com/${githubStatus.repository}`"
+                target="_blank"
+                class="text-primary text-sm hover:underline"
+              >
+                {{ githubStatus.repository }}
+              </a>
+            </div>
+            <div
+              v-if="githubStatus"
+              :class="[
+                githubStatus.connected ? 'text-success bg-success-subtle' : 'text-danger bg-danger-subtle',
+                'rounded px-1.5 py-0.5 text-xs',
+              ]"
+            >
+              {{ githubStatus.connected ? "Connected" : "Disconnected" }}
+            </div>
+          </div>
+          <div v-if="githubStatus && !githubStatus.connected" class="mt-3">
+            <p class="text-danger mb-3 text-xs">
+              {{ githubStatus.error || "The GitHub connection for this project is broken. Deployments will fail until reconnected." }}
+            </p>
+            <div class="flex items-center gap-2">
+              <DButton
+                variant="primary"
+                :loading="isReconnecting"
+                @click="reconnectGithub"
+              >
+                Reconnect
+              </DButton>
+              <a
+                :href="githubAppInstallUrl"
+                class="text-secondary hover:text-primary text-xs underline"
+              >
+                Install GitHub App
+              </a>
+            </div>
+            <p
+              v-if="reconnectMessage"
+              :class="reconnectMessage.type === 'error' ? 'text-danger' : 'text-success'"
+              class="mt-2 text-xs"
+            >
+              {{ reconnectMessage.text }}
+            </p>
+          </div>
+          <p
+            v-if="reconnectMessage && githubStatus?.connected"
+            :class="reconnectMessage.type === 'error' ? 'text-danger' : 'text-success'"
+            class="mt-2 text-xs"
+          >
+            {{ reconnectMessage.text }}
+          </p>
+        </div>
       </div>
 
       <div>

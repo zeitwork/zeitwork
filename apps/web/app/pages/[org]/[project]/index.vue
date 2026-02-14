@@ -20,20 +20,34 @@ useIntervalFn(() => {
 }, 1000);
 
 const isCreatingDeployment = ref(false);
+const deploymentError = ref<string | null>(null);
 
 async function createDeployment() {
   isCreatingDeployment.value = true;
+  deploymentError.value = null;
   try {
     await $fetch(`/api/projects/${projectSlug}/deployments`, {
       method: "POST",
     });
     await refreshDeployments();
-  } catch (error) {
+  } catch (error: any) {
     console.error("Failed to create deployment:", error);
+    deploymentError.value =
+      error?.data?.message || "Failed to create deployment";
   } finally {
     isCreatingDeployment.value = false;
   }
 }
+
+const isGitHubError = computed(() => {
+  if (!deploymentError.value) return false;
+  const msg = deploymentError.value.toLowerCase();
+  return (
+    msg.includes("github") ||
+    msg.includes("installation") ||
+    msg.includes("commit")
+  );
+});
 
 function renderDate(date: string) {
   return Intl.DateTimeFormat("en-DE", {
@@ -109,6 +123,25 @@ function deploymentLink(deployment: any) {
         </d-button>
       </template>
     </DHeader>
+    <div
+      v-if="deploymentError"
+      class="bg-danger-subtle text-danger border-edge-subtle flex items-center gap-2 border-b px-4 py-3 text-sm"
+    >
+      <span>{{ deploymentError }}</span>
+      <nuxt-link
+        v-if="isGitHubError"
+        :to="`/${orgId}/${projectSlug}/settings`"
+        class="underline"
+      >
+        Go to Settings
+      </nuxt-link>
+      <button
+        class="text-danger/60 hover:text-danger ml-auto"
+        @click="deploymentError = null"
+      >
+        Dismiss
+      </button>
+    </div>
     <div class="flex-1 overflow-auto">
       <nuxt-link
         v-for="deployment in deployments"
