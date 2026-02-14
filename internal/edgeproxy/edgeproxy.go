@@ -13,6 +13,8 @@ import (
 
 	"github.com/caddyserver/certmagic"
 	"github.com/zeitwork/zeitwork/internal/database"
+	"github.com/zeitwork/zeitwork/internal/shared/base58"
+	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 )
 
 type Config struct {
@@ -35,8 +37,10 @@ type Config struct {
 // With L2 routing between servers, the edge proxy proxies directly to the VM IP.
 // The kernel routing table handles cross-server delivery via VLAN host routes.
 type Route struct {
-	Port int32  // VM's port
-	IP   string // VM's IP address
+	Port     int32     // VM's port
+	IP       string    // VM's IP address
+	ServerID uuid.UUID // Server hosting the VM
+	VmID     uuid.UUID // VM serving this route
 }
 
 // Service is the edgeproxy service
@@ -216,8 +220,10 @@ func (s *Service) loadRoutes(ctx context.Context) error {
 		// server it's on. The kernel routing table (host routes per-server)
 		// delivers packets across the VLAN transparently.
 		newRoutes[row.DomainName] = Route{
-			IP:   row.VmIp.Addr().String(),
-			Port: row.VmPort.Int32,
+			IP:       row.VmIp.Addr().String(),
+			Port:     row.VmPort.Int32,
+			ServerID: row.ServerID,
+			VmID:     row.VmID,
 		}
 	}
 
@@ -321,8 +327,18 @@ func (s *Service) serveHTTPS(w http.ResponseWriter, r *http.Request) {
 		req.Header.Set("X-Real-IP", r.RemoteAddr)
 	}
 
+	zeitworkID := base58.Encode(route.ServerID.Bytes[:]) + ":" + base58.Encode(route.VmID.Bytes[:])
+
+	proxy.ModifyResponse = func(resp *http.Response) error {
+		resp.Header.Set("Server", "Zeitwork")
+		resp.Header.Set("X-Zeitwork-Id", zeitworkID)
+		return nil
+	}
+
 	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
 		s.logger.Warn("proxy error", "host", host, "target", targetURL, "error", err)
+		w.Header().Set("Server", "Zeitwork")
+		w.Header().Set("X-Zeitwork-Id", zeitworkID)
 		http.Error(w, "Bad Gateway", http.StatusBadGateway)
 	}
 
