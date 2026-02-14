@@ -233,13 +233,18 @@ func (s *Service) executeBuild(ctx context.Context, build queries.Build, vm quer
 
 	slog.Info("building docker image with buildx", "build_id", build.ID, "tag", imageTag)
 
-	// Build and push using docker buildx with OCI media types
-	// We run a container with the docker CLI to execute buildx build
-	if err := s.runBuildxBuild(ctx, dockerClient, build, buildContext, imageTag); err != nil {
-		return fmt.Errorf("buildx build failed: %w", err)
+	// Check if the image already exists in the registry (e.g. from a previous build of the same commit)
+	srcCreds := fmt.Sprintf("%s:%s", s.cfg.DockerRegistryUsername, s.cfg.DockerRegistryPAT)
+	if err := s.runCommand("skopeo", "inspect", "--creds", srcCreds, "docker://"+imageTag); err == nil {
+		slog.Info("image already exists in registry, skipping build", "build_id", build.ID, "tag", imageTag)
+	} else {
+		// Build and push using docker buildx with OCI media types
+		// We run a container with the docker CLI to execute buildx build
+		if err := s.runBuildxBuild(ctx, dockerClient, build, buildContext, imageTag); err != nil {
+			return fmt.Errorf("buildx build failed: %w", err)
+		}
+		slog.Info("docker build and push completed", "build_id", build.ID)
 	}
-
-	slog.Info("docker build and push completed", "build_id", build.ID)
 
 	// 9. Create image record in DB (use find-or-create to handle concurrent builds for same commit)
 	outputImage, err := s.db.ImageFindOrCreate(ctx, queries.ImageFindOrCreateParams{
