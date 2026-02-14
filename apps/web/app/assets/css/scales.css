@@ -1,0 +1,30 @@
+/**
+ * OKLCH Gray Scale
+ *
+ * A perceptually uniform achromatic scale used as the foundation
+ * for all neutral/surface semantic tokens. Chroma is 0 (pure gray).
+ *
+ * These values are designed to match the Figma design tokens
+ * (Radix Gray + Tailwind neutral references) while being
+ * mathematically consistent in OKLCH lightness.
+ */
+
+@theme {
+  --color-gray-50: oklch(0.985 0 0); /* ~#FAFAFA */
+  --color-gray-100: oklch(0.965 0 0); /* ~#F3F3F3 */
+  --color-gray-150: oklch(0.95 0 0); /* ~# */
+  --color-gray-200: oklch(0.935 0 0); /* ~#E5E5E5 */
+  --color-gray-250: oklch(0.905 0 0); /* ~#E2E2E2 — control surfaces */
+  --color-gray-300: oklch(0.895 0 0); /* ~#D4D4D4 */
+  --color-gray-350: oklch(0.68 0 0); /* ~#A0A0A0 — subtle text (dark) */
+  --color-gray-400: oklch(0.71 0 0); /* ~#A1A1A1 */
+  --color-gray-450: oklch(0.5 0 0); /* ~#707070 — weak text (dark) */
+  --color-gray-500: oklch(0.556 0 0); /* ~#737373 */
+  --color-gray-600: oklch(0.44 0 0); /* ~#525252 */
+  --color-gray-700: oklch(0.37 0 0); /* ~#404040 */
+  --color-gray-750: oklch(0.3 0 0); /* ~#343434 — control surfaces (dark) */
+  --color-gray-800: oklch(0.27 0 0); /* ~#262626 */
+  --color-gray-850: oklch(0.24 0 0); /* ~#1C1C1C — weak surfaces (dark) */
+  --color-gray-900: oklch(0.21 0 0); /* ~#171717 */
+  --color-gray-950: oklch(0.14 0 0); /* ~#0A0A0A */
+}
