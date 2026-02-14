@@ -7,6 +7,7 @@ import {
   CircleDotIcon,
   HammerIcon,
   LoaderIcon,
+  TerminalIcon,
 } from "lucide-vue-next";
 
 definePageMeta({
@@ -41,12 +42,65 @@ const isSettled = computed(
   () => deployment.value && ["running", "stopped", "failed"].includes(deployment.value.status),
 );
 
+// --- VM Logs (cursor-based accumulation) ---
+const vmLogEntries = ref<Array<{ id: string; message: string; level: string | null }>>([]);
+const vmLogCursor = ref<string | null>(null);
+const isLoadingVmLogs = ref(false);
+
+const hasVmLogs = computed(() => {
+  if (!deployment.value) return false;
+  const status = deployment.value.status;
+  return ["starting", "running", "stopped", "failed"].includes(status);
+});
+
+const isVmLogStreaming = computed(() => {
+  if (!deployment.value) return false;
+  return ["starting", "running"].includes(deployment.value.status);
+});
+
+async function fetchVmLogs() {
+  if (isLoadingVmLogs.value) return;
+  isLoadingVmLogs.value = true;
+  try {
+    const params: Record<string, string> = {};
+    if (vmLogCursor.value) {
+      params.cursor = vmLogCursor.value;
+    }
+    const result = await $fetch(`/api/deployments/${deploymentId}/logs`, {
+      query: params,
+    });
+    if (result.logs && result.logs.length > 0) {
+      vmLogEntries.value.push(...result.logs);
+      const lastLog = result.logs.at(-1);
+      if (lastLog) {
+        vmLogCursor.value = lastLog.id;
+      }
+    }
+  } catch (error) {
+    console.error("Failed to fetch VM logs:", error);
+  } finally {
+    isLoadingVmLogs.value = false;
+  }
+}
+
+// Initial fetch
+if (hasVmLogs.value) {
+  await fetchVmLogs();
+}
+
+const parsedVmLogs = computed(() =>
+  vmLogEntries.value.map((log) => parseAnsi(log.message)),
+);
+
 useIntervalFn(() => {
   if (!isSettled.value) {
     refreshDeployment();
   }
   if (isBuilding.value) {
     refreshBuildLogs();
+  }
+  if (hasVmLogs.value) {
+    fetchVmLogs();
   }
 }, 1000);
 
@@ -390,6 +444,42 @@ function toggleStep(sIndex: number, stepIndex: number) {
               </div>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- Runtime Logs -->
+      <div v-if="hasVmLogs" class="border-edge-subtle border-b">
+        <div
+          class="border-edge-subtle flex items-center gap-2 border-b bg-surface-1 px-4 py-2"
+        >
+          <TerminalIcon class="size-4 text-secondary" />
+          <span class="text-sm font-medium text-secondary">Runtime Logs</span>
+          <LoaderIcon
+            v-if="isVmLogStreaming"
+            class="size-3.5 text-tertiary animate-spin"
+          />
+        </div>
+
+        <div
+          v-if="vmLogEntries.length === 0"
+          class="bg-surface-0 p-4 font-mono text-sm"
+        >
+          <pre class="text-xs text-tertiary">No runtime logs available yet...</pre>
+        </div>
+
+        <div v-else class="bg-surface-0 p-4 font-mono">
+          <pre
+            v-for="(segments, index) in parsedVmLogs"
+            :key="index"
+            class="text-xs text-secondary"
+          ><span
+              v-for="(segment, i) in segments"
+              :key="i"
+              :style="{
+                color: segment.color ?? undefined,
+                fontWeight: segment.bold ? 'bold' : undefined,
+              }"
+            >{{ segment.text }}</span></pre>
         </div>
       </div>
     </div>

@@ -12,9 +12,10 @@ const rootDirectory = ref(project.value?.rootDirectory || "/");
 const isSaving = ref(false);
 const saveMessage = ref<{ type: "success" | "error"; text: string } | null>(null);
 
-// GitHub connection status
-const { data: githubStatus, refresh: refreshGithubStatus } = await useFetch(
+// GitHub connection status (client-side only, non-blocking)
+const { data: githubStatus, refresh: refreshGithubStatus, status: githubStatusLoading } = useFetch(
   `/api/projects/${projectSlug}/github-status`,
+  { server: false },
 );
 const isReconnecting = ref(false);
 const reconnectMessage = ref<{ type: "success" | "error"; text: string } | null>(null);
@@ -116,7 +117,13 @@ async function saveSettings() {
               </a>
             </div>
             <div
-              v-if="githubStatus"
+              v-if="githubStatusLoading === 'pending'"
+              class="text-tertiary bg-inverse/5 rounded px-1.5 py-0.5 text-xs"
+            >
+              Checking...
+            </div>
+            <div
+              v-else-if="githubStatus"
               :class="[
                 githubStatus.connected ? 'text-success bg-success-subtle' : 'text-danger bg-danger-subtle',
                 'rounded px-1.5 py-0.5 text-xs',

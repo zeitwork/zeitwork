@@ -1,5 +1,11 @@
 import { vmLogs, deployments } from "@zeitwork/database/schema";
-import { eq, and } from "@zeitwork/database/utils/drizzle";
+import { eq, and, gt } from "@zeitwork/database/utils/drizzle";
+import { z } from "zod";
+
+const querySchema = z.object({
+  cursor: z.uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(1000).default(200),
+});
 
 export default defineEventHandler(async (event) => {
   const { secure, verified } = await requireVerifiedUser(event);
@@ -10,6 +16,8 @@ export default defineEventHandler(async (event) => {
   if (!deploymentId) {
     throw createError({ statusCode: 400, message: "Deployment ID is required" });
   }
+
+  const { cursor, limit } = await getValidatedQuery(event, querySchema.parse);
 
   // Get the deployment to verify access
   const [deployment] = await useDrizzle()
@@ -25,15 +33,24 @@ export default defineEventHandler(async (event) => {
   }
 
   if (!deployment.vmId) {
-    return [];
+    return { logs: [], nextCursor: null };
+  }
+
+  // Build conditions with optional cursor
+  const conditions = [eq(vmLogs.vmId, deployment.vmId)];
+  if (cursor) {
+    conditions.push(gt(vmLogs.id, cursor));
   }
 
   // Fetch VM logs via the deployment's vmId
   const logs = await useDrizzle()
     .select()
     .from(vmLogs)
-    .where(eq(vmLogs.vmId, deployment.vmId))
-    .orderBy(vmLogs.createdAt);
+    .where(and(...conditions))
+    .orderBy(vmLogs.id)
+    .limit(limit);
 
-  return logs;
+  const nextCursor = logs.length === limit ? (logs.at(-1)?.id ?? null) : null;
+
+  return { logs, nextCursor };
 });
