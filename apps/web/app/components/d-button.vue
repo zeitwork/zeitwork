@@ -23,7 +23,12 @@ interface Props {
 }
 
 const props = defineProps<Props>();
-const { variant = "primary", size = "md", type = "button", loading = false } = props;
+const {
+  variant = "primary",
+  size = "md",
+  type = "button",
+  loading = false,
+} = props;
 
 const variantClasses: { [key: string]: string } = {
   primary:
@@ -31,8 +36,9 @@ const variantClasses: { [key: string]: string } = {
   secondary:
     "bg-surface-1 text-primary hover:bg-surface-2 active:bg-base border border-transparent",
   transparent:
-    "text-secondary hover:bg-inverse/5 active:bg-inverse/10 border !border-transparent",
-  danger: "bg-danger text-danger-on hover:bg-danger-strong border border-transparent active:bg-danger-strong",
+    "text-secondary hover:bg-surface-1 active:bg-inverse/10 border !border-transparent",
+  danger:
+    "bg-danger text-danger-on hover:bg-danger-strong border border-transparent active:bg-danger-strong",
   "danger-light":
     "text-danger bg-danger-subtle hover:bg-danger/30 active:bg-danger/50 border border-transparent",
   outline:
@@ -74,12 +80,25 @@ const isLoading = refDebounced(toRef(props, "loading"), 100);
     :type
     :to
     class="relative flex min-w-fit cursor-default items-center justify-center gap-2 rounded-md text-sm whitespace-pre ring-focus outline-none select-none focus-visible:ring-2 focus-visible:ring-offset-2"
-    :class="[sizeClass, variantClasses[variant], disabled ? 'pointer-events-none opacity-50' : '']"
+    :class="[
+      sizeClass,
+      variantClasses[variant],
+      disabled ? 'pointer-events-none opacity-50' : '',
+    ]"
     :disabled
   >
-    <component v-if="iconLeft" :is="iconLeft" class="size-4" :class="{ 'opacity-0': isLoading }" />
+    <component
+      v-if="iconLeft"
+      :is="iconLeft"
+      class="size-4"
+      :class="{ 'opacity-0': isLoading }"
+    />
     <slot name="leading"></slot>
-    <div v-if="$slots.default" class="inline" :class="{ 'opacity-0': isLoading }">
+    <div
+      v-if="$slots.default"
+      class="inline"
+      :class="{ 'opacity-0': isLoading }"
+    >
       <slot></slot>
     </div>
     <slot name="trailing"></slot>

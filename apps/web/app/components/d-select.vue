@@ -48,7 +48,7 @@ const open = ref(false);
         position="popper"
         side="bottom"
         align="start"
-        class="border-edge bg-base z-[9999] w-[var(--reka-select-trigger-width)] rounded-lg border shadow-sm"
+        class="border-edge base-3 z-[9999] w-[var(--reka-select-trigger-width)] rounded-lg border shadow-sm"
         :side-offset="5"
         ref="selectContentRef"
       >

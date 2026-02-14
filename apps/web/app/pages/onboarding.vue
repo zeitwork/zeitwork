@@ -55,7 +55,7 @@ async function subscribe(plan: "early-access" | "hobby" | "business") {
       <h2 class="text-primary mb-2 text-lg">Pick a plan</h2>
       <div class="grid grid-cols-4 gap-4">
         <div
-          class="bg-surface-1 border-edge-subtle flex flex-col gap-2 rounded-sm border p-2"
+          class="base-3 border-edge-subtle flex flex-col gap-2 rounded-sm border p-2"
         >
           <h3 class="text-primary">Early Access</h3>
           <p class="text-secondary">$0/month</p>
@@ -75,7 +75,7 @@ async function subscribe(plan: "early-access" | "hobby" | "business") {
           </DButton>
         </div>
         <div
-          class="bg-surface-1 border-edge-subtle flex flex-col gap-2 rounded-sm border p-2"
+          class="base-3 border-edge-subtle flex flex-col gap-2 rounded-sm border p-2"
         >
           <h3 class="text-primary">Hobby</h3>
           <p class="text-secondary">$5/month</p>
@@ -91,7 +91,7 @@ async function subscribe(plan: "early-access" | "hobby" | "business") {
           </DButton>
         </div>
         <div
-          class="bg-surface-1 border-edge-subtle flex flex-col gap-2 rounded-sm border p-2"
+          class="base-3 border-edge-subtle flex flex-col gap-2 rounded-sm border p-2"
         >
           <h3 class="text-primary">Business</h3>
           <p class="text-secondary">$25/month</p>

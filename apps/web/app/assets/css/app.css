@@ -25,6 +25,11 @@
   --dir: -1; /* light mode: surfaces darken to elevate */
   --contrast: 1;
 
+  /* ── Edge alpha (per-scheme) ── */
+  --edge-alpha: 0.12;
+  --edge-alpha-subtle: 0.06;
+  --edge-alpha-strong: 0.2;
+
   /* ── Base level offsets from seed (subtracted from seed lightness, negative = lighter) ── */
   --base-0-offset: 0.08;
   --base-1-offset: 0.03;
@@ -58,9 +63,12 @@
   :root {
     color-scheme: dark;
     --dir: 1;
+    --edge-alpha: 0.08;
+    --edge-alpha-subtle: 0.04;
+    --edge-alpha-strong: 0.14;
     --base-0-offset: 0.12;
     --base-1-offset: 0.02;
-    --base-3-offset: -0.05;
+    --base-3-offset: -0.03;
     --surface-step-on-0: 0.14;
     --surface-step-on-1: 0.065;
     --surface-step-on-2: 0.05;
@@ -118,13 +126,13 @@
    * ═══════════════════════════════════════
    */
   --border-color-edge: oklch(
-    from var(--base) calc(l + 0.75 * var(--dir)) c h / 0.12
+    from var(--base) calc(l + 0.75 * var(--dir)) c h / var(--edge-alpha)
   );
   --border-color-edge-subtle: oklch(
-    from var(--base) calc(l + 0.75 * var(--dir)) c h / 0.06
+    from var(--base) calc(l + 0.75 * var(--dir)) c h / var(--edge-alpha-subtle)
   );
   --border-color-edge-strong: oklch(
-    from var(--base) calc(l + 0.75 * var(--dir)) c h / 0.2
+    from var(--base) calc(l + 0.75 * var(--dir)) c h / var(--edge-alpha-strong)
   );
 
   /*
@@ -133,7 +141,7 @@
    * ═══════════════════════════════════════
    */
   --ring-color-edge: oklch(
-    from var(--base) calc(l + 0.75 * var(--dir)) c h / 0.12
+    from var(--base) calc(l + 0.75 * var(--dir)) c h / var(--edge-alpha)
   );
 
   /*
@@ -142,7 +150,7 @@
    * ═══════════════════════════════════════
    */
   --outline-color-edge: oklch(
-    from var(--base) calc(l + 0.75 * var(--dir)) c h / 0.12
+    from var(--base) calc(l + 0.75 * var(--dir)) c h / var(--edge-alpha)
   );
 
   /*

@@ -221,7 +221,7 @@ function toggleStep(sIndex: number, stepIndex: number) {
         <!-- Empty state -->
         <div
           v-if="!buildLogs || buildLogs.length === 0"
-          class="bg-surface-0 p-4 font-mono text-sm"
+          class="bg-base p-4 font-mono text-sm"
         >
           <pre class="text-xs text-tertiary">No build logs available yet...</pre>
         </div>
@@ -229,7 +229,7 @@ function toggleStep(sIndex: number, stepIndex: number) {
         <!-- Raw view -->
         <div
           v-else-if="viewMode === 'raw'"
-          class="bg-surface-0 p-4 font-mono"
+          class="bg-base p-4 font-mono"
         >
           <pre
             v-for="(segments, index) in parsedBuildLogs"
@@ -294,7 +294,7 @@ function toggleStep(sIndex: number, stepIndex: number) {
             <!-- Section content: steps -->
             <div
               v-if="isSectionExpanded(sIndex)"
-              class="bg-surface-0 font-mono"
+              class="bg-base font-mono"
             >
               <div
                 v-for="(step, stepIndex) in section.steps"
