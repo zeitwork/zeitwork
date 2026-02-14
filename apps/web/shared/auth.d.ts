@@ -25,6 +25,7 @@ declare module "#auth-utils" {
       token_type: string;
       scope: string;
     };
+    tokenExpiresAt: number;
   }
 }
 
