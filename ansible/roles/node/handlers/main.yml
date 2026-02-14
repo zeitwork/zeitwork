@@ -14,3 +14,5 @@
 
 - name: netplan apply
   command: netplan apply
+  async: 30
+  poll: 1
