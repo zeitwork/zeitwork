@@ -27,9 +27,16 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 	}
 
 	if deployment.DeletedAt.Valid || deployment.FailedAt.Valid || deployment.StoppedAt.Valid {
-		logger.Info("deployment in terminal state, skipping", "status")
+		logger.Info("deployment in terminal state, skipping")
 
 		// Ensure if the deployment is in a terminal state, the VM is also deleted
+		vm, err := s.db.VMFirstByID(ctx, deployment.VmID)
+		if err != nil {
+			return err
+		}
+		if vm.DeletedAt.Valid {
+			return nil
+		}
 		if deployment.VmID.Valid {
 			err = s.db.VMSoftDelete(ctx, deployment.VmID)
 			if err != nil {

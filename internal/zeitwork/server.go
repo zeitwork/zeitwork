@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/vishvananda/netlink"
 	"github.com/zeitwork/zeitwork/internal/database/queries"
 	"github.com/zeitwork/zeitwork/internal/shared/uuid"
@@ -132,15 +133,22 @@ func (s *Service) clusterDutyLoop(ctx context.Context) {
 	}
 }
 
-// tryBecomeClusterLeader acquires a dedicated connection, tries to become the
-// cluster leader, and runs cluster duties if successful. Returns when leadership
-// is lost (connection error, context cancelled, etc.).
+// tryBecomeClusterLeader opens a dedicated direct PostgreSQL connection
+// (bypassing PgBouncer), tries to acquire a session-scoped advisory lock,
+// and runs cluster duties if successful. Returns when leadership is lost
+// (connection error, context cancelled, etc.).
+//
+// A direct connection is required because session-level advisory locks are
+// incompatible with PgBouncer's transaction pooling mode.
 func (s *Service) tryBecomeClusterLeader(ctx context.Context) {
-	conn, err := s.db.Pool.Acquire(ctx)
+	conn, err := pgx.Connect(ctx, s.databaseDirectURL)
 	if err != nil {
-		slog.Error("failed to acquire connection for cluster leader election", "err", err)
+		slog.Error("failed to connect for cluster leader election", "err", err)
 		return
 	}
+	// Closing the direct connection guarantees the PostgreSQL backend session
+	// ends and the advisory lock is released — no explicit unlock needed.
+	defer conn.Close(context.Background())
 
 	// Try to acquire a session-scoped advisory lock (non-blocking).
 	// The lock is held as long as this connection stays open.
@@ -148,28 +156,11 @@ func (s *Service) tryBecomeClusterLeader(ctx context.Context) {
 	acquired, err := q.TrySessionAdvisoryLock(ctx, "cluster_leader")
 	if err != nil {
 		slog.Error("failed to try cluster leader lock", "err", err)
-		conn.Release()
 		return
 	}
 	if !acquired {
-		conn.Release()
 		return // Another server is the leader
 	}
-
-	defer func() {
-		releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-
-		if _, err := q.ReleaseSessionAdvisoryLock(releaseCtx, "cluster_leader"); err != nil {
-			// Do not return a locked session to the pool.
-			slog.Warn("failed to release cluster leader lock, closing connection", "err", err)
-			hijacked := conn.Hijack()
-			_ = hijacked.Close(context.Background())
-			return
-		}
-
-		conn.Release()
-	}()
 
 	s.setControlPlaneLeader(true)
 	defer s.setControlPlaneLeader(false)

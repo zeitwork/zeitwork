@@ -1,6 +1,7 @@
 import { deployments, projects, domains } from "@zeitwork/database/schema";
 import { eq, and, lt, inArray } from "@zeitwork/database/utils/drizzle";
 import { z } from "zod";
+import { deploymentStatus } from "~~/server/models/deployment";
 
 const paramsSchema = z.object({
   id: z.string(),
@@ -41,15 +42,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const deploymentList = await useDrizzle()
-    .select({
-      id: deployments.id,
-      status: deployments.status,
-      projectId: deployments.projectId,
-      githubCommit: deployments.githubCommit,
-      organisationId: deployments.organisationId,
-      createdAt: deployments.createdAt,
-      updatedAt: deployments.updatedAt,
-    })
+    .select()
     .from(deployments)
     .where(and(...conditions))
     .orderBy(desc(deployments.id))
@@ -71,10 +64,11 @@ export default defineEventHandler(async (event) => {
   // Step 3: Merge domains into deployments
   const merged = deploymentList.map((d) => ({
     ...d,
+    status: deploymentStatus(d),
     domains: domainList.filter((dom) => dom.deploymentId === d.id).map((dom) => dom.name),
   }));
 
-  const nextCursor = deploymentList.length === limit ? deploymentList.at(-1)?.id ?? null : null;
+  const nextCursor = deploymentList.length === limit ? (deploymentList.at(-1)?.id ?? null) : null;
 
   return { deployments: merged, nextCursor };
 });

@@ -77,6 +77,9 @@ type Service struct {
 	domainScheduler     *reconciler.Scheduler
 	serverScheduler     *reconciler.Scheduler
 
+	// Direct PG connection URL for leader election (NOT PgBouncer).
+	databaseDirectURL string
+
 	// Control-plane role (true when this server holds cluster_leader lock).
 	controlPlaneLeader atomic.Bool
 
@@ -97,6 +100,7 @@ func New(cfg Config) (*Service, error) {
 		db:                cfg.DB,
 		serverID:          cfg.ServerID,
 		routeChangeNotify: cfg.RouteChangeNotify,
+		databaseDirectURL: cfg.DatabaseDirectURL,
 		dnsResolver:       dnsresolver.NewResolver(),
 		vsockManager:      NewVSockManager(cfg.DB),
 		vmToCmd:           make(map[uuid.UUID]*exec.Cmd),

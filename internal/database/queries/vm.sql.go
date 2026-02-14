@@ -239,33 +239,33 @@ func (q *Queries) VMFirstByID(ctx context.Context, id uuid.UUID) (Vm, error) {
 
 const vMNextIPAddress = `-- name: VMNextIPAddress :one
 WITH lock AS (
-    SELECT pg_advisory_xact_lock(hashtext('vm_ip_allocation'))
+  SELECT pg_advisory_xact_lock(hashtext('vm_ip_allocation'))
 )
-SELECT COALESCE(
-               (SELECT set_masklen((ip_address + 2)::inet, 31)
-                FROM vms
-                WHERE server_id = $1
-                  AND deleted_at IS NULL
-                ORDER BY ip_address DESC
-                LIMIT 1),
-               set_masklen((host($2::cidr)::inet + 1), 31)  -- First VM: base+1/31
-       )::inet AS next_ip
-FROM lock
+SELECT set_masklen((network($1::inet) + gs)::inet, 31) AS free_ip
+FROM lock, generate_series(1, (2 ^ (32 - masklen($1::inet)))::int - 2, 2) gs
+WHERE NOT EXISTS (
+  SELECT 1 FROM vms
+  WHERE deleted_at IS NULL
+    AND server_id = $2
+    AND ip_address = set_masklen((network($1::inet) + gs)::inet, 31)
+)
+ORDER BY gs
+LIMIT 1
 `
 
 type VMNextIPAddressParams struct {
-	ServerID uuid.UUID    `json:"server_id"`
 	IpRange  netip.Prefix `json:"ip_range"`
+	ServerID uuid.UUID    `json:"server_id"`
 }
 
 // Allocate the next /31 subnet within a server's IP range.
 // Each VM needs its own /31 subnet, so we increment by 2 to skip to the next block.
 // The first VM in a range gets base+1 (e.g., 10.1.0.1/31), host side is base+0.
 func (q *Queries) VMNextIPAddress(ctx context.Context, arg VMNextIPAddressParams) (netip.Prefix, error) {
-	row := q.db.QueryRow(ctx, vMNextIPAddress, arg.ServerID, arg.IpRange)
-	var next_ip netip.Prefix
-	err := row.Scan(&next_ip)
-	return next_ip, err
+	row := q.db.QueryRow(ctx, vMNextIPAddress, arg.IpRange, arg.ServerID)
+	var free_ip netip.Prefix
+	err := row.Scan(&free_ip)
+	return free_ip, err
 }
 
 const vMSoftDelete = `-- name: VMSoftDelete :exec

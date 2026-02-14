@@ -21,18 +21,18 @@ RETURNING *;
 -- Each VM needs its own /31 subnet, so we increment by 2 to skip to the next block.
 -- The first VM in a range gets base+1 (e.g., 10.1.0.1/31), host side is base+0.
 WITH lock AS (
-    SELECT pg_advisory_xact_lock(hashtext('vm_ip_allocation'))
+  SELECT pg_advisory_xact_lock(hashtext('vm_ip_allocation'))
 )
-SELECT COALESCE(
-               (SELECT set_masklen((ip_address + 2)::inet, 31)
-                FROM vms
-                WHERE server_id = @server_id
-                  AND deleted_at IS NULL
-                ORDER BY ip_address DESC
-                LIMIT 1),
-               set_masklen((host(@ip_range::cidr)::inet + 1), 31)  -- First VM: base+1/31
-       )::inet AS next_ip
-FROM lock;
+SELECT set_masklen((network(@ip_range::inet) + gs)::inet, 31) AS free_ip
+FROM lock, generate_series(1, (2 ^ (32 - masklen(@ip_range::inet)))::int - 2, 2) gs
+WHERE NOT EXISTS (
+  SELECT 1 FROM vms
+  WHERE deleted_at IS NULL
+    AND server_id = @server_id
+    AND ip_address = set_masklen((network(@ip_range::inet) + gs)::inet, 31)
+)
+ORDER BY gs
+LIMIT 1;
 
 -- name: VMSoftDelete :exec
 UPDATE vms
