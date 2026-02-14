@@ -16,7 +16,7 @@ LIMIT 1;
 
 -- name: DeploymentUpdateBuild :one
 UPDATE deployments
-SET build_id = $2, updated_at = now()
+SET build_id = $2, building_at = COALESCE(building_at, now()), updated_at = now()
 WHERE id = $1
 RETURNING *;
 
@@ -28,7 +28,7 @@ RETURNING *;
 
 -- name: DeploymentUpdateVM :one
 UPDATE deployments
-SET vm_id = $2, updated_at = now()
+SET vm_id = $2, starting_at = COALESCE(starting_at, now()), updated_at = now()
 WHERE id = $1
 RETURNING *;
 

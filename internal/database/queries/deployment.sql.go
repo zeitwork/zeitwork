@@ -354,7 +354,7 @@ func (q *Queries) DeploymentMarkStopped(ctx context.Context, id uuid.UUID) error
 
 const deploymentUpdateBuild = `-- name: DeploymentUpdateBuild :one
 UPDATE deployments
-SET build_id = $2, updated_at = now()
+SET build_id = $2, building_at = COALESCE(building_at, now()), updated_at = now()
 WHERE id = $1
 RETURNING id, status, github_commit, project_id, build_id, image_id, vm_id, pending_at, building_at, starting_at, running_at, stopping_at, stopped_at, failed_at, organisation_id, created_at, updated_at, deleted_at
 `
@@ -441,7 +441,7 @@ func (q *Queries) DeploymentUpdateImage(ctx context.Context, arg DeploymentUpdat
 
 const deploymentUpdateVM = `-- name: DeploymentUpdateVM :one
 UPDATE deployments
-SET vm_id = $2, updated_at = now()
+SET vm_id = $2, starting_at = COALESCE(starting_at, now()), updated_at = now()
 WHERE id = $1
 RETURNING id, status, github_commit, project_id, build_id, image_id, vm_id, pending_at, building_at, starting_at, running_at, stopping_at, stopped_at, failed_at, organisation_id, created_at, updated_at, deleted_at
 `
