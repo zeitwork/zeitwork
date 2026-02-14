@@ -89,13 +89,6 @@ func (s *Service) reconcileBuild(ctx context.Context, objectID uuid.UUID) error 
 		return err
 	}
 
-	if !buildImage.DiskImageKey.Valid {
-		slog.Debug("disk image of build image not ready yet", "build_id", build.ID)
-		return nil
-	}
-
-	slog.Debug("disk image found", "id", buildImage.ID)
-
 	// if we dont have a vm create one
 	if !build.VmID.Valid {
 		vm, err := s.VMCreate(ctx, VMCreateParams{

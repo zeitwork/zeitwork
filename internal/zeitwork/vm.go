@@ -3,7 +3,6 @@ package zeitwork
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"net/netip"
@@ -11,10 +10,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strings"
 	"syscall"
 	"time"
 
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/zeitwork/zeitwork/internal/database/queries"
 	"github.com/zeitwork/zeitwork/internal/shared/crypto"
@@ -47,16 +46,8 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 
 	// ensure the image has a disk image
 	image, err := s.db.ImageFindByID(ctx, vm.ImageID)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil
-	}
 	if err != nil {
 		return err
-	}
-	// skip if image does not (yet) have a disk image
-	if !image.DiskImageKey.Valid {
-		slog.Error("image has no disk image", "reconciler_name", "vm", "vm_id", vm.ID)
-		return nil
 	}
 
 	// if the vm is currently pending, advance to status starting
@@ -98,38 +89,14 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 	}
 
 	// Create per-VM CoW disk backed by the base image
-	vmDiskPath := fmt.Sprintf("/data/work/%s.qcow2", vm.ID.String())
-	baseDiskPath := fmt.Sprintf("/data/base/%s.qcow2", vm.ImageID.String())
-
-	// Check if base image exists locally; if not, download from S3.
-	// In single-node mode (no S3), the image is always built locally by the
-	// image reconciler before the VM reconciler reaches this point.
-	if _, err := os.Stat(baseDiskPath); os.IsNotExist(err) {
-		if s.s3 == nil {
-			return fmt.Errorf("base image not found locally and S3 not configured (image_id=%s)", vm.ImageID)
-		}
-		// Remove stale partial downloads from previous failed attempts. Minio's FGetObject
-		// resumes from .part.minio files; that resume path can send malformed Range headers.
-		// Starting fresh avoids the bug.
-		if matches, err := filepath.Glob(filepath.Join(filepath.Dir(baseDiskPath), "*.part.minio")); err == nil {
-			for _, m := range matches {
-				_ = os.Remove(m)
-			}
-		}
-		s3Key := fmt.Sprintf("images/%s.qcow2", vm.ImageID.String())
-		slog.Info("base image not found locally, downloading from S3", "image_id", vm.ImageID, "s3_key", s3Key)
-		if err := s.s3.Download(ctx, s3Key, baseDiskPath); err != nil {
-			return fmt.Errorf("failed to download base image from S3: %w", err)
-		}
+	err = s.reconcileVMBaseImage(ctx, vm, image)
+	if err != nil {
+		return err
 	}
 
-	// Always recreate the CoW disk from the clean base image.
-	// If the disk exists from a previous run, it may have a dirty ext4 journal
-	// from an unclean shutdown (SIGKILL). A fresh CoW snapshot is instant and guaranteed clean.
-	_ = os.Remove(vmDiskPath)
-	err = s.runCommand("qemu-img", "create", "-f", "qcow2", "-b", baseDiskPath, "-F", "qcow2", vmDiskPath)
+	err = s.reconcileVMWorkImage(ctx, vm, image)
 	if err != nil {
-		return fmt.Errorf("failed to create VM disk: %w", err)
+		return err
 	}
 
 	vmIp := vm.IpAddress
@@ -157,7 +124,7 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 	slog.Info("starting DA VM", "id", vm.ID, "hostIp", hostIp, "vmIp", vmIp, "vcpus", vm.Vcpus, "memory_mb", vm.Memory, "envVarsCount", len(envVars))
 
 	cmd := exec.Command("/data/cloud-hypervisor", "--kernel", "/data/vmlinuz.bin",
-		"--disk", fmt.Sprintf("path=%s,direct=on,queue_size=256", vmDiskPath),
+		"--disk", fmt.Sprintf("path=/data/work/%s.qcow2,direct=on,queue_size=256", vm.ID.String()),
 		"--initramfs", "/data/initramfs.cpio.gz",
 		"--cmdline", "console=hvc0",
 		"--cpus", fmt.Sprintf("boot=%d", vm.Vcpus),
@@ -332,4 +299,64 @@ func (s *Service) reconcileVMUpdateStatusIf(ctx context.Context, vm queries.Vm, 
 		})
 	}
 	return vm, nil
+}
+
+func (s *Service) reconcileVMBaseImage(ctx context.Context, vm queries.Vm, image queries.Image) error {
+	baseImagePath := fmt.Sprintf("/data/base/%s.qcow2", image.ID.String())
+
+	// check if the image already exists on the server
+	_, err := os.Stat(baseImagePath)
+	if err == nil {
+		// the image exist, nothing to do.
+		return nil
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+
+	// download the image from source repo
+	tmpdir, err := os.MkdirTemp("", "image")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmpdir)
+
+	imageRef := fmt.Sprintf("%s/%s:%s", image.Registry, image.Repository, image.Tag)
+	ociPath := filepath.Join(tmpdir, "oci")
+	if strings.Index(imageRef, "ghcr.io/zeitwork") == 0 {
+		srcCreds := fmt.Sprintf("%s:%s", s.cfg.DockerRegistryUsername, s.cfg.DockerRegistryPAT)
+		err = s.runCommand("skopeo", "copy", "--src-creds", srcCreds, fmt.Sprintf("docker://%s", imageRef), fmt.Sprintf("oci:%s:latest", ociPath))
+	} else {
+		err = s.runCommand("skopeo", "copy", fmt.Sprintf("docker://%s", imageRef), fmt.Sprintf("oci:%s:latest", ociPath))
+	}
+	if err != nil {
+		return fmt.Errorf("failed to pull image: %w", err)
+	}
+
+	// unpack the oci image
+	bundlePath := filepath.Join(tmpdir, "bundle")
+	err = s.runCommand("umoci", "unpack", "--image", ociPath+":latest", bundlePath)
+	if err != nil {
+		return fmt.Errorf("failed to unpack OCI image: %w", err)
+	}
+
+	// convert bundle to qcow2
+	err = s.runCommand("virt-make-fs", "--format=qcow2", "--type=ext4", "--size=+5G", bundlePath, baseImagePath)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (s *Service) reconcileVMWorkImage(ctx context.Context, vm queries.Vm, image queries.Image) error {
+	baseImagePath := fmt.Sprintf("/data/base/%s.qcow2", image.ID.String())
+	workImagePath := fmt.Sprintf("/data/work/%s.qcow2", vm.ID.String())
+
+	_ = os.Remove(workImagePath)
+	err := s.runCommand("qemu-img", "create", "-f", "qcow2", "-b", baseImagePath, "-F", "qcow2", workImagePath)
+	if err != nil {
+		return fmt.Errorf("failed to create VM disk: %w", err)
+	}
+
+	return nil
 }

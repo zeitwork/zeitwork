@@ -19,7 +19,6 @@ import (
 	dnsresolver "github.com/zeitwork/zeitwork/internal/shared/dns"
 	"github.com/zeitwork/zeitwork/internal/shared/github"
 	"github.com/zeitwork/zeitwork/internal/shared/uuid"
-	"github.com/zeitwork/zeitwork/internal/storage"
 )
 
 type Config struct {
@@ -42,9 +41,6 @@ type Config struct {
 	ServerID   uuid.UUID // Stable server identity (read from /data/server-id)
 	InternalIP string    // This server's VLAN IP for cross-server communication
 
-	// S3/MinIO for shared image storage
-	S3 *storage.S3
-
 	// RouteChangeNotify is sent to when routes may have changed.
 	// The edge proxy listens on this channel.
 	RouteChangeNotify chan struct{}
@@ -58,9 +54,6 @@ type Service struct {
 	// Server identity
 	serverID      uuid.UUID
 	serverIPRange netip.Prefix // This server's allocated /20 VM IP range
-
-	// S3 for shared images
-	s3 *storage.S3
 
 	// Route change notification channel (for edge proxy)
 	routeChangeNotify chan struct{}
@@ -80,7 +73,6 @@ type Service struct {
 	// Schedulers
 	deploymentScheduler *reconciler.Scheduler
 	buildScheduler      *reconciler.Scheduler
-	imageScheduler      *reconciler.Scheduler
 	vmScheduler         *reconciler.Scheduler
 	domainScheduler     *reconciler.Scheduler
 	serverScheduler     *reconciler.Scheduler
@@ -104,7 +96,6 @@ func New(cfg Config) (*Service, error) {
 		cfg:               cfg,
 		db:                cfg.DB,
 		serverID:          cfg.ServerID,
-		s3:                cfg.S3,
 		routeChangeNotify: cfg.RouteChangeNotify,
 		dnsResolver:       dnsresolver.NewResolver(),
 		vsockManager:      NewVSockManager(cfg.DB),
@@ -129,7 +120,6 @@ func New(cfg Config) (*Service, error) {
 
 	s.deploymentScheduler = reconciler.NewWithName("deployment", s.reconcileDeployment)
 	s.buildScheduler = reconciler.NewWithName("build", s.reconcileBuild)
-	s.imageScheduler = reconciler.NewWithName("image", s.reconcileImage)
 	s.vmScheduler = reconciler.NewWithName("vm", s.reconcileVM)
 	s.domainScheduler = reconciler.NewWithName("domain", s.reconcileDomain)
 	s.serverScheduler = reconciler.NewWithName("server", s.reconcileServer)
@@ -152,7 +142,6 @@ func (s *Service) Start(ctx context.Context) error {
 	// Start all schedulers
 	s.deploymentScheduler.Start()
 	s.buildScheduler.Start()
-	s.imageScheduler.Start()
 	s.vmScheduler.Start()
 	s.domainScheduler.Start()
 	s.serverScheduler.Start()
@@ -198,31 +187,6 @@ func (s *Service) Start(ctx context.Context) error {
 				for _, d := range deployments {
 					slog.Debug("notifying deployment of build change", "deployment_id", d.ID, "build_id", id)
 					s.deploymentScheduler.Schedule(d.ID, time.Now())
-				}
-			}
-		},
-
-		OnImage: func(ctx context.Context, id uuid.UUID) {
-			s.imageScheduler.Schedule(id, time.Now())
-
-			// Notify VMs that use this image
-			if vms, err := s.db.VMFindByImageID(ctx, id); err != nil {
-				slog.Error("failed to find VMs by image_id", "image_id", id, "error", err)
-			} else {
-				for _, vm := range vms {
-					slog.Debug("notifying VM of image change", "vm_id", vm.ID, "image_id", id)
-					s.vmScheduler.Schedule(vm.ID, time.Now())
-				}
-			}
-
-			// Notify builds waiting for build image (dind case).
-			// When any image becomes ready, check if pending/building builds can proceed.
-			if builds, err := s.db.BuildFindWaitingForBuildImage(ctx); err != nil {
-				slog.Error("failed to find builds waiting for build image", "error", err)
-			} else {
-				for _, b := range builds {
-					slog.Debug("notifying build of image change", "build_id", b.ID, "image_id", id)
-					s.buildScheduler.Schedule(b.ID, time.Now())
 				}
 			}
 		},
@@ -308,16 +272,6 @@ func (s *Service) bootstrapGlobal(ctx context.Context) error {
 		s.buildScheduler.Schedule(build.ID, time.Now())
 	}
 	slog.Info("bootstrapped builds", "count", len(builds))
-
-	// Images
-	images, err := s.db.ImageFind(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to find images: %w", err)
-	}
-	for _, image := range images {
-		s.imageScheduler.Schedule(image.ID, time.Now())
-	}
-	slog.Info("bootstrapped images", "count", len(images))
 
 	// Domains
 	domains, err := s.db.DomainFind(ctx)

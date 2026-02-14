@@ -14,7 +14,6 @@ import (
 	"github.com/lmittmann/tint"
 	"github.com/zeitwork/zeitwork/internal/database"
 	"github.com/zeitwork/zeitwork/internal/edgeproxy"
-	"github.com/zeitwork/zeitwork/internal/storage"
 	"github.com/zeitwork/zeitwork/internal/zeitwork"
 )
 
@@ -73,25 +72,6 @@ func main() {
 		panic("failed to init database: " + err.Error())
 	}
 
-	// Initialize S3 client for shared image storage (optional for single-node)
-	var s3Client *storage.S3
-	if cfg.S3Endpoint != "" {
-		var err error
-		s3Client, err = storage.NewS3(storage.S3Config{
-			Endpoint:  cfg.S3Endpoint,
-			Bucket:    cfg.S3Bucket,
-			AccessKey: cfg.S3AccessKey,
-			SecretKey: cfg.S3SecretKey,
-			UseSSL:    cfg.S3UseSSL,
-		})
-		if err != nil {
-			panic("failed to init S3 client: " + err.Error())
-		}
-		slog.Info("S3 storage enabled", "endpoint", cfg.S3Endpoint, "bucket", cfg.S3Bucket)
-	} else {
-		slog.Info("S3 storage not configured — running in single-node mode")
-	}
-
 	// Route change notification channel (shared between zeitwork service and edge proxy)
 	routeChangeNotify := make(chan struct{}, 1)
 
@@ -101,7 +81,6 @@ func main() {
 		DatabaseDirectURL:      cfg.DatabaseDirectURL,
 		InternalIP:             cfg.InternalIP,
 		ServerID:               serverID,
-		S3:                     s3Client,
 		RouteChangeNotify:      routeChangeNotify,
 		DockerRegistryURL:      cfg.DockerRegistryURL,
 		DockerRegistryUsername: cfg.DockerRegistryUsername,

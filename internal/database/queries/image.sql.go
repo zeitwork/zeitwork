@@ -12,45 +12,10 @@ import (
 	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 )
 
-const imageClaimBuild = `-- name: ImageClaimBuild :one
-UPDATE images
-SET building_by = $2, building_started_at = now()
-WHERE id = $1
-  AND disk_image_key IS NULL
-  AND (building_by IS NULL OR building_started_at < now() - interval '15 minutes')
-RETURNING id, registry, repository, tag, created_at, updated_at, deleted_at, disk_image_key, building_by, building_started_at
-`
-
-type ImageClaimBuildParams struct {
-	ID         uuid.UUID `json:"id"`
-	BuildingBy uuid.UUID `json:"building_by"`
-}
-
-// Atomically claim an image for building on this server.
-// Succeeds if: unclaimed, OR previous claim is stale (> 15 min).
-// Returns the image if claimed, pgx.ErrNoRows if another server has a fresh claim.
-func (q *Queries) ImageClaimBuild(ctx context.Context, arg ImageClaimBuildParams) (Image, error) {
-	row := q.db.QueryRow(ctx, imageClaimBuild, arg.ID, arg.BuildingBy)
-	var i Image
-	err := row.Scan(
-		&i.ID,
-		&i.Registry,
-		&i.Repository,
-		&i.Tag,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.DeletedAt,
-		&i.DiskImageKey,
-		&i.BuildingBy,
-		&i.BuildingStartedAt,
-	)
-	return i, err
-}
-
 const imageCreate = `-- name: ImageCreate :one
 insert into images (id, registry, repository, tag)
 VALUES ($1, $2, $3, $4)
-RETURNING id, registry, repository, tag, created_at, updated_at, deleted_at, disk_image_key, building_by, building_started_at
+RETURNING id, registry, repository, tag, created_at, updated_at, deleted_at
 `
 
 type ImageCreateParams struct {
@@ -76,15 +41,12 @@ func (q *Queries) ImageCreate(ctx context.Context, arg ImageCreateParams) (Image
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
-		&i.DiskImageKey,
-		&i.BuildingBy,
-		&i.BuildingStartedAt,
 	)
 	return i, err
 }
 
 const imageFind = `-- name: ImageFind :many
-select id, registry, repository, tag, created_at, updated_at, deleted_at, disk_image_key, building_by, building_started_at from images
+select id, registry, repository, tag, created_at, updated_at, deleted_at from images
 `
 
 func (q *Queries) ImageFind(ctx context.Context) ([]Image, error) {
@@ -104,9 +66,6 @@ func (q *Queries) ImageFind(ctx context.Context) ([]Image, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
-			&i.DiskImageKey,
-			&i.BuildingBy,
-			&i.BuildingStartedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -119,7 +78,7 @@ func (q *Queries) ImageFind(ctx context.Context) ([]Image, error) {
 }
 
 const imageFindByID = `-- name: ImageFindByID :one
-select id, registry, repository, tag, created_at, updated_at, deleted_at, disk_image_key, building_by, building_started_at from images where id=$1
+select id, registry, repository, tag, created_at, updated_at, deleted_at from images where id=$1
 `
 
 func (q *Queries) ImageFindByID(ctx context.Context, id uuid.UUID) (Image, error) {
@@ -133,15 +92,12 @@ func (q *Queries) ImageFindByID(ctx context.Context, id uuid.UUID) (Image, error
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
-		&i.DiskImageKey,
-		&i.BuildingBy,
-		&i.BuildingStartedAt,
 	)
 	return i, err
 }
 
 const imageFindByRepositoryAndTag = `-- name: ImageFindByRepositoryAndTag :one
-select id, registry, repository, tag, created_at, updated_at, deleted_at, disk_image_key, building_by, building_started_at
+select id, registry, repository, tag, created_at, updated_at, deleted_at
 from images
 where registry = $1
   and repository = $2
@@ -166,9 +122,6 @@ func (q *Queries) ImageFindByRepositoryAndTag(ctx context.Context, arg ImageFind
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
-		&i.DiskImageKey,
-		&i.BuildingBy,
-		&i.BuildingStartedAt,
 	)
 	return i, err
 }
@@ -178,11 +131,11 @@ WITH ins AS (
     INSERT INTO images (id, registry, repository, tag)
     VALUES ($1, $2, $3, $4)
     ON CONFLICT (registry, repository, tag) DO NOTHING
-    RETURNING id, registry, repository, tag, created_at, updated_at, deleted_at, disk_image_key, building_by, building_started_at
+    RETURNING id, registry, repository, tag, created_at, updated_at, deleted_at
 )
-SELECT id, registry, repository, tag, created_at, updated_at, deleted_at, disk_image_key, building_by, building_started_at FROM ins
+SELECT id, registry, repository, tag, created_at, updated_at, deleted_at FROM ins
 UNION ALL
-SELECT id, registry, repository, tag, created_at, updated_at, deleted_at, disk_image_key, building_by, building_started_at FROM images
+SELECT id, registry, repository, tag, created_at, updated_at, deleted_at FROM images
 WHERE registry = $2 AND repository = $3 AND tag = $4
   AND NOT EXISTS (SELECT 1 FROM ins)
 LIMIT 1
@@ -196,16 +149,13 @@ type ImageFindOrCreateParams struct {
 }
 
 type ImageFindOrCreateRow struct {
-	ID                uuid.UUID          `json:"id"`
-	Registry          string             `json:"registry"`
-	Repository        string             `json:"repository"`
-	Tag               string             `json:"tag"`
-	CreatedAt         pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt         pgtype.Timestamptz `json:"deleted_at"`
-	DiskImageKey      pgtype.Text        `json:"disk_image_key"`
-	BuildingBy        uuid.UUID          `json:"building_by"`
-	BuildingStartedAt pgtype.Timestamptz `json:"building_started_at"`
+	ID         uuid.UUID          `json:"id"`
+	Registry   string             `json:"registry"`
+	Repository string             `json:"repository"`
+	Tag        string             `json:"tag"`
+	CreatedAt  pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt  pgtype.Timestamptz `json:"deleted_at"`
 }
 
 func (q *Queries) ImageFindOrCreate(ctx context.Context, arg ImageFindOrCreateParams) (ImageFindOrCreateRow, error) {
@@ -224,42 +174,6 @@ func (q *Queries) ImageFindOrCreate(ctx context.Context, arg ImageFindOrCreatePa
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
-		&i.DiskImageKey,
-		&i.BuildingBy,
-		&i.BuildingStartedAt,
 	)
 	return i, err
-}
-
-const imageReleaseBuild = `-- name: ImageReleaseBuild :exec
-UPDATE images
-SET building_by = NULL, building_started_at = NULL, disk_image_key = $2
-WHERE id = $1
-`
-
-type ImageReleaseBuildParams struct {
-	ID           uuid.UUID   `json:"id"`
-	DiskImageKey pgtype.Text `json:"disk_image_key"`
-}
-
-// Release the build claim and set the disk image key after a successful build.
-func (q *Queries) ImageReleaseBuild(ctx context.Context, arg ImageReleaseBuildParams) error {
-	_, err := q.db.Exec(ctx, imageReleaseBuild, arg.ID, arg.DiskImageKey)
-	return err
-}
-
-const imageUpdateDiskImage = `-- name: ImageUpdateDiskImage :exec
-UPDATE images
-SET disk_image_key = $2
-WHERE id = $1
-`
-
-type ImageUpdateDiskImageParams struct {
-	ID           uuid.UUID   `json:"id"`
-	DiskImageKey pgtype.Text `json:"disk_image_key"`
-}
-
-func (q *Queries) ImageUpdateDiskImage(ctx context.Context, arg ImageUpdateDiskImageParams) error {
-	_, err := q.db.Exec(ctx, imageUpdateDiskImage, arg.ID, arg.DiskImageKey)
-	return err
 }

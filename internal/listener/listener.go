@@ -27,7 +27,6 @@ type Config struct {
 	// Handlers for each table
 	OnDeployment Handler
 	OnBuild      Handler
-	OnImage      Handler
 	OnVM         Handler
 	OnDomain     Handler
 	OnServer     Handler
@@ -377,10 +376,6 @@ func (l *Listener) handleChange(ctx context.Context, relationID uint32, tuple *p
 	case "builds":
 		if l.config.OnBuild != nil {
 			l.config.OnBuild(ctx, id)
-		}
-	case "images":
-		if l.config.OnImage != nil {
-			l.config.OnImage(ctx, id)
 		}
 	case "vms":
 		if l.config.OnVM != nil {
