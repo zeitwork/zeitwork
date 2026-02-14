@@ -62,3 +62,11 @@ WHERE id = $1;
 -- name: VMLogCreate :exec
 INSERT INTO vm_logs (id, vm_id, message, level, created_at)
 VALUES ($1, $2, $3, $4, NOW());
+
+-- name: DeploymentFindRunningByServerID :many
+-- Find all running deployments whose VM is on a specific server.
+SELECT d.* FROM deployments d
+INNER JOIN vms v ON d.vm_id = v.id
+WHERE v.server_id = $1
+  AND d.status = 'running'
+  AND d.deleted_at IS NULL;

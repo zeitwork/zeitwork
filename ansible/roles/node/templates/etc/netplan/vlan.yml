@@ -1,0 +1,5 @@
+vlans:
+  vlan.{{vlan_id}}:
+    id: {{vlan_id}}
+    link: {{uplink_interface}}
+    addresses: [{{vlan_address}}]

@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  cidr,
   inet,
   integer,
   jsonb,
@@ -174,6 +175,9 @@ export const builds = pgTable("builds", {
   githubBranch: text().notNull(),
   imageId: uuid().references(() => images.id),
   vmId: uuid().references(() => vms.id),
+  // build lease coordination — ensures a build is processed by a single server at a time
+  processingBy: uuid().references(() => servers.id),
+  processingStartedAt: timestamp({ withTimezone: true }),
   //
   pendingAt: timestamp({ withTimezone: true }),
   buildingAt: timestamp({ withTimezone: true }),
@@ -206,6 +210,9 @@ export const images = pgTable(
     // digest: text().notNull(), // e.g. sha256:1234567890abcdef
     // output
     diskImageKey: text(), // if this is null we haven't created the disk image yet
+    // build coordination — prevents multiple servers from building the same image
+    buildingBy: uuid().references(() => servers.id), // server currently building this image (null = not building)
+    buildingStartedAt: timestamp({ withTimezone: true }), // when the build started (used to detect stale claims)
     //
     ...timestamps,
   },
@@ -226,6 +233,23 @@ export const certmagicLocks = pgTable("certmagic_locks", {
 
 // PLATFORM
 
+export const serverStatusEnum = pgEnum("server_status", [
+  "active",
+  "draining",
+  "drained",
+  "dead",
+]);
+
+export const servers = pgTable("servers", {
+  id: uuid().primaryKey().$defaultFn(uuidv7),
+  hostname: text().notNull(),
+  internalIp: text().notNull(),
+  ipRange: cidr().notNull(), // dedicated VM IP range (e.g., 10.1.0.0/20)
+  status: serverStatusEnum().notNull().default("active"),
+  lastHeartbeatAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+  ...timestamps,
+});
+
 export const vmStatusEnum = pgEnum("vm_status", [
   "pending",
   "starting",
@@ -243,6 +267,7 @@ export const vms = pgTable("vms", {
   imageId: uuid()
     .references(() => images.id)
     .notNull(),
+  serverId: uuid().references(() => servers.id),
   port: integer(),
   ipAddress: inet().notNull(),
   envVariables: text(),

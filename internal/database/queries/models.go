@@ -104,6 +104,50 @@ func (ns NullDeploymentStatus) Value() (driver.Value, error) {
 	return string(ns.DeploymentStatus), nil
 }
 
+type ServerStatus string
+
+const (
+	ServerStatusActive   ServerStatus = "active"
+	ServerStatusDraining ServerStatus = "draining"
+	ServerStatusDrained  ServerStatus = "drained"
+	ServerStatusDead     ServerStatus = "dead"
+)
+
+func (e *ServerStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = ServerStatus(s)
+	case string:
+		*e = ServerStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for ServerStatus: %T", src)
+	}
+	return nil
+}
+
+type NullServerStatus struct {
+	ServerStatus ServerStatus `json:"server_status"`
+	Valid        bool         `json:"valid"` // Valid is true if ServerStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullServerStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.ServerStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.ServerStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullServerStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.ServerStatus), nil
+}
+
 type VmStatus string
 
 const (
@@ -151,21 +195,23 @@ func (ns NullVmStatus) Value() (driver.Value, error) {
 }
 
 type Build struct {
-	ID             uuid.UUID          `json:"id"`
-	Status         BuildStatus        `json:"status"`
-	ProjectID      uuid.UUID          `json:"project_id"`
-	GithubCommit   string             `json:"github_commit"`
-	GithubBranch   string             `json:"github_branch"`
-	ImageID        uuid.UUID          `json:"image_id"`
-	VmID           uuid.UUID          `json:"vm_id"`
-	PendingAt      pgtype.Timestamptz `json:"pending_at"`
-	BuildingAt     pgtype.Timestamptz `json:"building_at"`
-	SuccessfulAt   pgtype.Timestamptz `json:"successful_at"`
-	FailedAt       pgtype.Timestamptz `json:"failed_at"`
-	OrganisationID uuid.UUID          `json:"organisation_id"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
+	ID                  uuid.UUID          `json:"id"`
+	Status              BuildStatus        `json:"status"`
+	ProjectID           uuid.UUID          `json:"project_id"`
+	GithubCommit        string             `json:"github_commit"`
+	GithubBranch        string             `json:"github_branch"`
+	ImageID             uuid.UUID          `json:"image_id"`
+	VmID                uuid.UUID          `json:"vm_id"`
+	PendingAt           pgtype.Timestamptz `json:"pending_at"`
+	BuildingAt          pgtype.Timestamptz `json:"building_at"`
+	SuccessfulAt        pgtype.Timestamptz `json:"successful_at"`
+	FailedAt            pgtype.Timestamptz `json:"failed_at"`
+	OrganisationID      uuid.UUID          `json:"organisation_id"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt           pgtype.Timestamptz `json:"deleted_at"`
+	ProcessingBy        uuid.UUID          `json:"processing_by"`
+	ProcessingStartedAt pgtype.Timestamptz `json:"processing_started_at"`
 }
 
 type BuildLog struct {
@@ -245,14 +291,16 @@ type GithubInstallation struct {
 }
 
 type Image struct {
-	ID           uuid.UUID          `json:"id"`
-	Registry     string             `json:"registry"`
-	Repository   string             `json:"repository"`
-	Tag          string             `json:"tag"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
-	DiskImageKey pgtype.Text        `json:"disk_image_key"`
+	ID                uuid.UUID          `json:"id"`
+	Registry          string             `json:"registry"`
+	Repository        string             `json:"repository"`
+	Tag               string             `json:"tag"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt         pgtype.Timestamptz `json:"deleted_at"`
+	DiskImageKey      pgtype.Text        `json:"disk_image_key"`
+	BuildingBy        uuid.UUID          `json:"building_by"`
+	BuildingStartedAt pgtype.Timestamptz `json:"building_started_at"`
 }
 
 type Organisation struct {
@@ -284,6 +332,18 @@ type Project struct {
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt            pgtype.Timestamptz `json:"deleted_at"`
 	RootDirectory        string             `json:"root_directory"`
+}
+
+type Server struct {
+	ID              uuid.UUID          `json:"id"`
+	Hostname        string             `json:"hostname"`
+	InternalIp      string             `json:"internal_ip"`
+	IpRange         netip.Prefix       `json:"ip_range"`
+	Status          ServerStatus       `json:"status"`
+	LastHeartbeatAt pgtype.Timestamptz `json:"last_heartbeat_at"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt       pgtype.Timestamptz `json:"deleted_at"`
 }
 
 type User struct {
@@ -318,6 +378,7 @@ type Vm struct {
 	StoppedAt    pgtype.Timestamptz `json:"stopped_at"`
 	FailedAt     pgtype.Timestamptz `json:"failed_at"`
 	EnvVariables pgtype.Text        `json:"env_variables"`
+	ServerID     uuid.UUID          `json:"server_id"`
 }
 
 type VmLog struct {

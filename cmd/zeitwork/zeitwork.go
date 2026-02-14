@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -13,17 +14,27 @@ import (
 	"github.com/lmittmann/tint"
 	"github.com/zeitwork/zeitwork/internal/database"
 	"github.com/zeitwork/zeitwork/internal/edgeproxy"
+	"github.com/zeitwork/zeitwork/internal/storage"
 	"github.com/zeitwork/zeitwork/internal/zeitwork"
 )
 
 type Config struct {
 	IPAdress               string `env:"LOAD_BALANCER_IP,required"`
-	DatabaseURL            string `env:"DATABASE_URL,required"`
+	DatabaseURL            string `env:"DATABASE_URL,required"`        // PgBouncer pooled connection (for queries)
+	DatabaseDirectURL      string `env:"DATABASE_DIRECT_URL,required"` // Direct connection (for WAL replication)
+	InternalIP             string `env:"INTERNAL_IP,required"`         // This server's VLAN IP
 	DockerRegistryURL      string `env:"DOCKER_REGISTRY_URL,required"`
 	DockerRegistryUsername string `env:"DOCKER_REGISTRY_USERNAME,required"`
 	DockerRegistryPAT      string `env:"DOCKER_REGISTRY_PAT,required"` // GitHub PAT with write:packages scope
 	GitHubAppID            string `env:"GITHUB_APP_ID"`
 	GitHubAppPrivateKey    string `env:"GITHUB_APP_PRIVATE_KEY"` // base64-encoded
+
+	// S3/MinIO for shared image storage (optional — only needed for multi-node)
+	S3Endpoint  string `env:"S3_ENDPOINT"`
+	S3Bucket    string `env:"S3_BUCKET"`
+	S3AccessKey string `env:"S3_ACCESS_KEY"`
+	S3SecretKey string `env:"S3_SECRET_KEY"`
+	S3UseSSL    bool   `env:"S3_USE_SSL" envDefault:"false"`
 
 	// Edge proxy config
 	EdgeProxyHTTPAddr    string `env:"EDGEPROXY_HTTP_ADDR" envDefault:":80"`
@@ -47,18 +58,51 @@ func main() {
 	// Parse configuration from environment variables
 	cfg := Config{}
 	if err := env.Parse(&cfg); err != nil {
-		panic("failed to parse config" + err.Error())
+		panic("failed to parse config: " + err.Error())
 	}
 
+	// Load or create stable server identity
+	serverID, err := zeitwork.LoadOrCreateServerID()
+	if err != nil {
+		panic("failed to load server ID: " + err.Error())
+	}
+
+	// Initialize database (pooled connection via PgBouncer)
 	db, err := database.New(cfg.DatabaseURL)
 	if err != nil {
-		panic("failed to init database")
+		panic("failed to init database: " + err.Error())
 	}
+
+	// Initialize S3 client for shared image storage (optional for single-node)
+	var s3Client *storage.S3
+	if cfg.S3Endpoint != "" {
+		var err error
+		s3Client, err = storage.NewS3(storage.S3Config{
+			Endpoint:  cfg.S3Endpoint,
+			Bucket:    cfg.S3Bucket,
+			AccessKey: cfg.S3AccessKey,
+			SecretKey: cfg.S3SecretKey,
+			UseSSL:    cfg.S3UseSSL,
+		})
+		if err != nil {
+			panic("failed to init S3 client: " + err.Error())
+		}
+		slog.Info("S3 storage enabled", "endpoint", cfg.S3Endpoint, "bucket", cfg.S3Bucket)
+	} else {
+		slog.Info("S3 storage not configured — running in single-node mode")
+	}
+
+	// Route change notification channel (shared between zeitwork service and edge proxy)
+	routeChangeNotify := make(chan struct{}, 1)
 
 	service, err := zeitwork.New(zeitwork.Config{
 		DB:                     db,
 		IPAdress:               cfg.IPAdress,
-		DatabaseURL:            cfg.DatabaseURL,
+		DatabaseDirectURL:      cfg.DatabaseDirectURL,
+		InternalIP:             cfg.InternalIP,
+		ServerID:               serverID,
+		S3:                     s3Client,
+		RouteChangeNotify:      routeChangeNotify,
 		DockerRegistryURL:      cfg.DockerRegistryURL,
 		DockerRegistryUsername: cfg.DockerRegistryUsername,
 		DockerRegistryPAT:      cfg.DockerRegistryPAT,
@@ -71,19 +115,19 @@ func main() {
 
 	go func() {
 		err = service.Start(ctx)
-		if err != nil && err != context.Canceled {
+		if err != nil && !errors.Is(context.Canceled, err) {
 			slog.Error("service error", "err", err)
 		}
 	}()
 
-	// Edge proxy
+	// Edge proxy (shares DB connection and route change channel)
 	edgeProxy, err := edgeproxy.NewService(edgeproxy.Config{
-		HTTPAddr:       cfg.EdgeProxyHTTPAddr,
-		HTTPSAddr:      cfg.EdgeProxyHTTPSAddr,
-		DatabaseURL:    cfg.DatabaseURL,
-		UpdateInterval: 10 * time.Second,
-		ACMEEmail:      cfg.EdgeProxyACMEEmail,
-		ACMEStaging:    cfg.EdgeProxyACMEStaging,
+		HTTPAddr:          cfg.EdgeProxyHTTPAddr,
+		HTTPSAddr:         cfg.EdgeProxyHTTPSAddr,
+		ACMEEmail:         cfg.EdgeProxyACMEEmail,
+		ACMEStaging:       cfg.EdgeProxyACMEStaging,
+		DB:                db,
+		RouteChangeNotify: routeChangeNotify,
 	}, logger)
 	if err != nil {
 		slog.Error("failed to create edge proxy", "err", err)
@@ -97,7 +141,7 @@ func main() {
 
 	sig := <-sigChan
 	logger.Info("shutdown signal", "signal", sig)
-	
+
 	// Cancel context first so WAL listener and other ctx-dependent goroutines
 	// start winding down in parallel with the shutdown sequence.
 	cancel()

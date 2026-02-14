@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"fmt"
 	"log/slog"
+	"net/netip"
 	"os/exec"
 	"sync"
 	"sync/atomic"
@@ -14,16 +15,18 @@ import (
 	"github.com/zeitwork/zeitwork/internal/database"
 	"github.com/zeitwork/zeitwork/internal/listener"
 	"github.com/zeitwork/zeitwork/internal/reconciler"
+	"github.com/zeitwork/zeitwork/internal/shared/base58"
 	dnsresolver "github.com/zeitwork/zeitwork/internal/shared/dns"
 	"github.com/zeitwork/zeitwork/internal/shared/github"
 	"github.com/zeitwork/zeitwork/internal/shared/uuid"
+	"github.com/zeitwork/zeitwork/internal/storage"
 )
 
 type Config struct {
 	IPAdress string
 
-	DB          *database.DB
-	DatabaseURL string // Required for WAL replication listener
+	DB                *database.DB
+	DatabaseDirectURL string // Direct PG connection for WAL replication listener (NOT PgBouncer)
 
 	// Docker registry configuration
 	// For GHCR, URL is "ghcr.io" and Username is the org/user (e.g., "zeitwork")
@@ -34,12 +37,33 @@ type Config struct {
 	// GitHub App credentials for fetching source code
 	GitHubAppID         string
 	GitHubAppPrivateKey string // base64-encoded
+
+	// Multi-node configuration
+	ServerID   uuid.UUID // Stable server identity (read from /data/server-id)
+	InternalIP string    // This server's VLAN IP for cross-server communication
+
+	// S3/MinIO for shared image storage
+	S3 *storage.S3
+
+	// RouteChangeNotify is sent to when routes may have changed.
+	// The edge proxy listens on this channel.
+	RouteChangeNotify chan struct{}
 }
 
 type Service struct {
 	cfg Config
 
 	db *database.DB
+
+	// Server identity
+	serverID      uuid.UUID
+	serverIPRange netip.Prefix // This server's allocated /20 VM IP range
+
+	// S3 for shared images
+	s3 *storage.S3
+
+	// Route change notification channel (for edge proxy)
+	routeChangeNotify chan struct{}
 
 	// Docker client
 	dockerClient *client.Client
@@ -59,6 +83,10 @@ type Service struct {
 	imageScheduler      *reconciler.Scheduler
 	vmScheduler         *reconciler.Scheduler
 	domainScheduler     *reconciler.Scheduler
+	serverScheduler     *reconciler.Scheduler
+
+	// Control-plane role (true when this server holds cluster_leader lock).
+	controlPlaneLeader atomic.Bool
 
 	// VM Stuff
 	imageMu sync.Mutex
@@ -73,14 +101,17 @@ type Service struct {
 // New creates a new reconciler service
 func New(cfg Config) (*Service, error) {
 	s := &Service{
-		cfg:          cfg,
-		db:           cfg.DB,
-		dnsResolver:  dnsresolver.NewResolver(),
-		vsockManager: NewVSockManager(cfg.DB),
-		vmToCmd:      make(map[uuid.UUID]*exec.Cmd),
-		imageMu:      sync.Mutex{},
-		nextTap:      atomic.Int32{},
-		activeBuilds: make(map[uuid.UUID]bool),
+		cfg:               cfg,
+		db:                cfg.DB,
+		serverID:          cfg.ServerID,
+		s3:                cfg.S3,
+		routeChangeNotify: cfg.RouteChangeNotify,
+		dnsResolver:       dnsresolver.NewResolver(),
+		vsockManager:      NewVSockManager(cfg.DB),
+		vmToCmd:           make(map[uuid.UUID]*exec.Cmd),
+		imageMu:           sync.Mutex{},
+		nextTap:           atomic.Int32{},
+		activeBuilds:      make(map[uuid.UUID]bool),
 	}
 
 	// Initialize GitHub token service if credentials are provided
@@ -101,13 +132,22 @@ func New(cfg Config) (*Service, error) {
 	s.imageScheduler = reconciler.NewWithName("image", s.reconcileImage)
 	s.vmScheduler = reconciler.NewWithName("vm", s.reconcileVM)
 	s.domainScheduler = reconciler.NewWithName("domain", s.reconcileDomain)
+	s.serverScheduler = reconciler.NewWithName("server", s.reconcileServer)
 
 	return s, nil
 }
 
 // Start starts the reconciler service
 func (s *Service) Start(ctx context.Context) error {
-	slog.Info("starting Zeitwork reconciler")
+	slog.Info("starting Zeitwork reconciler", "server_id", s.serverID)
+
+	// Register this server in the cluster
+	server, err := s.registerServer(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to register server: %w", err)
+	}
+	s.serverIPRange = server.IpRange
+	slog.Info("server registered", "server_id", s.serverID, "ip_range", s.serverIPRange, "internal_ip", s.cfg.InternalIP)
 
 	// Start all schedulers
 	s.deploymentScheduler.Start()
@@ -115,21 +155,37 @@ func (s *Service) Start(ctx context.Context) error {
 	s.imageScheduler.Start()
 	s.vmScheduler.Start()
 	s.domainScheduler.Start()
+	s.serverScheduler.Start()
 
-	// Bootstrap: schedule all existing entities once on startup
-	// This ensures we don't miss any changes that happened while we were down
-	if err := s.bootstrap(ctx); err != nil {
-		return fmt.Errorf("failed to bootstrap: %w", err)
+	// Start server lifecycle loops
+	go s.heartbeatLoop(ctx)
+	go s.clusterDutyLoop(ctx)
+
+	// Bootstrap local dataplane entities on all servers.
+	if err := s.bootstrapLocal(ctx); err != nil {
+		return fmt.Errorf("failed to bootstrap local entities: %w", err)
 	}
 
-	// Create WAL listener with callbacks to schedulers
-	// Following K8s pattern: when an entity changes, schedule self + notify parents via reverse lookups
+	// Global entities are bootstrapped only by the current control-plane leader.
+	// Followers will bootstrap globals after they acquire leadership.
+	if s.isControlPlaneLeader() {
+		if err := s.bootstrapGlobal(ctx); err != nil {
+			return fmt.Errorf("failed to bootstrap global entities: %w", err)
+		}
+	} else {
+		slog.Info("deferring global bootstrap until this server becomes control-plane leader", "server_id", s.serverID)
+	}
+
+	// Create WAL listener with callbacks to schedulers.
+	// Following K8s pattern: when an entity changes, schedule self + notify parents via reverse lookups.
 	walListener := listener.New(listener.Config{
-		DatabaseURL: s.cfg.DatabaseURL,
+		DatabaseURL:         s.cfg.DatabaseDirectURL,
+		ReplicationSlotName: base58.Encode(server.ID.Bytes[:]),
+		PublicationName:     base58.Encode(server.ID.Bytes[:]),
 
 		OnDeployment: func(ctx context.Context, id uuid.UUID) {
 			s.deploymentScheduler.Schedule(id, time.Now())
-			// Nothing depends on deployments
+			s.notifyRouteChange()
 		},
 
 		OnBuild: func(ctx context.Context, id uuid.UUID) {
@@ -159,8 +215,8 @@ func (s *Service) Start(ctx context.Context) error {
 				}
 			}
 
-			// Notify builds waiting for build image (dind case)
-			// When any image becomes ready, check if pending/building builds can proceed
+			// Notify builds waiting for build image (dind case).
+			// When any image becomes ready, check if pending/building builds can proceed.
 			if builds, err := s.db.BuildFindWaitingForBuildImage(ctx); err != nil {
 				slog.Error("failed to find builds waiting for build image", "error", err)
 			} else {
@@ -173,6 +229,7 @@ func (s *Service) Start(ctx context.Context) error {
 
 		OnVM: func(ctx context.Context, id uuid.UUID) {
 			s.vmScheduler.Schedule(id, time.Now())
+			s.notifyRouteChange()
 
 			// Notify builds that use this VM
 			if builds, err := s.db.BuildFindByVMID(ctx, id); err != nil {
@@ -195,7 +252,12 @@ func (s *Service) Start(ctx context.Context) error {
 
 		OnDomain: func(ctx context.Context, id uuid.UUID) {
 			s.domainScheduler.Schedule(id, time.Now())
-			// Nothing depends on domains
+			s.notifyRouteChange()
+		},
+
+		OnServer: func(ctx context.Context, id uuid.UUID) {
+			s.serverScheduler.Schedule(id, time.Now())
+			s.notifyRouteChange()
 		},
 	})
 
@@ -204,9 +266,28 @@ func (s *Service) Start(ctx context.Context) error {
 	return walListener.Start(ctx)
 }
 
-// bootstrap schedules all existing entities for reconciliation on startup
-func (s *Service) bootstrap(ctx context.Context) error {
-	slog.Info("bootstrapping: scheduling all existing entities")
+func (s *Service) isControlPlaneLeader() bool {
+	return s.controlPlaneLeader.Load()
+}
+
+func (s *Service) setControlPlaneLeader(isLeader bool) {
+	previous := s.controlPlaneLeader.Swap(isLeader)
+	if previous == isLeader {
+		return
+	}
+
+	if isLeader {
+		slog.Info("control-plane leadership acquired", "server_id", s.serverID)
+		return
+	}
+
+	slog.Info("control-plane leadership lost", "server_id", s.serverID)
+}
+
+// bootstrapGlobal schedules cluster-scoped entities.
+// This must only run on the control-plane leader.
+func (s *Service) bootstrapGlobal(ctx context.Context) error {
+	slog.Info("bootstrapping global entities", "server_id", s.serverID)
 
 	// Deployments
 	deployments, err := s.db.DeploymentFind(ctx)
@@ -238,16 +319,6 @@ func (s *Service) bootstrap(ctx context.Context) error {
 	}
 	slog.Info("bootstrapped images", "count", len(images))
 
-	// VMs
-	vms, err := s.db.VMFind(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to find vms: %w", err)
-	}
-	for _, vm := range vms {
-		s.vmScheduler.Schedule(vm.ID, time.Now())
-	}
-	slog.Info("bootstrapped vms", "count", len(vms))
-
 	// Domains
 	domains, err := s.db.DomainFind(ctx)
 	if err != nil {
@@ -258,7 +329,38 @@ func (s *Service) bootstrap(ctx context.Context) error {
 	}
 	slog.Info("bootstrapped domains", "count", len(domains))
 
-	slog.Info("bootstrap complete")
+	slog.Info("global bootstrap complete", "server_id", s.serverID)
+	return nil
+}
+
+// bootstrapLocal schedules node-local dataplane entities.
+func (s *Service) bootstrapLocal(ctx context.Context) error {
+	slog.Info("bootstrapping local entities", "server_id", s.serverID)
+
+	// VMs — only bootstrap VMs belonging to this server.
+	vms, err := s.db.VMFindByServerID(ctx, s.serverID)
+	if err != nil {
+		return fmt.Errorf("failed to find vms for this server: %w", err)
+	}
+	for _, vm := range vms {
+		s.vmScheduler.Schedule(vm.ID, time.Now())
+	}
+	slog.Info("bootstrapped vms", "count", len(vms), "server_id", s.serverID)
+
+	// Servers -- schedule all active servers for host route sync,
+	// and always schedule this server for drain monitoring.
+	servers, err := s.db.ServerFindActive(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to find active servers: %w", err)
+	}
+	for _, server := range servers {
+		s.serverScheduler.Schedule(server.ID, time.Now())
+	}
+	// Ensure this server is always scheduled (even if not yet in the active set)
+	s.serverScheduler.Schedule(s.serverID, time.Now())
+	slog.Info("bootstrapped servers", "count", len(servers))
+
+	slog.Info("local bootstrap complete", "server_id", s.serverID)
 	return nil
 }
 

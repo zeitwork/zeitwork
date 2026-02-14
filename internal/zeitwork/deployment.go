@@ -14,6 +14,10 @@ import (
 )
 
 func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) error {
+	if !s.isControlPlaneLeader() {
+		return nil
+	}
+
 	deployment, err := s.db.Queries.DeploymentFirstByID(ctx, objectID)
 	if err != nil {
 		return err

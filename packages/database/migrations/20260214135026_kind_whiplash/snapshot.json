@@ -1,9 +1,9 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "100231bf-5b51-487a-8a20-c74b171c45e6",
+  "id": "958a7b5c-335d-44c0-8441-92a15c4d7e44",
   "prevIds": [
-    "7d4af045-9917-40f5-99b3-5dbfaff503f8"
+    "47b18a26-5e8f-412f-b9b5-38b5e1740797"
   ],
   "ddl": [
     {
@@ -28,6 +28,17 @@
         "failed"
       ],
       "name": "deployment_status",
+      "entityType": "enums",
+      "schema": "public"
+    },
+    {
+      "values": [
+        "active",
+        "draining",
+        "drained",
+        "dead"
+      ],
+      "name": "server_status",
       "entityType": "enums",
       "schema": "public"
     },
@@ -113,6 +124,12 @@
     {
       "isRlsEnabled": false,
       "name": "projects",
+      "entityType": "tables",
+      "schema": "public"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "servers",
       "entityType": "tables",
       "schema": "public"
     },
@@ -299,6 +316,32 @@
       "generated": null,
       "identity": null,
       "name": "vm_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "builds"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "processing_by",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "builds"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "processing_started_at",
       "entityType": "columns",
       "schema": "public",
       "table": "builds"
@@ -772,6 +815,19 @@
       "table": "domains"
     },
     {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "txt_verification_required",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "domains"
+    },
+    {
       "type": "uuid",
       "typeSchema": null,
       "notNull": true,
@@ -819,19 +875,6 @@
       "generated": null,
       "identity": null,
       "name": "deleted_at",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "domains"
-    },
-    {
-      "type": "boolean",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": "false",
-      "generated": null,
-      "identity": null,
-      "name": "txt_verification_required",
       "entityType": "columns",
       "schema": "public",
       "table": "domains"
@@ -1105,6 +1148,32 @@
       "generated": null,
       "identity": null,
       "name": "disk_image_key",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "images"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "building_by",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "images"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "building_started_at",
       "entityType": "columns",
       "schema": "public",
       "table": "images"
@@ -1445,6 +1514,123 @@
       "name": "id",
       "entityType": "columns",
       "schema": "public",
+      "table": "servers"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "hostname",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "servers"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "internal_ip",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "servers"
+    },
+    {
+      "type": "cidr",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "ip_range",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "servers"
+    },
+    {
+      "type": "server_status",
+      "typeSchema": "public",
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'active'",
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "servers"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "last_heartbeat_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "servers"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "servers"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "servers"
+    },
+    {
+      "type": "timestamp with time zone",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "deleted_at",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "servers"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "public",
       "table": "users"
     },
     {
@@ -1690,6 +1876,19 @@
       "generated": null,
       "identity": null,
       "name": "image_id",
+      "entityType": "columns",
+      "schema": "public",
+      "table": "vms"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "server_id",
       "entityType": "columns",
       "schema": "public",
       "table": "vms"
@@ -1951,6 +2150,23 @@
     {
       "nameExplicit": false,
       "columns": [
+        "processing_by"
+      ],
+      "schemaTo": "public",
+      "tableTo": "servers",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "builds_processing_by_servers_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "builds"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
         "organisation_id"
       ],
       "schemaTo": "public",
@@ -2172,6 +2388,23 @@
     {
       "nameExplicit": false,
       "columns": [
+        "building_by"
+      ],
+      "schemaTo": "public",
+      "tableTo": "servers",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "images_building_by_servers_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "images"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
         "user_id"
       ],
       "schemaTo": "public",
@@ -2267,6 +2500,23 @@
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
       "name": "vms_image_id_images_id_fkey",
+      "entityType": "fks",
+      "schema": "public",
+      "table": "vms"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "server_id"
+      ],
+      "schemaTo": "public",
+      "tableTo": "servers",
+      "columnsTo": [
+        "id"
+      ],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "name": "vms_server_id_servers_id_fkey",
       "entityType": "fks",
       "schema": "public",
       "table": "vms"
@@ -2389,6 +2639,16 @@
       "name": "projects_pkey",
       "schema": "public",
       "table": "projects",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "servers_pkey",
+      "schema": "public",
+      "table": "servers",
       "entityType": "pks"
     },
     {
@@ -2526,7 +2786,5 @@
       "entityType": "uniques"
     }
   ],
-  "renames": [
-    "public.deployment_logs->public.vm_logs"
-  ]
+  "renames": []
 }

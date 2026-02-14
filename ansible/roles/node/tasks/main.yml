@@ -62,7 +62,7 @@
     mode: 0644
 
 - include_tasks: ./linux.yml
+- include_tasks: ./routing.yml
 - include_tasks: ./initramfs.yml
 - include_tasks: ./zeitworkctl.yml
-- include_tasks: ./routing.yml
 - include_tasks: ./deployment.yml

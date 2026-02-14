@@ -30,6 +30,7 @@ type Config struct {
 	OnImage      Handler
 	OnVM         Handler
 	OnDomain     Handler
+	OnServer     Handler
 }
 
 // Listener streams PostgreSQL WAL changes and dispatches to handlers
@@ -107,7 +108,8 @@ func (l *Listener) setupReplication(ctx context.Context) error {
 			builds,
 			images,
 			vms,
-			domains
+			domains,
+			servers
 		`, l.config.PublicationName)
 
 	// Drop and recreate publication (idempotent setup)
@@ -387,6 +389,10 @@ func (l *Listener) handleChange(ctx context.Context, relationID uint32, tuple *p
 	case "domains":
 		if l.config.OnDomain != nil {
 			l.config.OnDomain(ctx, id)
+		}
+	case "servers":
+		if l.config.OnServer != nil {
+			l.config.OnServer(ctx, id)
 		}
 	default:
 		slog.Debug("ignoring change for unhandled table", "table", relation.RelationName)
