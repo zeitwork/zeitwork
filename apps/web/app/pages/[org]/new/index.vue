@@ -69,7 +69,7 @@ function addGitHubAccount() {
     <div class="mx-auto mt-20 flex max-w-xl flex-col gap-4">
       <h1 class="text-title-sm text-primary">Import from Git</h1>
       <div class="bg-surface-1 w-full rounded-[14px] p-0.5">
-        <div class="base-3 flex flex-col gap-2 rounded-xl p-2">
+        <div class="bg-base-3 flex flex-col gap-2 rounded-xl p-2">
           <div class="flex items-center gap-2">
             <DCombobox
               class="w-50"

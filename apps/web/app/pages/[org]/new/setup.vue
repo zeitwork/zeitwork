@@ -115,7 +115,7 @@ async function createProject() {
           We're working on automatic framework support - <a href="https://github.com/zeitwork/zeitwork/issues/15" target="_blank" class="underline hover:no-underline">upvote the issue</a> if you'd like to see it sooner.
         </p>
       </div>
-      <div class="base-2 w-full rounded-[14px] p-0.5">
+      <div class="bg-base-2 w-full rounded-[14px] p-0.5">
         <div class="flex flex-col gap-1 px-[18px] py-3">
           <p class="text-secondary text-copy-sm">Importing from GitHub</p>
           <div class="text-primary text-copy flex items-center gap-1">
@@ -129,7 +129,7 @@ async function createProject() {
             </p>
           </div>
         </div>
-        <div class="base-3 flex flex-col gap-2 rounded-xl">
+        <div class="bg-base-3 flex flex-col gap-2 rounded-xl">
           <div class="flex flex-col gap-3 p-[18px]">
             <div class="flex w-full items-end gap-2">
               <DFormGroup v-if="false" class="flex-1">

@@ -62,7 +62,7 @@ const formattedDate = computed(() => {
 <template>
   <NuxtLink
     :to="`/${orgName}/${project.slug}`"
-    class="base-3 border-edge text-copy hover:border-edge-strong flex flex-col items-start gap-2 rounded-lg border p-4 shadow-sm transition-all hover:shadow"
+    class="bg-base-3 border-edge text-copy hover:border-edge-strong flex flex-col items-start gap-2 rounded-lg border p-4 shadow-sm transition-all hover:shadow"
   >
     <div class="flex items-center gap-2">
       <img
