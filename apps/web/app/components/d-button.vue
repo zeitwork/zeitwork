@@ -29,7 +29,7 @@ const variantClasses: { [key: string]: string } = {
   primary:
     "bg-surface-1 text-primary hover:bg-surface-2 border border-edge shadow-xs active:bg-surface-3",
   secondary:
-    "bg-surface-1 text-primary hover:bg-surface-2 active:bg-surface-0 border border-transparent",
+    "bg-surface-1 text-primary hover:bg-surface-2 active:bg-base border border-transparent",
   transparent:
     "text-secondary hover:bg-inverse/5 active:bg-inverse/10 border !border-transparent",
   danger: "bg-danger text-danger-on hover:bg-danger-strong border border-transparent active:bg-danger-strong",

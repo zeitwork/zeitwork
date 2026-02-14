@@ -9,7 +9,7 @@ const route = useRoute();
 </script>
 
 <template>
-  <div class="bg-surface-0" :class="[padding ? 'px-2 md:px-4' : '']">
+  <div :class="[padding ? 'px-2 md:px-4' : '']">
     <div
       class="flex overflow-x-auto whitespace-nowrap no-scrollbar md:overflow-visible md:whitespace-normal"
     >

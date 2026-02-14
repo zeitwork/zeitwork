@@ -24,14 +24,20 @@ type Props = {
 
 const { project } = defineProps<Props>();
 
-const githubOwner = computed(() => project.githubRepository.split("/")[0] ?? "");
+const githubOwner = computed(
+  () => project.githubRepository.split("/")[0] ?? "",
+);
 const githubRepo = computed(() => project.githubRepository.split("/")[1] ?? "");
 
 // Construct GitHub URL from owner and repo
-const githubUrl = computed(() => `https://github.com/${githubOwner.value}/${githubRepo.value}`);
+const githubUrl = computed(
+  () => `https://github.com/${githubOwner.value}/${githubRepo.value}`,
+);
 
 // GitHub avatar URL
-const githubAvatarUrl = computed(() => `https://github.com/${githubOwner.value}.png`);
+const githubAvatarUrl = computed(
+  () => `https://github.com/${githubOwner.value}.png`,
+);
 
 const shortCommitHash = computed(() => {
   if (!project.latestDeploymentCommit) return null;
@@ -56,7 +62,7 @@ const formattedDate = computed(() => {
 <template>
   <NuxtLink
     :to="`/${orgName}/${project.slug}`"
-    class="bg-surface-raised border-edge text-copy hover:border-edge-strong flex flex-col items-start gap-2 rounded-lg border p-4 shadow-sm transition-all hover:shadow"
+    class="base-3 border-edge text-copy hover:border-edge-strong flex flex-col items-start gap-2 rounded-lg border p-4 shadow-sm transition-all hover:shadow"
   >
     <div class="flex items-center gap-2">
       <img
@@ -80,7 +86,10 @@ const formattedDate = computed(() => {
         {{ githubOwner }}/{{ githubRepo }}
       </a>
     </div>
-    <div v-if="shortCommitHash" class="text-secondary text-copy-sm flex items-center gap-1">
+    <div
+      v-if="shortCommitHash"
+      class="text-secondary text-copy-sm flex items-center gap-1"
+    >
       <GitCommitHorizontalIcon class="size-4" />
       <a
         :href="commitUrl!"
@@ -93,6 +102,8 @@ const formattedDate = computed(() => {
       </a>
     </div>
     <p v-else class="text-tertiary text-copy-sm">No deployments yet</p>
-    <p v-if="formattedDate" class="text-secondary text-copy-sm">{{ formattedDate }}</p>
+    <p v-if="formattedDate" class="text-secondary text-copy-sm">
+      {{ formattedDate }}
+    </p>
   </NuxtLink>
 </template>

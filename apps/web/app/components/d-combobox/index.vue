@@ -103,7 +103,7 @@ watch(open, (newOpen, oldOpen) => {
   >
     <ComboboxAnchor as-child>
       <ComboboxTrigger
-        class="bg-surface-1 border-edge text-primary text-copy focus:bg-surface-0 focus:border-edge-strong hover:border-edge-strong disabled:bg-surface-2 flex h-8 w-full min-w-40 items-center justify-between gap-1 rounded-md border px-2.5 py-2 leading-none transition-all outline-none disabled:cursor-not-allowed disabled:opacity-50"
+        class="bg-surface-1 border-edge text-primary text-copy focus:bg-base focus:border-edge-strong hover:border-edge-strong disabled:bg-surface-2 flex h-8 w-full min-w-40 items-center justify-between gap-1 rounded-md border px-2.5 py-2 leading-none transition-all outline-none disabled:cursor-not-allowed disabled:opacity-50"
       >
         <span class="flex">
           <slot

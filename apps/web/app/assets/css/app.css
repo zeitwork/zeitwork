@@ -25,10 +25,21 @@
   --dir: -1; /* light mode: surfaces darken to elevate */
   --contrast: 1;
 
-  /* ── Surface steps ── */
-  --surface-step-1: 0.04;
-  --surface-step-2: 0.07;
-  --surface-step-3: 0.1;
+  /* ── Base level offsets from seed (subtracted from seed lightness, negative = lighter) ── */
+  --base-0-offset: 0.08;
+  --base-1-offset: 0.03;
+  --base-3-offset: -0.015;
+
+  /* ── Surface steps per base (1x, 2x, 3x multipliers in @utility base-*) ── */
+  --surface-step-on-0: 0.035;
+  --surface-step-on-1: 0.035;
+  --surface-step-on-2: 0.035;
+  --surface-step-on-3: 0.035;
+
+  /* ── Fallback for elements not inside a base-* class ── */
+  --surface-1: var(--surface-step-on-2);
+  --surface-2: calc(var(--surface-step-on-2) * 2);
+  --surface-3: calc(var(--surface-step-on-2) * 3);
 
   /* ── Composed seed colors ── */
   --seed: oklch(0.985 var(--seed-c) var(--seed-h));
@@ -46,10 +57,14 @@
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
-    --dir: 1; /* dark mode: surfaces lighten to elevate */
-    --surface-step-1: 0.06;
-    --surface-step-2: 0.1;
-    --surface-step-3: 0.14;
+    --dir: 1;
+    --base-0-offset: 0.12;
+    --base-1-offset: 0.02;
+    --base-3-offset: -0.05;
+    --surface-step-on-0: 0.14;
+    --surface-step-on-1: 0.065;
+    --surface-step-on-2: 0.05;
+    --surface-step-on-3: 0.04;
     --seed: oklch(0.15 var(--seed-c) var(--seed-h));
     --accent: oklch(0.7 var(--accent-c) var(--accent-h));
     --danger: oklch(0.7 0.18 25);
@@ -72,9 +87,10 @@
    * .base-* classes override --base for children.
    * ═══════════════════════════════════════
    */
-  --color-base-0: oklch(from var(--seed) calc(l - 0.08 * var(--contrast)) c h);
-  --color-base-1: oklch(from var(--seed) calc(l - 0.03 * var(--contrast)) c h);
+  --color-base-0: oklch(from var(--seed) calc(l - var(--base-0-offset) * var(--contrast)) c h);
+  --color-base-1: oklch(from var(--seed) calc(l - var(--base-1-offset) * var(--contrast)) c h);
   --color-base-2: var(--seed);
+  --color-base-3: oklch(from var(--seed) calc(l - var(--base-3-offset) * var(--contrast)) c h);
 
   /* Surfaces moved to @utility (context-relative, see below) */
 
@@ -318,14 +334,40 @@
  */
 @utility base-0 {
   --base: var(--color-base-0);
+  --surface-1: var(--surface-step-on-0);
+  --surface-2: calc(var(--surface-step-on-0) * 2);
+  --surface-3: calc(var(--surface-step-on-0) * 3);
   background-color: var(--base);
 }
 @utility base-1 {
   --base: var(--color-base-1);
+  --surface-1: var(--surface-step-on-1);
+  --surface-2: calc(var(--surface-step-on-1) * 2);
+  --surface-3: calc(var(--surface-step-on-1) * 3);
   background-color: var(--base);
 }
 @utility base-2 {
   --base: var(--color-base-2);
+  --surface-1: var(--surface-step-on-2);
+  --surface-2: calc(var(--surface-step-on-2) * 2);
+  --surface-3: calc(var(--surface-step-on-2) * 3);
+  background-color: var(--base);
+}
+@utility base-3 {
+  --base: var(--color-base-3);
+  --surface-1: var(--surface-step-on-3);
+  --surface-2: calc(var(--surface-step-on-3) * 2);
+  --surface-3: calc(var(--surface-step-on-3) * 3);
+  background-color: var(--base);
+}
+
+/*
+ * ═══════════════════════════════════════════════════════════════
+ * BG-BASE — Matches the current inherited base level
+ * Use where you want an element to "blend into" its base context.
+ * ═══════════════════════════════════════════════════════════════
+ */
+@utility bg-base {
   background-color: var(--base);
 }
 
@@ -340,20 +382,17 @@
  */
 @utility bg-surface-1 {
   background-color: oklch(
-    from var(--base)
-      calc(l + var(--surface-step-1) * var(--dir) * var(--contrast)) c h
+    from var(--base) calc(l + var(--surface-1) * var(--dir)) c h
   );
 }
 @utility bg-surface-2 {
   background-color: oklch(
-    from var(--base)
-      calc(l + var(--surface-step-2) * var(--dir) * var(--contrast)) c h
+    from var(--base) calc(l + var(--surface-2) * var(--dir)) c h
   );
 }
 @utility bg-surface-3 {
   background-color: oklch(
-    from var(--base)
-      calc(l + var(--surface-step-3) * var(--dir) * var(--contrast)) c h
+    from var(--base) calc(l + var(--surface-3) * var(--dir)) c h
   );
 }
 

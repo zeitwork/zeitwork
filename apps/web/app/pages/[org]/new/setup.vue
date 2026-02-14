@@ -129,7 +129,7 @@ async function createProject() {
             </p>
           </div>
         </div>
-        <div class="bg-surface-0 flex flex-col gap-2 rounded-xl">
+        <div class="base-3 flex flex-col gap-2 rounded-xl">
           <div class="flex flex-col gap-3 p-[18px]">
             <div class="flex w-full items-end gap-2">
               <DFormGroup v-if="false" class="flex-1">
