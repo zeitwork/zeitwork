@@ -1,9 +1,14 @@
 import { deployments, projects, domains } from "@zeitwork/database/schema";
-import { eq, and, inArray } from "@zeitwork/database/utils/drizzle";
+import { eq, and, lt, inArray } from "@zeitwork/database/utils/drizzle";
 import { z } from "zod";
 
 const paramsSchema = z.object({
   id: z.string(),
+});
+
+const querySchema = z.object({
+  cursor: z.string().uuid().optional(),
+  limit: z.coerce.number().int().min(1).max(100).default(20),
 });
 
 export default defineEventHandler(async (event) => {
@@ -12,6 +17,7 @@ export default defineEventHandler(async (event) => {
   if (!verified) throw createError({ statusCode: 403, message: "Account not verified" });
 
   const { id } = await getValidatedRouterParams(event, paramsSchema.parse);
+  const { cursor, limit } = await getValidatedQuery(event, querySchema.parse);
 
   const [project] = await useDrizzle()
     .select()
@@ -25,7 +31,15 @@ export default defineEventHandler(async (event) => {
     });
   }
 
-  // Step 1: Fetch deployments
+  // Step 1: Fetch deployments with cursor-based pagination
+  const conditions = [
+    eq(deployments.projectId, project.id),
+    eq(deployments.organisationId, secure.organisationId),
+  ];
+  if (cursor) {
+    conditions.push(lt(deployments.id, cursor));
+  }
+
   const deploymentList = await useDrizzle()
     .select({
       id: deployments.id,
@@ -37,13 +51,9 @@ export default defineEventHandler(async (event) => {
       updatedAt: deployments.updatedAt,
     })
     .from(deployments)
-    .where(
-      and(
-        eq(deployments.projectId, project.id),
-        eq(deployments.organisationId, secure.organisationId),
-      ),
-    )
-    .orderBy(desc(deployments.id));
+    .where(and(...conditions))
+    .orderBy(desc(deployments.id))
+    .limit(limit);
 
   // Step 2: Fetch domains for these deployments
   const deploymentIds = deploymentList.map((d) => d.id);
@@ -59,8 +69,12 @@ export default defineEventHandler(async (event) => {
       : [];
 
   // Step 3: Merge domains into deployments
-  return deploymentList.map((d) => ({
+  const merged = deploymentList.map((d) => ({
     ...d,
     domains: domainList.filter((dom) => dom.deploymentId === d.id).map((dom) => dom.name),
   }));
+
+  const nextCursor = deploymentList.length === limit ? deploymentList.at(-1)?.id ?? null : null;
+
+  return { deployments: merged, nextCursor };
 });

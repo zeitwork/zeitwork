@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { useIntervalFn } from "@vueuse/core";
+import { useInfiniteScroll, useIntervalFn } from "@vueuse/core";
 
 definePageMeta({
   layout: "project",
@@ -11,12 +11,85 @@ const projectSlug = route.params.project as string;
 
 const { data: project } = await useFetch(`/api/projects/${projectSlug}`);
 
-const { data: deployments, refresh: refreshDeployments } = await useFetch(
-  `/api/projects/${projectSlug}/deployments`,
+// --- Deployment list with infinite scroll ---
+type Deployment = {
+  id: string;
+  status: string;
+  projectId: string;
+  githubCommit: string;
+  organisationId: string;
+  createdAt: string;
+  updatedAt: string;
+  domains: string[];
+};
+
+const deploymentList = ref<Deployment[]>([]);
+const nextCursor = ref<string | null>(null);
+const isLoadingMore = ref(false);
+
+async function fetchDeployments(cursor?: string) {
+  const params: Record<string, string> = {};
+  if (cursor) {
+    params.cursor = cursor;
+  }
+  return await $fetch(`/api/projects/${projectSlug}/deployments`, {
+    query: params,
+  });
+}
+
+// Initial load
+const initialData = await fetchDeployments();
+deploymentList.value = initialData.deployments;
+nextCursor.value = initialData.nextCursor;
+
+// Infinite scroll
+const scrollContainer = useTemplateRef<HTMLElement>("scrollContainer");
+
+useInfiniteScroll(
+  scrollContainer,
+  async () => {
+    if (!nextCursor.value || isLoadingMore.value) return;
+    isLoadingMore.value = true;
+    try {
+      const result = await fetchDeployments(nextCursor.value);
+      deploymentList.value.push(...result.deployments);
+      nextCursor.value = result.nextCursor;
+    } catch (error) {
+      console.error("Failed to load more deployments:", error);
+    } finally {
+      isLoadingMore.value = false;
+    }
+  },
+  {
+    distance: 100,
+    canLoadMore: () => !!nextCursor.value,
+  },
 );
 
-useIntervalFn(() => {
-  refreshDeployments();
+// Background polling: fetch first page and merge updates
+useIntervalFn(async () => {
+  try {
+    const result = await fetchDeployments();
+    const existingIds = new Set(deploymentList.value.map((d) => d.id));
+
+    // Prepend new deployments
+    const newDeployments = result.deployments.filter((d) => !existingIds.has(d.id));
+    if (newDeployments.length > 0) {
+      deploymentList.value.unshift(...newDeployments);
+    }
+
+    // Update existing deployments in-place
+    for (const fresh of result.deployments) {
+      const existing = deploymentList.value.find((d) => d.id === fresh.id);
+      if (existing) {
+        existing.status = fresh.status;
+        existing.updatedAt = fresh.updatedAt;
+        existing.domains = fresh.domains;
+      }
+    }
+  } catch {
+    // Silently ignore polling errors
+  }
 }, 1000);
 
 const isCreatingDeployment = ref(false);
@@ -29,7 +102,7 @@ async function createDeployment() {
     await $fetch(`/api/projects/${projectSlug}/deployments`, {
       method: "POST",
     });
-    await refreshDeployments();
+    // Poll will pick up the new deployment
   } catch (error: any) {
     console.error("Failed to create deployment:", error);
     deploymentError.value =
@@ -142,9 +215,9 @@ function deploymentLink(deployment: any) {
         Dismiss
       </button>
     </div>
-    <div class="flex-1 overflow-auto">
+    <div ref="scrollContainer" class="flex-1 overflow-auto">
       <nuxt-link
-        v-for="deployment in deployments"
+        v-for="deployment in deploymentList"
         :key="deployment.id"
         :to="deploymentLink(deployment)"
         class="hover:bg-surface-1 border-edge-subtle text-primary grid cursor-pointer grid-cols-[auto_100px_100px_3fr_1fr] items-center gap-4 border-b p-4 text-sm"
