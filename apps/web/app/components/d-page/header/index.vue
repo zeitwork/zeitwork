@@ -26,7 +26,7 @@ async function logout() {
 </script>
 
 <template>
-  <header class="bg-surface-0 border-edge w-full border-b">
+  <header class="border-edge w-full border-b">
     <div class="flex items-center justify-between px-6 py-4">
       <div class="flex items-center gap-2">
         <NuxtLink :to="`/${orgName}`" class="flex flex-shrink-0 items-center gap-2">
