@@ -195,21 +195,23 @@ func (ns NullVmStatus) Value() (driver.Value, error) {
 }
 
 type Build struct {
-	ID             uuid.UUID          `json:"id"`
-	Status         BuildStatus        `json:"status"`
-	ProjectID      uuid.UUID          `json:"project_id"`
-	GithubCommit   string             `json:"github_commit"`
-	GithubBranch   string             `json:"github_branch"`
-	ImageID        uuid.UUID          `json:"image_id"`
-	VmID           uuid.UUID          `json:"vm_id"`
-	PendingAt      pgtype.Timestamptz `json:"pending_at"`
-	BuildingAt     pgtype.Timestamptz `json:"building_at"`
-	SuccessfulAt   pgtype.Timestamptz `json:"successful_at"`
-	FailedAt       pgtype.Timestamptz `json:"failed_at"`
-	OrganisationID uuid.UUID          `json:"organisation_id"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
-	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
+	ID                  uuid.UUID          `json:"id"`
+	Status              BuildStatus        `json:"status"`
+	ProjectID           uuid.UUID          `json:"project_id"`
+	GithubCommit        string             `json:"github_commit"`
+	GithubBranch        string             `json:"github_branch"`
+	ImageID             uuid.UUID          `json:"image_id"`
+	VmID                uuid.UUID          `json:"vm_id"`
+	PendingAt           pgtype.Timestamptz `json:"pending_at"`
+	BuildingAt          pgtype.Timestamptz `json:"building_at"`
+	SuccessfulAt        pgtype.Timestamptz `json:"successful_at"`
+	FailedAt            pgtype.Timestamptz `json:"failed_at"`
+	OrganisationID      uuid.UUID          `json:"organisation_id"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	DeletedAt           pgtype.Timestamptz `json:"deleted_at"`
+	ProcessingBy        uuid.UUID          `json:"processing_by"`
+	ProcessingStartedAt pgtype.Timestamptz `json:"processing_started_at"`
 }
 
 type BuildLog struct {

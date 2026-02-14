@@ -11,6 +11,53 @@ import (
 	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 )
 
+const buildClaimLease = `-- name: BuildClaimLease :one
+UPDATE builds
+SET processing_by = $2, processing_started_at = now()
+WHERE id = $1
+  AND status IN ('pending', 'building')
+  AND deleted_at IS NULL
+  AND (
+    processing_by IS NULL
+        OR processing_by = $2
+        OR processing_started_at < now() - interval '30 minutes'
+    )
+RETURNING id, status, project_id, github_commit, github_branch, image_id, vm_id, pending_at, building_at, successful_at, failed_at, organisation_id, created_at, updated_at, deleted_at, processing_by, processing_started_at
+`
+
+type BuildClaimLeaseParams struct {
+	ID           uuid.UUID `json:"id"`
+	ProcessingBy uuid.UUID `json:"processing_by"`
+}
+
+// Atomically claim a build lease for processing on a server.
+// Succeeds if the build is pending/building and either unclaimed, already
+// claimed by this server, or the previous lease is stale.
+func (q *Queries) BuildClaimLease(ctx context.Context, arg BuildClaimLeaseParams) (Build, error) {
+	row := q.db.QueryRow(ctx, buildClaimLease, arg.ID, arg.ProcessingBy)
+	var i Build
+	err := row.Scan(
+		&i.ID,
+		&i.Status,
+		&i.ProjectID,
+		&i.GithubCommit,
+		&i.GithubBranch,
+		&i.ImageID,
+		&i.VmID,
+		&i.PendingAt,
+		&i.BuildingAt,
+		&i.SuccessfulAt,
+		&i.FailedAt,
+		&i.OrganisationID,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.ProcessingBy,
+		&i.ProcessingStartedAt,
+	)
+	return i, err
+}
+
 const buildCreate = `-- name: BuildCreate :one
 INSERT INTO builds (
     id,
@@ -23,7 +70,7 @@ INSERT INTO builds (
     updated_at
 )
 VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
-RETURNING id, status, project_id, github_commit, github_branch, image_id, vm_id, pending_at, building_at, successful_at, failed_at, organisation_id, created_at, updated_at, deleted_at
+RETURNING id, status, project_id, github_commit, github_branch, image_id, vm_id, pending_at, building_at, successful_at, failed_at, organisation_id, created_at, updated_at, deleted_at, processing_by, processing_started_at
 `
 
 type BuildCreateParams struct {
@@ -61,12 +108,14 @@ func (q *Queries) BuildCreate(ctx context.Context, arg BuildCreateParams) (Build
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.ProcessingBy,
+		&i.ProcessingStartedAt,
 	)
 	return i, err
 }
 
 const buildFind = `-- name: BuildFind :many
-SELECT id, status, project_id, github_commit, github_branch, image_id, vm_id, pending_at, building_at, successful_at, failed_at, organisation_id, created_at, updated_at, deleted_at
+SELECT id, status, project_id, github_commit, github_branch, image_id, vm_id, pending_at, building_at, successful_at, failed_at, organisation_id, created_at, updated_at, deleted_at, processing_by, processing_started_at
 FROM builds
 `
 
@@ -95,6 +144,8 @@ func (q *Queries) BuildFind(ctx context.Context) ([]Build, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.ProcessingBy,
+			&i.ProcessingStartedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -107,7 +158,7 @@ func (q *Queries) BuildFind(ctx context.Context) ([]Build, error) {
 }
 
 const buildFindByVMID = `-- name: BuildFindByVMID :many
-SELECT id, status, project_id, github_commit, github_branch, image_id, vm_id, pending_at, building_at, successful_at, failed_at, organisation_id, created_at, updated_at, deleted_at FROM builds WHERE vm_id = $1
+SELECT id, status, project_id, github_commit, github_branch, image_id, vm_id, pending_at, building_at, successful_at, failed_at, organisation_id, created_at, updated_at, deleted_at, processing_by, processing_started_at FROM builds WHERE vm_id = $1
 `
 
 func (q *Queries) BuildFindByVMID(ctx context.Context, vmID uuid.UUID) ([]Build, error) {
@@ -135,6 +186,8 @@ func (q *Queries) BuildFindByVMID(ctx context.Context, vmID uuid.UUID) ([]Build,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.ProcessingBy,
+			&i.ProcessingStartedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -147,7 +200,7 @@ func (q *Queries) BuildFindByVMID(ctx context.Context, vmID uuid.UUID) ([]Build,
 }
 
 const buildFindWaitingForBuildImage = `-- name: BuildFindWaitingForBuildImage :many
-SELECT id, status, project_id, github_commit, github_branch, image_id, vm_id, pending_at, building_at, successful_at, failed_at, organisation_id, created_at, updated_at, deleted_at FROM builds 
+SELECT id, status, project_id, github_commit, github_branch, image_id, vm_id, pending_at, building_at, successful_at, failed_at, organisation_id, created_at, updated_at, deleted_at, processing_by, processing_started_at FROM builds 
 WHERE status IN ('pending', 'building') 
   AND image_id IS NULL 
   AND deleted_at IS NULL
@@ -178,6 +231,8 @@ func (q *Queries) BuildFindWaitingForBuildImage(ctx context.Context) ([]Build, e
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.ProcessingBy,
+			&i.ProcessingStartedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -190,7 +245,7 @@ func (q *Queries) BuildFindWaitingForBuildImage(ctx context.Context) ([]Build, e
 }
 
 const buildFirstByID = `-- name: BuildFirstByID :one
-SELECT id, status, project_id, github_commit, github_branch, image_id, vm_id, pending_at, building_at, successful_at, failed_at, organisation_id, created_at, updated_at, deleted_at
+SELECT id, status, project_id, github_commit, github_branch, image_id, vm_id, pending_at, building_at, successful_at, failed_at, organisation_id, created_at, updated_at, deleted_at, processing_by, processing_started_at
 FROM builds
 WHERE id = $1
 LIMIT 1
@@ -215,12 +270,14 @@ func (q *Queries) BuildFirstByID(ctx context.Context, id uuid.UUID) (Build, erro
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.ProcessingBy,
+		&i.ProcessingStartedAt,
 	)
 	return i, err
 }
 
 const buildFirstPending = `-- name: BuildFirstPending :one
-SELECT id, status, project_id, github_commit, github_branch, image_id, vm_id, pending_at, building_at, successful_at, failed_at, organisation_id, created_at, updated_at, deleted_at
+SELECT id, status, project_id, github_commit, github_branch, image_id, vm_id, pending_at, building_at, successful_at, failed_at, organisation_id, created_at, updated_at, deleted_at, processing_by, processing_started_at
 FROM builds WHERE status = 'pending'
 ORDER BY id DESC
 LIMIT 1
@@ -245,6 +302,8 @@ func (q *Queries) BuildFirstPending(ctx context.Context) (Build, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.ProcessingBy,
+		&i.ProcessingStartedAt,
 	)
 	return i, err
 }
@@ -313,5 +372,23 @@ type BuildMarkSuccessfulParams struct {
 
 func (q *Queries) BuildMarkSuccessful(ctx context.Context, arg BuildMarkSuccessfulParams) error {
 	_, err := q.db.Exec(ctx, buildMarkSuccessful, arg.ID, arg.ImageID)
+	return err
+}
+
+const buildReleaseLease = `-- name: BuildReleaseLease :exec
+UPDATE builds
+SET processing_by = NULL, processing_started_at = NULL
+WHERE id = $1
+  AND processing_by = $2
+`
+
+type BuildReleaseLeaseParams struct {
+	ID           uuid.UUID `json:"id"`
+	ProcessingBy uuid.UUID `json:"processing_by"`
+}
+
+// Release a build processing lease if it's still owned by this server.
+func (q *Queries) BuildReleaseLease(ctx context.Context, arg BuildReleaseLeaseParams) error {
+	_, err := q.db.Exec(ctx, buildReleaseLease, arg.ID, arg.ProcessingBy)
 	return err
 }

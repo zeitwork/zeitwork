@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -22,15 +23,29 @@ import (
 	"github.com/docker/docker/api/types/mount"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
+	"github.com/jackc/pgx/v5"
 	"github.com/zeitwork/zeitwork/internal/database/queries"
 	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 )
 
 func (s *Service) reconcileBuild(ctx context.Context, objectID uuid.UUID) error {
-	build, err := s.db.BuildFirstByID(ctx, objectID)
-	if err != nil {
-		return err
+	if !s.isControlPlaneLeader() {
+		return nil
 	}
+
+	build, err := s.db.BuildClaimLease(ctx, queries.BuildClaimLeaseParams{
+		ID:           objectID,
+		ProcessingBy: s.serverID,
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		// Another server currently owns the lease, lease is stale-unclaimable yet,
+		// or the build is already terminal/deleted.
+		return nil
+	}
+	if err != nil {
+		return fmt.Errorf("failed to claim build lease: %w", err)
+	}
+	defer s.releaseBuildLease(objectID)
 
 	// Skip if already completed
 	if build.Status == queries.BuildStatusSuccesful || build.Status == queries.BuildStatusFailed {
@@ -140,6 +155,18 @@ func (s *Service) reconcileBuild(ctx context.Context, objectID uuid.UUID) error 
 	}
 
 	return nil
+}
+
+func (s *Service) releaseBuildLease(buildID uuid.UUID) {
+	releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := s.db.BuildReleaseLease(releaseCtx, queries.BuildReleaseLeaseParams{
+		ID:           buildID,
+		ProcessingBy: s.serverID,
+	}); err != nil {
+		slog.Warn("failed to release build lease", "build_id", buildID, "server_id", s.serverID, "err", err)
+	}
 }
 
 // executeBuild performs the actual build process inside the VM

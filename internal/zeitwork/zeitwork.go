@@ -85,6 +85,9 @@ type Service struct {
 	domainScheduler     *reconciler.Scheduler
 	serverScheduler     *reconciler.Scheduler
 
+	// Control-plane role (true when this server holds cluster_leader lock).
+	controlPlaneLeader atomic.Bool
+
 	// VM Stuff
 	imageMu sync.Mutex
 	vmToCmd map[uuid.UUID]*exec.Cmd
@@ -158,10 +161,19 @@ func (s *Service) Start(ctx context.Context) error {
 	go s.heartbeatLoop(ctx)
 	go s.clusterDutyLoop(ctx)
 
-	// Bootstrap: schedule all existing entities once on startup.
-	// This ensures we don't miss any changes that happened while we were down.
-	if err := s.bootstrap(ctx); err != nil {
-		return fmt.Errorf("failed to bootstrap: %w", err)
+	// Bootstrap local dataplane entities on all servers.
+	if err := s.bootstrapLocal(ctx); err != nil {
+		return fmt.Errorf("failed to bootstrap local entities: %w", err)
+	}
+
+	// Global entities are bootstrapped only by the current control-plane leader.
+	// Followers will bootstrap globals after they acquire leadership.
+	if s.isControlPlaneLeader() {
+		if err := s.bootstrapGlobal(ctx); err != nil {
+			return fmt.Errorf("failed to bootstrap global entities: %w", err)
+		}
+	} else {
+		slog.Info("deferring global bootstrap until this server becomes control-plane leader", "server_id", s.serverID)
 	}
 
 	// Create WAL listener with callbacks to schedulers.
@@ -254,11 +266,30 @@ func (s *Service) Start(ctx context.Context) error {
 	return walListener.Start(ctx)
 }
 
-// bootstrap schedules all existing entities for reconciliation on startup
-func (s *Service) bootstrap(ctx context.Context) error {
-	slog.Info("bootstrapping: scheduling all existing entities")
+func (s *Service) isControlPlaneLeader() bool {
+	return s.controlPlaneLeader.Load()
+}
 
-	// Deployments (all — stateless reconcilers run on every server)
+func (s *Service) setControlPlaneLeader(isLeader bool) {
+	previous := s.controlPlaneLeader.Swap(isLeader)
+	if previous == isLeader {
+		return
+	}
+
+	if isLeader {
+		slog.Info("control-plane leadership acquired", "server_id", s.serverID)
+		return
+	}
+
+	slog.Info("control-plane leadership lost", "server_id", s.serverID)
+}
+
+// bootstrapGlobal schedules cluster-scoped entities.
+// This must only run on the control-plane leader.
+func (s *Service) bootstrapGlobal(ctx context.Context) error {
+	slog.Info("bootstrapping global entities", "server_id", s.serverID)
+
+	// Deployments
 	deployments, err := s.db.DeploymentFind(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to find deployments: %w", err)
@@ -268,7 +299,7 @@ func (s *Service) bootstrap(ctx context.Context) error {
 	}
 	slog.Info("bootstrapped deployments", "count", len(deployments))
 
-	// Builds (all)
+	// Builds
 	builds, err := s.db.BuildFind(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to find builds: %w", err)
@@ -278,7 +309,7 @@ func (s *Service) bootstrap(ctx context.Context) error {
 	}
 	slog.Info("bootstrapped builds", "count", len(builds))
 
-	// Images (all)
+	// Images
 	images, err := s.db.ImageFind(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to find images: %w", err)
@@ -288,17 +319,7 @@ func (s *Service) bootstrap(ctx context.Context) error {
 	}
 	slog.Info("bootstrapped images", "count", len(images))
 
-	// VMs — only bootstrap VMs belonging to this server
-	vms, err := s.db.VMFindByServerID(ctx, s.serverID)
-	if err != nil {
-		return fmt.Errorf("failed to find vms for this server: %w", err)
-	}
-	for _, vm := range vms {
-		s.vmScheduler.Schedule(vm.ID, time.Now())
-	}
-	slog.Info("bootstrapped vms", "count", len(vms), "server_id", s.serverID)
-
-	// Domains (all)
+	// Domains
 	domains, err := s.db.DomainFind(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to find domains: %w", err)
@@ -307,6 +328,24 @@ func (s *Service) bootstrap(ctx context.Context) error {
 		s.domainScheduler.Schedule(domain.ID, time.Now())
 	}
 	slog.Info("bootstrapped domains", "count", len(domains))
+
+	slog.Info("global bootstrap complete", "server_id", s.serverID)
+	return nil
+}
+
+// bootstrapLocal schedules node-local dataplane entities.
+func (s *Service) bootstrapLocal(ctx context.Context) error {
+	slog.Info("bootstrapping local entities", "server_id", s.serverID)
+
+	// VMs — only bootstrap VMs belonging to this server.
+	vms, err := s.db.VMFindByServerID(ctx, s.serverID)
+	if err != nil {
+		return fmt.Errorf("failed to find vms for this server: %w", err)
+	}
+	for _, vm := range vms {
+		s.vmScheduler.Schedule(vm.ID, time.Now())
+	}
+	slog.Info("bootstrapped vms", "count", len(vms), "server_id", s.serverID)
 
 	// Servers -- schedule all active servers for host route sync,
 	// and always schedule this server for drain monitoring.
@@ -321,7 +360,7 @@ func (s *Service) bootstrap(ctx context.Context) error {
 	s.serverScheduler.Schedule(s.serverID, time.Now())
 	slog.Info("bootstrapped servers", "count", len(servers))
 
-	slog.Info("bootstrap complete")
+	slog.Info("local bootstrap complete", "server_id", s.serverID)
 	return nil
 }
 

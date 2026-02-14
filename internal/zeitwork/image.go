@@ -17,6 +17,10 @@ import (
 )
 
 func (s *Service) reconcileImage(ctx context.Context, objectID uuid.UUID) error {
+	if !s.isControlPlaneLeader() {
+		return nil
+	}
+
 	// Serialize image builds locally (one at a time on this server)
 	s.imageMu.Lock()
 	defer s.imageMu.Unlock()

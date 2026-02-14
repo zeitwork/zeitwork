@@ -9,6 +9,7 @@ import (
 	"net/netip"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"syscall"
 	"time"
@@ -106,6 +107,14 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 	if _, err := os.Stat(baseDiskPath); os.IsNotExist(err) {
 		if s.s3 == nil {
 			return fmt.Errorf("base image not found locally and S3 not configured (image_id=%s)", vm.ImageID)
+		}
+		// Remove stale partial downloads from previous failed attempts. Minio's FGetObject
+		// resumes from .part.minio files; that resume path can send malformed Range headers.
+		// Starting fresh avoids the bug.
+		if matches, err := filepath.Glob(filepath.Join(filepath.Dir(baseDiskPath), "*.part.minio")); err == nil {
+			for _, m := range matches {
+				_ = os.Remove(m)
+			}
 		}
 		s3Key := fmt.Sprintf("images/%s.qcow2", vm.ImageID.String())
 		slog.Info("base image not found locally, downloading from S3", "image_id", vm.ImageID, "s3_key", s3Key)

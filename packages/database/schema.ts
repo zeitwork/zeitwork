@@ -175,6 +175,9 @@ export const builds = pgTable("builds", {
   githubBranch: text().notNull(),
   imageId: uuid().references(() => images.id),
   vmId: uuid().references(() => vms.id),
+  // build lease coordination — ensures a build is processed by a single server at a time
+  processingBy: uuid().references(() => servers.id),
+  processingStartedAt: timestamp({ withTimezone: true }),
   //
   pendingAt: timestamp({ withTimezone: true }),
   buildingAt: timestamp({ withTimezone: true }),

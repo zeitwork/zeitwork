@@ -141,7 +141,6 @@ func (s *Service) tryBecomeClusterLeader(ctx context.Context) {
 		slog.Error("failed to acquire connection for cluster leader election", "err", err)
 		return
 	}
-	defer conn.Release()
 
 	// Try to acquire a session-scoped advisory lock (non-blocking).
 	// The lock is held as long as this connection stays open.
@@ -149,13 +148,38 @@ func (s *Service) tryBecomeClusterLeader(ctx context.Context) {
 	acquired, err := q.TrySessionAdvisoryLock(ctx, "cluster_leader")
 	if err != nil {
 		slog.Error("failed to try cluster leader lock", "err", err)
+		conn.Release()
 		return
 	}
 	if !acquired {
+		conn.Release()
 		return // Another server is the leader
 	}
 
+	defer func() {
+		releaseCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		if _, err := q.ReleaseSessionAdvisoryLock(releaseCtx, "cluster_leader"); err != nil {
+			// Do not return a locked session to the pool.
+			slog.Warn("failed to release cluster leader lock, closing connection", "err", err)
+			hijacked := conn.Hijack()
+			_ = hijacked.Close(context.Background())
+			return
+		}
+
+		conn.Release()
+	}()
+
+	s.setControlPlaneLeader(true)
+	defer s.setControlPlaneLeader(false)
+
 	slog.Info("this server is now the cluster leader", "server_id", s.serverID)
+
+	// Bootstrap global entities now that we own control-plane responsibilities.
+	if err := s.bootstrapGlobal(ctx); err != nil {
+		slog.Error("failed to bootstrap global entities after leadership acquisition", "err", err)
+	}
 
 	// Run cluster duties until context is cancelled
 	ticker := time.NewTicker(deadDetectionInterval)

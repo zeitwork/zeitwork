@@ -9,6 +9,29 @@ FROM builds
 WHERE id = $1
 LIMIT 1;
 
+-- name: BuildClaimLease :one
+-- Atomically claim a build lease for processing on a server.
+-- Succeeds if the build is pending/building and either unclaimed, already
+-- claimed by this server, or the previous lease is stale.
+UPDATE builds
+SET processing_by = $2, processing_started_at = now()
+WHERE id = $1
+  AND status IN ('pending', 'building')
+  AND deleted_at IS NULL
+  AND (
+    processing_by IS NULL
+        OR processing_by = $2
+        OR processing_started_at < now() - interval '30 minutes'
+    )
+RETURNING *;
+
+-- name: BuildReleaseLease :exec
+-- Release a build processing lease if it's still owned by this server.
+UPDATE builds
+SET processing_by = NULL, processing_started_at = NULL
+WHERE id = $1
+  AND processing_by = $2;
+
 -- name: BuildCreate :one
 INSERT INTO builds (
     id,

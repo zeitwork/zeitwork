@@ -13,6 +13,10 @@ import (
 )
 
 func (s *Service) reconcileDomain(ctx context.Context, objectID uuid.UUID) error {
+	if !s.isControlPlaneLeader() {
+		return nil
+	}
+
 	domain, err := s.db.DomainFirstByID(ctx, objectID)
 	if err != nil {
 		return err
