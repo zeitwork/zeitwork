@@ -7,7 +7,7 @@ import {
   DeploymentStatus,
 } from "@zeitwork/database/schema";
 import { eq } from "../utils/drizzle";
-import { nanoid } from "nanoid";
+import { customAlphabet } from "nanoid";
 
 type ModelResponse<T> =
   | {
@@ -111,13 +111,9 @@ export function useDeploymentModel() {
   };
 }
 
-/**
- * Generates an internal domain name for a deployment
- * Pattern: <project-slug>-<nanoid>-<org-slug>.zeitwork.app
- */
 function generateInternalDomain(projectSlug: string, orgSlug: string): string {
-  const id = nanoid(6);
-  return `${projectSlug}-${id}-${orgSlug}.zeitwork.app`.toLowerCase();
+  const id = customAlphabet("0123456789abcdefghijklmnopqrstuvwxyz", 6)();
+  return `${projectSlug}-${id}-${orgSlug}.zeitwork.app`;
 }
 
 export function deploymentStatus(deployment: typeof deployments.$inferSelect): DeploymentStatus {
