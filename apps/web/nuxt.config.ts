@@ -28,7 +28,7 @@ export default defineNuxtConfig({
       appUrl: "http://localhost:3000",
       appName: "zeitwork",
       githubClientId: "",
-      edgeDomain: "edge.zeitwork.app",
+      edgeDomain: "edge.zeitwork.com",
       edgeIp: "91.98.13.193",
     },
 
