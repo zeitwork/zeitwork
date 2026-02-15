@@ -42,6 +42,7 @@ export const organisations = pgTable("organisations", {
   id: uuid().primaryKey().$defaultFn(uuidv7),
   name: text().notNull(),
   slug: text().notNull().unique(),
+  projectLimit: integer().notNull().default(5),
   ...timestamps,
 });
 

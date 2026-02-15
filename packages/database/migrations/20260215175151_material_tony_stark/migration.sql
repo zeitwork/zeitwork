@@ -1,0 +1,1 @@
+ALTER TABLE "organisations" ADD COLUMN "project_limit" integer DEFAULT 5 NOT NULL;

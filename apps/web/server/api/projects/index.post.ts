@@ -1,4 +1,4 @@
-import { environmentVariables, githubInstallations, projects } from "@zeitwork/database/schema";
+import { environmentVariables, githubInstallations, organisations, projects } from "@zeitwork/database/schema";
 import { count } from "@zeitwork/database/utils/drizzle";
 import z from "zod";
 import { encrypt } from "~~/server/utils/crypto";
@@ -31,15 +31,24 @@ export default defineEventHandler(async (event) => {
 
   const body = await readValidatedBody(event, bodySchema.parse);
 
-  // Enforce 5 project limit for all users
+  // Fetch organisation's project limit
+  const [organisation] = await useDrizzle()
+    .select({ projectLimit: organisations.projectLimit })
+    .from(organisations)
+    .where(eq(organisations.id, secure.organisationId));
+  if (!organisation) {
+    throw createError({ statusCode: 404, message: "Organisation not found" });
+  }
+
+  // Enforce project limit
   const [countResult] = await useDrizzle()
     .select({ count: count() })
     .from(projects)
     .where(eq(projects.organisationId, secure.organisationId));
-  if (!countResult || countResult.count >= 5) {
+  if (!countResult || countResult.count >= organisation.projectLimit) {
     throw createError({
       statusCode: 403,
-      message: "Project limit reached (5 projects maximum)",
+      message: `Project limit reached (${organisation.projectLimit} projects maximum)`,
     });
   }
 
