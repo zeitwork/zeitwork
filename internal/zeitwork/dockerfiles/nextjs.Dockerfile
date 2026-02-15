@@ -25,7 +25,12 @@ RUN config_file=""; \
       [ -f "$f" ] && config_file="$f" && break; \
     done; \
     if [ -n "$config_file" ] && ! grep -q "standalone" "$config_file"; then \
-      sed -i "s/\(export default\|module\.exports *=\) *{/\1 { output: \"standalone\",/" "$config_file" || true; \
+      node -e " \
+        const fs = require('fs'); \
+        let c = fs.readFileSync('$config_file', 'utf8'); \
+        c = c.replace(/((?:const|let|var)\s+\w+(?:\s*:\s*\w+)?\s*=\s*\{)/, '\$1\n  output: \"standalone\",'); \
+        fs.writeFileSync('$config_file', c); \
+      "; \
     fi
 
 RUN \
