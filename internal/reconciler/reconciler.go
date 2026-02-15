@@ -96,6 +96,14 @@ func (s *Scheduler) worker() {
 		}
 
 		logger.Info("reconcile done", "id", id)
-		s.Schedule(id, time.Now().Add(1*time.Hour))
+
+		// Only apply the 1-hour default if the reconcile function
+		// did not already schedule a custom next-run time.
+		s.mu.RLock()
+		alreadyScheduled := !s.schedule[id].IsZero()
+		s.mu.RUnlock()
+		if !alreadyScheduled {
+			s.Schedule(id, time.Now().Add(1*time.Hour))
+		}
 	}
 }

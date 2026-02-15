@@ -54,6 +54,8 @@ SELECT * FROM deployments
 WHERE project_id = $1
   AND id < $2
   AND running_at IS NOT NULL
+  AND stopped_at IS NULL
+  AND failed_at IS NULL
   AND deleted_at IS NULL;
 
 

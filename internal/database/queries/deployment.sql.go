@@ -168,6 +168,8 @@ SELECT id, status, github_commit, project_id, build_id, image_id, vm_id, pending
 WHERE project_id = $1
   AND id < $2
   AND running_at IS NOT NULL
+  AND stopped_at IS NULL
+  AND failed_at IS NULL
   AND deleted_at IS NULL
 `
 

@@ -138,6 +138,16 @@ func (s *Service) reconcileBuild(ctx context.Context, objectID uuid.UUID) error 
 		err = s.executeBuild(ctx, build, vm)
 		if err != nil {
 			slog.Error("build execution failed", "build_id", build.ID, "error", err)
+
+			// Write error to build_logs so it's queryable
+			s.db.BuildLogCreate(ctx, queries.BuildLogCreateParams{
+				ID:             uuid.New(),
+				BuildID:        build.ID,
+				Message:        fmt.Sprintf("Build failed: %s", err.Error()),
+				Level:          "error",
+				OrganisationID: build.OrganisationID,
+			})
+
 			// Only mark as failed if not already failed (avoid unnecessary DB update)
 			if build.Status != queries.BuildStatusFailed {
 				s.db.BuildMarkFailed(ctx, build.ID)

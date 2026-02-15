@@ -3,11 +3,13 @@ package zeitwork
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/zeitwork/zeitwork/internal/database/queries"
 	"github.com/zeitwork/zeitwork/internal/shared/crypto"
 	"github.com/zeitwork/zeitwork/internal/shared/uuid"
@@ -29,22 +31,33 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 	if deployment.DeletedAt.Valid || deployment.FailedAt.Valid || deployment.StoppedAt.Valid {
 		logger.Info("deployment in terminal state, skipping")
 
+		if !deployment.VmID.Valid {
+			return nil
+		}
+
 		// Ensure if the deployment is in a terminal state, the VM is also deleted
 		vm, err := s.db.VMFirstByID(ctx, deployment.VmID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil
+		}
 		if err != nil {
 			return err
 		}
 		if vm.DeletedAt.Valid {
 			return nil
 		}
-		if deployment.VmID.Valid {
-			err = s.db.VMSoftDelete(ctx, deployment.VmID)
-			if err != nil {
-				return err
-			}
-			logger.Info("deleted VM for terminal deployment", "deployment_id", deployment.ID, "vm_id", deployment.VmID)
-		}
 
+		err = s.db.VMSoftDelete(ctx, deployment.VmID)
+		if err != nil {
+			return err
+		}
+		logger.Info("deleted VM for terminal deployment", "deployment_id", deployment.ID, "vm_id", deployment.VmID)
+
+		return nil
+	}
+
+	// Already running - nothing to reconcile
+	if deployment.RunningAt.Valid {
 		return nil
 	}
 
