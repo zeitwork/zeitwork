@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/vishvananda/netlink"
 	"github.com/zeitwork/zeitwork/internal/database/queries"
 	"github.com/zeitwork/zeitwork/internal/shared/crypto"
 	"github.com/zeitwork/zeitwork/internal/shared/uuid"
@@ -121,6 +122,8 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 		return fmt.Errorf("failed to register VM with VSOCK manager: %w", err)
 	}
 
+	tapName := fmt.Sprintf("ztap%d", s.nextTap.Add(1))
+
 	slog.Info("starting DA VM", "id", vm.ID, "hostIp", hostIp, "vmIp", vmIp, "vcpus", vm.Vcpus, "memory_mb", vm.Memory, "envVarsCount", len(envVars))
 
 	cmd := exec.Command("/data/cloud-hypervisor", "--kernel", "/data/vmlinuz.bin",
@@ -129,7 +132,7 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 		"--cmdline", "console=hvc0",
 		"--cpus", fmt.Sprintf("boot=%d", vm.Vcpus),
 		"--memory", fmt.Sprintf("size=%dM", vm.Memory),
-		"--net", fmt.Sprintf("tap=tap%d,mac=,ip=%s,mask=255.255.255.254", s.nextTap.Add(1), hostIp.Addr()), // todo mask might not be /31 theoretically but who cares
+		"--net", fmt.Sprintf("tap=%s,mac=,ip=%s,mask=255.255.255.254", tapName, hostIp.Addr()), // todo mask might not be /31 theoretically but who cares
 		"--vsock", fmt.Sprintf("cid=3,socket=%s", vsockPath))
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Pdeathsig: syscall.SIGKILL,
@@ -139,6 +142,7 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 
 	slog.Info("Starting VM", "cmd", cmd)
 	s.vmToCmd[vm.ID] = cmd
+	s.vmToTap[vm.ID] = tapName
 
 	err = cmd.Start()
 	if err != nil {
@@ -192,6 +196,14 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 
 		// Unregister from VSOCK manager (connection is dead when VM exits)
 		s.vsockManager.UnregisterVM(vm.ID)
+
+		// Cleanup tap device (safety net in case reconcileVmDelete hasn't run yet)
+		if tapName, ok := s.vmToTap[vm.ID]; ok {
+			if link, err := netlink.LinkByName(tapName); err == nil {
+				netlink.LinkDel(link)
+			}
+			delete(s.vmToTap, vm.ID)
+		}
 
 		delete(s.vmToCmd, vm.ID)
 		s.vmScheduler.Schedule(vm.ID, time.Now().Add(5*time.Second))
@@ -269,6 +281,16 @@ func (s *Service) reconcileVmDelete(ctx context.Context, vm queries.Vm) error {
 			}
 		}
 		delete(s.vmToCmd, vm.ID)
+	}
+
+	// Cleanup the tap device
+	if tapName, ok := s.vmToTap[vm.ID]; ok {
+		if link, err := netlink.LinkByName(tapName); err == nil {
+			if err := netlink.LinkDel(link); err != nil {
+				slog.Error("failed to delete tap device", "vm_id", vm.ID.String(), "tap", tapName, "err", err)
+			}
+		}
+		delete(s.vmToTap, vm.ID)
 	}
 
 	// Cleanup the work disk

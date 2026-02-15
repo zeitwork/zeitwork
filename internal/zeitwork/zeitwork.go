@@ -7,11 +7,13 @@ import (
 	"log/slog"
 	"net/netip"
 	"os/exec"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/docker/docker/client"
+	"github.com/vishvananda/netlink"
 	"github.com/zeitwork/zeitwork/internal/database"
 	"github.com/zeitwork/zeitwork/internal/listener"
 	"github.com/zeitwork/zeitwork/internal/reconciler"
@@ -86,6 +88,7 @@ type Service struct {
 	// VM Stuff
 	imageMu sync.Mutex
 	vmToCmd map[uuid.UUID]*exec.Cmd
+	vmToTap map[uuid.UUID]string
 	nextTap atomic.Int32
 
 	// Build execution tracking (prevents concurrent execution of the same build)
@@ -104,6 +107,7 @@ func New(cfg Config) (*Service, error) {
 		dnsResolver:       dnsresolver.NewResolver(),
 		vsockManager:      NewVSockManager(cfg.DB),
 		vmToCmd:           make(map[uuid.UUID]*exec.Cmd),
+		vmToTap:           make(map[uuid.UUID]string),
 		imageMu:           sync.Mutex{},
 		nextTap:           atomic.Int32{},
 		activeBuilds:      make(map[uuid.UUID]bool),
@@ -142,6 +146,17 @@ func (s *Service) Start(ctx context.Context) error {
 	}
 	s.serverIPRange = server.IpRange
 	slog.Info("server registered", "server_id", s.serverID, "ip_range", s.serverIPRange, "internal_ip", s.cfg.InternalIP)
+
+	// Clean up stale tap devices from previous runs.
+	// This is safe because the bootstrap process will re-create them for running VMs.
+	if links, err := netlink.LinkList(); err == nil {
+		for _, link := range links {
+			if strings.HasPrefix(link.Attrs().Name, "ztap") {
+				slog.Info("cleaning up stale tap device", "tap", link.Attrs().Name)
+				netlink.LinkDel(link)
+			}
+		}
+	}
 
 	// Start all schedulers
 	s.deploymentScheduler.Start()

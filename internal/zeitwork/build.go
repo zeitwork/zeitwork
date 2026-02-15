@@ -38,6 +38,7 @@ func (s *Service) reconcileBuild(ctx context.Context, objectID uuid.UUID) error 
 		ProcessingBy: s.serverID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
+		slog.Debug("build lease not found, skipping", "build_id", objectID)
 		// Another server currently owns the lease, lease is stale-unclaimable yet,
 		// or the build is already terminal/deleted.
 		return nil
