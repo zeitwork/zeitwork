@@ -26,6 +26,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/zeitwork/zeitwork/internal/database/queries"
 	"github.com/zeitwork/zeitwork/internal/shared/uuid"
+	"github.com/zeitwork/zeitwork/internal/zeitwork/dockerfiles"
 )
 
 func (s *Service) reconcileBuild(ctx context.Context, objectID uuid.UUID) error {
@@ -222,7 +223,7 @@ func (s *Service) executeBuild(ctx context.Context, build queries.Build, vm quer
 	slog.Info("connected to docker daemon", "build_id", build.ID, "host", dockerHost)
 
 	// 6. Prepare build context from tarball (convert gzip tarball to Docker-compatible tar)
-	buildContext, err := s.prepareBuildContext(tarballReader, project.RootDirectory)
+	buildContext, err := s.prepareBuildContext(ctx, build, tarballReader, project.RootDirectory)
 	if err != nil {
 		return fmt.Errorf("failed to prepare build context: %w", err)
 	}
@@ -311,7 +312,11 @@ func (s *Service) downloadSourceTarball(ctx context.Context, token, repo, commit
 // prepareBuildContext converts a GitHub gzip tarball to a Docker build context
 // GitHub tarballs have a top-level directory like "owner-repo-sha/" that we need to strip
 // rootDir specifies the subdirectory to use as build context (e.g., "/" for repo root, "/apps/web" for monorepo)
-func (s *Service) prepareBuildContext(gzipReader io.Reader, rootDir string) (io.Reader, error) {
+//
+// If no Dockerfile is found, the function attempts to detect the framework from
+// well-known files (nuxt.config.ts, Gemfile, artisan, etc.) and injects a
+// framework-specific Dockerfile into the build context.
+func (s *Service) prepareBuildContext(ctx context.Context, build queries.Build, gzipReader io.Reader, rootDir string) (io.Reader, error) {
 	// Create a pipe for streaming the output
 	pr, pw := io.Pipe()
 
@@ -335,6 +340,7 @@ func (s *Service) prepareBuildContext(gzipReader io.Reader, rootDir string) (io.
 
 		var githubPrefix string
 		foundDockerfile := false
+		var signals frameworkSignals
 
 		// Normalize rootDir: remove leading slash for path matching, ensure trailing slash
 		// "/" -> "" (repo root)
@@ -389,6 +395,25 @@ func (s *Service) prepareBuildContext(gzipReader io.Reader, rootDir string) (io.
 				foundDockerfile = true
 			}
 
+			// Collect framework indicator signals from filenames
+			if !strings.Contains(pathAfterGitHub, "/") {
+				// Root-level files
+				switch pathAfterGitHub {
+				case "nuxt.config.ts", "nuxt.config.js":
+					signals.hasNuxtConfig = true
+				case "next.config.ts", "next.config.js", "next.config.mjs":
+					signals.hasNextConfig = true
+				case "Gemfile":
+					signals.hasGemfile = true
+				case "Rakefile":
+					signals.hasRakefile = true
+				case "artisan":
+					signals.hasArtisan = true
+				}
+			} else if pathAfterGitHub == "config/routes.rb" {
+				signals.hasRailsRoutes = true
+			}
+
 			// Create new header with the final stripped name
 			newHeader := *header
 			newHeader.Name = pathAfterGitHub
@@ -399,24 +424,164 @@ func (s *Service) prepareBuildContext(gzipReader io.Reader, rootDir string) (io.
 			}
 
 			if header.Typeflag == tar.TypeReg {
-				if _, err := io.Copy(tw, tr); err != nil {
-					pw.CloseWithError(fmt.Errorf("failed to copy tar content: %w", err))
-					return
+				// For root-level manifest files, buffer content for framework detection
+				var bufferDest *[]byte
+				if !strings.Contains(pathAfterGitHub, "/") {
+					switch pathAfterGitHub {
+					case "package.json":
+						bufferDest = &signals.packageJSON
+					case "Gemfile":
+						bufferDest = &signals.gemfileContent
+					case "composer.json":
+						bufferDest = &signals.composerJSON
+					}
+				}
+
+				if bufferDest != nil {
+					content, err := io.ReadAll(tr)
+					if err != nil {
+						pw.CloseWithError(fmt.Errorf("failed to read file content: %w", err))
+						return
+					}
+					if _, err := tw.Write(content); err != nil {
+						pw.CloseWithError(fmt.Errorf("failed to write tar content: %w", err))
+						return
+					}
+					*bufferDest = content
+				} else {
+					if _, err := io.Copy(tw, tr); err != nil {
+						pw.CloseWithError(fmt.Errorf("failed to copy tar content: %w", err))
+						return
+					}
 				}
 			}
 		}
 
 		if !foundDockerfile {
-			if rootDirPrefix != "" {
-				pw.CloseWithError(fmt.Errorf("no Dockerfile found in %s", rootDir))
-			} else {
-				pw.CloseWithError(fmt.Errorf("no Dockerfile found in repository root"))
+			// Attempt to detect the framework and inject a Dockerfile
+			framework := detectFramework(signals)
+			if framework == "" {
+				msg := "No Dockerfile found and could not detect a supported framework. Please add a Dockerfile to your repository or use one of the supported frameworks: Nuxt, Next.js, Rails, Laravel."
+				s.db.BuildLogCreate(ctx, queries.BuildLogCreateParams{
+					ID:             uuid.New(),
+					BuildID:        build.ID,
+					Message:        msg,
+					Level:          "error",
+					OrganisationID: build.OrganisationID,
+				})
+				pw.CloseWithError(fmt.Errorf(msg))
+				return
 			}
-			return
+
+			content := dockerfiles.Get(framework)
+			if content == nil {
+				pw.CloseWithError(fmt.Errorf("no Dockerfile template for detected framework %q", framework))
+				return
+			}
+
+			slog.Info("no Dockerfile found, injecting framework Dockerfile", "framework", framework)
+			s.db.BuildLogCreate(ctx, queries.BuildLogCreateParams{
+				ID:             uuid.New(),
+				BuildID:        build.ID,
+				Message:        fmt.Sprintf("No Dockerfile found. Detected framework: %s - injecting default Dockerfile.", framework),
+				Level:          "info",
+				OrganisationID: build.OrganisationID,
+			})
+
+			if err := tw.WriteHeader(&tar.Header{
+				Name:    "Dockerfile",
+				Mode:    0644,
+				Size:    int64(len(content)),
+				ModTime: time.Now(),
+			}); err != nil {
+				pw.CloseWithError(fmt.Errorf("failed to write injected Dockerfile header: %w", err))
+				return
+			}
+			if _, err := tw.Write(content); err != nil {
+				pw.CloseWithError(fmt.Errorf("failed to write injected Dockerfile content: %w", err))
+				return
+			}
 		}
 	}()
 
 	return pr, nil
+}
+
+// frameworkSignals collects indicators observed while iterating the source tarball.
+type frameworkSignals struct {
+	// Strong signals (config file presence)
+	hasNuxtConfig  bool // nuxt.config.ts or nuxt.config.js
+	hasNextConfig  bool // next.config.ts, next.config.js, or next.config.mjs
+	hasGemfile     bool // Gemfile
+	hasRakefile    bool // Rakefile
+	hasRailsRoutes bool // config/routes.rb
+	hasArtisan     bool // artisan (Laravel CLI)
+
+	// Buffered file contents for fallback parsing
+	packageJSON    []byte // package.json content
+	gemfileContent []byte // Gemfile content
+	composerJSON   []byte // composer.json content
+}
+
+// detectFramework resolves the framework from collected signals.
+// Strong signals (config files) take priority; file-content parsing is a fallback.
+func detectFramework(s frameworkSignals) string {
+	// 1. Strong config-file signals
+	if s.hasNuxtConfig {
+		return "nuxt"
+	}
+	if s.hasNextConfig {
+		return "nextjs"
+	}
+	if s.hasArtisan {
+		return "laravel"
+	}
+	if s.hasRailsRoutes || (s.hasGemfile && s.hasRakefile) {
+		return "rails"
+	}
+
+	// 2. Fallback: parse manifest file contents
+	if s.packageJSON != nil {
+		var pkg struct {
+			Dependencies    map[string]string `json:"dependencies"`
+			DevDependencies map[string]string `json:"devDependencies"`
+		}
+		if json.Unmarshal(s.packageJSON, &pkg) == nil {
+			// Check nuxt before next (nuxt depends on vue, not next)
+			if _, ok := pkg.Dependencies["nuxt"]; ok {
+				return "nuxt"
+			}
+			if _, ok := pkg.DevDependencies["nuxt"]; ok {
+				return "nuxt"
+			}
+			if _, ok := pkg.Dependencies["next"]; ok {
+				return "nextjs"
+			}
+			if _, ok := pkg.DevDependencies["next"]; ok {
+				return "nextjs"
+			}
+		}
+	}
+
+	if s.gemfileContent != nil {
+		content := string(s.gemfileContent)
+		if strings.Contains(content, "'rails'") || strings.Contains(content, "\"rails\"") {
+			return "rails"
+		}
+	}
+
+	if s.composerJSON != nil {
+		var composer struct {
+			Require map[string]string `json:"require"`
+		}
+		if json.Unmarshal(s.composerJSON, &composer) == nil {
+			if _, ok := composer.Require["laravel/framework"]; ok {
+				return "laravel"
+			}
+		}
+	}
+
+	return ""
 }
 
 // waitForDockerReady waits for the Docker daemon to be ready
