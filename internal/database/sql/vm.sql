@@ -20,11 +20,8 @@ RETURNING *;
 -- Allocate the next /31 subnet within a server's IP range.
 -- Each VM needs its own /31 subnet, so we increment by 2 to skip to the next block.
 -- The first VM in a range gets base+1 (e.g., 10.1.0.1/31), host side is base+0.
-WITH lock AS (
-  SELECT pg_advisory_xact_lock(hashtext('vm_ip_allocation'))
-)
 SELECT set_masklen((network(@ip_range::inet) + gs)::inet, 31) AS free_ip
-FROM lock, generate_series(1, (2 ^ (32 - masklen(@ip_range::inet)))::int - 2, 2) gs
+FROM generate_series(1, (2 ^ (32 - masklen(@ip_range::inet)))::int - 2, 2) gs
 WHERE NOT EXISTS (
   SELECT 1 FROM vms
   WHERE deleted_at IS NULL

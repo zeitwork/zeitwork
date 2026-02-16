@@ -13,6 +13,17 @@ import (
 	"github.com/zeitwork/zeitwork/internal/shared/uuid"
 )
 
+const advisoryLock = `-- name: AdvisoryLock :exec
+SELECT pg_advisory_xact_lock(hashtext($1))
+`
+
+// Try to acquire a transaction-scoped advisory lock (non-blocking).
+// Returns true if the lock was acquired, false if another session holds it.
+func (q *Queries) AdvisoryLock(ctx context.Context, hashtext string) error {
+	_, err := q.db.Exec(ctx, advisoryLock, hashtext)
+	return err
+}
+
 const releaseSessionAdvisoryLock = `-- name: ReleaseSessionAdvisoryLock :one
 SELECT pg_advisory_unlock(hashtext($1)) as released
 `
@@ -26,9 +37,6 @@ func (q *Queries) ReleaseSessionAdvisoryLock(ctx context.Context, hashtext strin
 }
 
 const serverAllocateIPRange = `-- name: ServerAllocateIPRange :one
-WITH lock AS (
-    SELECT pg_advisory_xact_lock(hashtext('server_ip_range_allocation'))
-)
 SELECT COALESCE(
     (SELECT host(
                 set_masklen(

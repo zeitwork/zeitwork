@@ -60,6 +60,11 @@ UPDATE servers SET status = 'drained', updated_at = now() WHERE id = $1;
 -- Returns true if the lock was acquired, false if another session holds it.
 SELECT pg_try_advisory_xact_lock(hashtext($1)) as acquired;
 
+-- name: AdvisoryLock :exec
+-- Try to acquire a transaction-scoped advisory lock (non-blocking).
+-- Returns true if the lock was acquired, false if another session holds it.
+SELECT pg_advisory_xact_lock(hashtext($1));
+
 -- name: TrySessionAdvisoryLock :one
 -- Try to acquire a session-scoped advisory lock (non-blocking).
 -- Lock is held until explicitly released or the connection is closed.
@@ -74,9 +79,6 @@ SELECT pg_advisory_unlock(hashtext($1)) as released;
 -- Allocate the next available /20 IP range for a new server.
 -- First server gets 10.1.0.0/20, second gets 10.1.16.0/20, etc.
 -- Each /20 contains 4096 addresses (2048 VMs with /31 pairs).
-WITH lock AS (
-    SELECT pg_advisory_xact_lock(hashtext('server_ip_range_allocation'))
-)
 SELECT COALESCE(
     (SELECT host(
                 set_masklen(
@@ -89,5 +91,4 @@ SELECT COALESCE(
      ORDER BY ip_range DESC
      LIMIT 1),
     '10.1.0.0/20'::cidr
-)::cidr AS next_range
-FROM lock;
+)::cidr AS next_range;

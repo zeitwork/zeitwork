@@ -192,14 +192,14 @@ func (s *Suite) WaitUntil(f func() bool) {
 
 	var success bool
 	for i := 0; i < 60; i++ {
-		<-ticker.C
-
 		slog.Info("Running WaitUntil")
 		success = f()
 
 		if success {
 			break
 		}
+
+		<-ticker.C
 	}
 	s.Truef(success, "WaitUntil timed out")
 }
@@ -210,12 +210,16 @@ type CreateVMArgs struct {
 	Tag        string
 	Port       int32
 
-	Server uuid.UUID
+	Server       uuid.UUID
+	EnvVariables string // Encrypted JSON array of "KEY=value" strings
 }
 
 func (s *Suite) CreateVM(args CreateVMArgs) queries.Vm {
 	var vm queries.Vm
 	err := s.DB.WithTx(s.Context(), func(q *queries.Queries) error {
+		err := q.AdvisoryLock(s.Context(), "VMNextIPAddress")
+		s.NoError(err)
+
 		server, err := q.ServerFindByID(s.Context(), args.Server)
 		s.NoError(err)
 
@@ -233,15 +237,21 @@ func (s *Suite) CreateVM(args CreateVMArgs) queries.Vm {
 		})
 		s.NoError(err)
 
+		envVars := pgtype.Text{}
+		if args.EnvVariables != "" {
+			envVars = pgtype.Text{String: args.EnvVariables, Valid: true}
+		}
+
 		vm, err = q.VMCreate(s.Context(), queries.VMCreateParams{
-			ID:        uuid.New(),
-			Vcpus:     1,
-			Memory:    2048,
-			ImageID:   image.ID,
-			ServerID:  server.ID,
-			IpAddress: nextIp,
-			Port:      pgtype.Int4{Valid: true, Int32: args.Port},
-			Status:    queries.VmStatusPending,
+			ID:           uuid.New(),
+			Vcpus:        1,
+			Memory:       2048,
+			ImageID:      image.ID,
+			ServerID:     server.ID,
+			IpAddress:    nextIp,
+			Port:         pgtype.Int4{Valid: true, Int32: args.Port},
+			Status:       queries.VmStatusPending,
+			EnvVariables: envVars,
 		})
 		s.NoError(err)
 
@@ -249,6 +259,33 @@ func (s *Suite) CreateVM(args CreateVMArgs) queries.Vm {
 	})
 	s.NoError(err)
 
+	return vm
+}
+
+// CreateAndWaitVM creates a VM and waits for it to be running and curlable.
+func (s *Suite) CreateAndWaitVM(args CreateVMArgs) queries.Vm {
+	vm := s.CreateVM(args)
+	slog.Info("Created VM, waiting for it to be ready", "id", vm.ID)
+
+	s.WaitUntil(func() bool {
+		vm, err := s.DB.VMFirstByID(s.Context(), vm.ID)
+		s.NoError(err)
+		if vm.Status != queries.VmStatusRunning {
+			slog.Warn("VM not running", "status", vm.Status)
+			return false
+		}
+		_, err = s.TryRunCommand("curl", "-f", "-s", "--connect-timeout", "2",
+			fmt.Sprintf("http://%s:%d", vm.IpAddress.Addr(), vm.Port.Int32))
+		if err != nil {
+			slog.Warn("VM not curlable")
+			return false
+		}
+		return true
+	})
+
+	// Re-fetch to return latest state
+	vm, err := s.DB.VMFirstByID(s.Context(), vm.ID)
+	s.NoError(err)
 	return vm
 }
 

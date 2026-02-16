@@ -238,6 +238,11 @@ func (s *Service) VMCreate(ctx context.Context, params VMCreateParams) (*queries
 	// pg_advisory_xact_lock in VMNextIPAddress serializes correctly.
 	var vm queries.Vm
 	err := s.db.WithTx(ctx, func(q *queries.Queries) error {
+		err := q.AdvisoryLock(ctx, "VMNextIPAddress")
+		if err != nil {
+			return err
+		}
+
 		ipAddress, err := q.VMNextIPAddress(ctx, queries.VMNextIPAddressParams{
 			ServerID: targetServerID,
 			IpRange:  targetIPRange,

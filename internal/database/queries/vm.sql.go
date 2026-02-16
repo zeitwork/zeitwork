@@ -238,11 +238,8 @@ func (q *Queries) VMFirstByID(ctx context.Context, id uuid.UUID) (Vm, error) {
 }
 
 const vMNextIPAddress = `-- name: VMNextIPAddress :one
-WITH lock AS (
-  SELECT pg_advisory_xact_lock(hashtext('vm_ip_allocation'))
-)
 SELECT set_masklen((network($1::inet) + gs)::inet, 31) AS free_ip
-FROM lock, generate_series(1, (2 ^ (32 - masklen($1::inet)))::int - 2, 2) gs
+FROM generate_series(1, (2 ^ (32 - masklen($1::inet)))::int - 2, 2) gs
 WHERE NOT EXISTS (
   SELECT 1 FROM vms
   WHERE deleted_at IS NULL
