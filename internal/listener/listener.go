@@ -207,7 +207,7 @@ func (l *Listener) replicationLoop(ctx context.Context) error {
 				slog.Error("failed to send standby status update", "error", err)
 				return fmt.Errorf("failed to send standby status update: %w", err)
 			}
-			slog.Debug("sent standby status message", "wal_pos", l.clientXLogPos.String())
+			//slog.Debug("sent standby status message", "wal_pos", l.clientXLogPos.String())
 			nextStandbyMessageDeadline = time.Now().Add(l.standbyMessageTimeout)
 		}
 
@@ -262,10 +262,10 @@ func (l *Listener) handleKeepalive(data []byte) error {
 		return fmt.Errorf("failed to parse keepalive message: %w", err)
 	}
 
-	slog.Debug("received keepalive",
-		"server_wal_end", pkm.ServerWALEnd,
-		"server_time", pkm.ServerTime,
-		"reply_requested", pkm.ReplyRequested)
+	//slog.Debug("received keepalive",
+	//	"server_wal_end", pkm.ServerWALEnd,
+	//	"server_time", pkm.ServerTime,
+	//	"reply_requested", pkm.ReplyRequested)
 
 	if pkm.ServerWALEnd > l.clientXLogPos {
 		l.clientXLogPos = pkm.ServerWALEnd
@@ -281,10 +281,10 @@ func (l *Listener) handleXLogData(ctx context.Context, data []byte) error {
 		return fmt.Errorf("failed to parse XLog data: %w", err)
 	}
 
-	slog.Debug("received XLog data",
-		"wal_start", xld.WALStart,
-		"server_wal_end", xld.ServerWALEnd,
-		"server_time", xld.ServerTime)
+	//slog.Debug("received XLog data",
+	//	"wal_start", xld.WALStart,
+	//	"server_wal_end", xld.ServerWALEnd,
+	//	"server_time", xld.ServerTime)
 
 	if err := l.processLogicalMessage(ctx, xld.WALData); err != nil {
 		return fmt.Errorf("failed to process logical message: %w", err)
@@ -304,7 +304,7 @@ func (l *Listener) processLogicalMessage(ctx context.Context, walData []byte) er
 		return fmt.Errorf("failed to parse logical message: %w", err)
 	}
 
-	slog.Debug("received logical message", "type", logicalMsg.Type())
+	//slog.Debug("received logical message", "type", logicalMsg.Type())
 
 	switch msg := logicalMsg.(type) {
 	case *pglogrepl.RelationMessageV2:
@@ -362,10 +362,10 @@ func (l *Listener) handleChange(ctx context.Context, relationID uint32, tuple *p
 		return fmt.Errorf("failed to extract ID from %s: %w", relation.RelationName, err)
 	}
 
-	slog.Info("detected change",
-		"table", relation.RelationName,
-		"operation", operation,
-		"id", id)
+	//slog.Info("detected change",
+	//	"table", relation.RelationName,
+	//	"operation", operation,
+	//	"id", id)
 
 	// Dispatch to appropriate handler
 	switch relation.RelationName {

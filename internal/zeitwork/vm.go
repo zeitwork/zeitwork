@@ -61,7 +61,7 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 	// Reset them to starting so they can be restarted.
 	// This is safe because build VMs are soft-deleted after use, and deployment VMs should always run.
 	if vm.Status == queries.VmStatusFailed || vm.Status == queries.VmStatusStopped {
-		slog.Info("recovering VM from stopped/failed state", "vm_id", vm.ID, "previous_status", vm.Status)
+		slog.InfoContext(ctx, "recovering VM from stopped/failed state", "vm_id", vm.ID, "previous_status", vm.Status)
 		vm, err = s.reconcileVMUpdateStatusIf(ctx, vm, queries.VmStatusStarting, queries.VmStatusFailed, queries.VmStatusStopped)
 		if err != nil {
 			return err
@@ -145,7 +145,7 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 
 	tapName := fmt.Sprintf("ztap%d", s.nextTap.Add(1))
 
-	slog.Info("starting DA VM", "id", vm.ID, "hostIp", hostIp, "vmIp", vmIp, "vcpus", vm.Vcpus, "memory_mb", vm.Memory, "envVarsCount", len(envVars))
+	slog.InfoContext(ctx, "starting DA VM", "id", vm.ID, "hostIp", hostIp, "vmIp", vmIp, "vcpus", vm.Vcpus, "memory_mb", vm.Memory, "envVarsCount", len(envVars))
 
 	cmd := exec.Command("/data/cloud-hypervisor", "--kernel", "/data/vmlinuz.bin",
 		"--disk", fmt.Sprintf("path=/data/work/%s.qcow2,direct=on,queue_size=256", vm.ID.String()),
@@ -161,7 +161,7 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 
-	slog.Info("Starting VM", "cmd", cmd)
+	slog.InfoContext(ctx, "Starting VM", "cmd", cmd)
 	s.vmMu.Lock()
 	s.vmToCmd[vm.ID] = cmd
 	s.vmToTap[vm.ID] = tapName
@@ -169,16 +169,16 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 
 	err = cmd.Start()
 	if err != nil {
-		slog.Error("failed to start hypervisor", "vm_id", vm.ID, "err", err)
+		slog.ErrorContext(ctx, "failed to start hypervisor", "vm_id", vm.ID, "err", err)
 		return err
 	}
-	slog.Info("about to update to running", "vm_id", vm.ID, "vm_status", vm.Status)
+	slog.InfoContext(ctx, "about to update to running", "vm_id", vm.ID, "vm_status", vm.Status)
 	vm, err = s.reconcileVMUpdateStatusIf(ctx, vm, queries.VmStatusRunning, queries.VmStatusStarting)
 	if err != nil {
-		slog.Error("failed to update to running", "vm_id", vm.ID, "err", err)
+		slog.ErrorContext(ctx, "failed to update to running", "vm_id", vm.ID, "err", err)
 		return err
 	}
-	slog.Info("updated to running", "vm_id", vm.ID, "vm_status", vm.Status)
+	slog.InfoContext(ctx, "updated to running", "vm_id", vm.ID, "vm_status", vm.Status)
 
 	go func() {
 		err := cmd.Wait()
@@ -188,11 +188,11 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 		// Fetch current VM status before updating (avoid unnecessary DB update)
 		currentVM, fetchErr := s.db.VMFirstByID(context.Background(), vm.ID)
 		if fetchErr != nil {
-			slog.Error("failed to fetch VM for status update", "vm", vm.ID.String(), "err", fetchErr)
+			slog.ErrorContext(ctx, "failed to fetch VM for status update", "vm", vm.ID.String(), "err", fetchErr)
 		}
 
 		if err != nil {
-			slog.Error("hypervisor exited with error", "vm", vm.ID.String(), "err", err, "pid", cmd.Process.Pid, "processState", cmd.ProcessState.String())
+			slog.ErrorContext(ctx, "hypervisor exited with error", "vm", vm.ID.String(), "err", err, "pid", cmd.Process.Pid, "processState", cmd.ProcessState.String())
 			// Only update if status is not already failed
 			if fetchErr == nil && currentVM.Status != queries.VmStatusFailed {
 				_, updateErr := s.db.VMUpdateStatus(context.Background(), queries.VMUpdateStatusParams{
@@ -200,11 +200,11 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 					ID:     vm.ID,
 				})
 				if updateErr != nil {
-					slog.Error("failed to update VM status to failed", "vm", vm.ID.String(), "err", updateErr)
+					slog.ErrorContext(ctx, "failed to update VM status to failed", "vm", vm.ID.String(), "err", updateErr)
 				}
 			}
 		} else {
-			slog.Info("hypervisor exited cleanly", "vm", vm.ID.String())
+			slog.InfoContext(ctx, "hypervisor exited cleanly", "vm", vm.ID.String())
 			// Only update if status is not already stopped
 			if fetchErr == nil && currentVM.Status != queries.VmStatusStopped {
 				_, updateErr := s.db.VMUpdateStatus(context.Background(), queries.VMUpdateStatusParams{
@@ -212,7 +212,7 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 					ID:     vm.ID,
 				})
 				if updateErr != nil {
-					slog.Error("failed to update VM status to stopped", "vm", vm.ID.String(), "err", updateErr)
+					slog.ErrorContext(ctx, "failed to update VM status to stopped", "vm", vm.ID.String(), "err", updateErr)
 				}
 			}
 		}
@@ -295,7 +295,7 @@ func (s *Service) VMCreate(ctx context.Context, params VMCreateParams) (*queries
 }
 
 func (s *Service) reconcileVmDelete(ctx context.Context, vm queries.Vm) error {
-	slog.Info("deleting VM", "vm_id", vm.ID.String())
+	slog.InfoContext(ctx, "deleting VM", "vm_id", vm.ID.String())
 
 	// Unregister VM from VSOCK manager (stops gRPC listener, cleans up UDS sockets)
 	s.vsockManager.UnregisterVM(vm.ID)
@@ -311,7 +311,7 @@ func (s *Service) reconcileVmDelete(ctx context.Context, vm queries.Vm) error {
 	// If the VM is currently running, kill it
 	if hadDelCmd && delCmd.Process != nil {
 		if err := delCmd.Process.Kill(); err != nil {
-			slog.Error("failed to kill VM process", "vm_id", vm.ID.String(), "err", err)
+			slog.ErrorContext(ctx, "failed to kill VM process", "vm_id", vm.ID.String(), "err", err)
 		}
 	}
 
@@ -319,7 +319,7 @@ func (s *Service) reconcileVmDelete(ctx context.Context, vm queries.Vm) error {
 	if hadDelTap {
 		if link, err := netlink.LinkByName(delTap); err == nil {
 			if err := netlink.LinkDel(link); err != nil {
-				slog.Error("failed to delete tap device", "vm_id", vm.ID.String(), "tap", delTap, "err", err)
+				slog.ErrorContext(ctx, "failed to delete tap device", "vm_id", vm.ID.String(), "tap", delTap, "err", err)
 			}
 		}
 	}
@@ -333,15 +333,15 @@ func (s *Service) reconcileVmDelete(ctx context.Context, vm queries.Vm) error {
 	return nil
 }
 
-func (s *Service) runCommand(name string, args ...string) error {
-	slog.Info("Running command", "name", name, "args", args)
+func (s *Service) runCommand(ctx context.Context, name string, args ...string) error {
+	slog.InfoContext(ctx, "Running command", "name", name, "args", args)
 	cmd := exec.Command(name, args...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		slog.Error("Error running command", "name", name, "err", err, "output", string(out))
+		slog.ErrorContext(ctx, "Error running command", "name", name, "err", err, "output", string(out))
 		return err
 	}
-	slog.Info("command output", "name", name, "args", args, "output", string(out))
+	slog.InfoContext(ctx, "command output", "name", name, "args", args, "output", string(out))
 	return nil
 }
 
@@ -378,9 +378,9 @@ func (s *Service) reconcileVMBaseImage(ctx context.Context, vm queries.Vm, image
 	ociPath := filepath.Join(tmpdir, "oci")
 	if strings.Index(imageRef, "ghcr.io/zeitwork") == 0 {
 		srcCreds := fmt.Sprintf("%s:%s", s.cfg.DockerRegistryUsername, s.cfg.DockerRegistryPAT)
-		err = s.runCommand("skopeo", "copy", "--src-creds", srcCreds, fmt.Sprintf("docker://%s", imageRef), fmt.Sprintf("oci:%s:latest", ociPath))
+		err = s.runCommand(ctx, "skopeo", "copy", "--src-creds", srcCreds, fmt.Sprintf("docker://%s", imageRef), fmt.Sprintf("oci:%s:latest", ociPath))
 	} else {
-		err = s.runCommand("skopeo", "copy", fmt.Sprintf("docker://%s", imageRef), fmt.Sprintf("oci:%s:latest", ociPath))
+		err = s.runCommand(ctx, "skopeo", "copy", fmt.Sprintf("docker://%s", imageRef), fmt.Sprintf("oci:%s:latest", ociPath))
 	}
 	if err != nil {
 		return fmt.Errorf("failed to pull image: %w", err)
@@ -388,13 +388,13 @@ func (s *Service) reconcileVMBaseImage(ctx context.Context, vm queries.Vm, image
 
 	// unpack the oci image
 	bundlePath := filepath.Join(tmpdir, "bundle")
-	err = s.runCommand("umoci", "unpack", "--image", ociPath+":latest", bundlePath)
+	err = s.runCommand(ctx, "umoci", "unpack", "--image", ociPath+":latest", bundlePath)
 	if err != nil {
 		return fmt.Errorf("failed to unpack OCI image: %w", err)
 	}
 
 	// convert bundle to qcow2
-	err = s.runCommand("virt-make-fs", "--format=qcow2", "--type=ext4", "--size=+5G", bundlePath, baseImagePath)
+	err = s.runCommand(ctx, "virt-make-fs", "--format=qcow2", "--type=ext4", "--size=+5G", bundlePath, baseImagePath)
 	if err != nil {
 		return err
 	}
@@ -407,7 +407,7 @@ func (s *Service) reconcileVMWorkImage(ctx context.Context, vm queries.Vm, image
 	workImagePath := fmt.Sprintf("/data/work/%s.qcow2", vm.ID.String())
 
 	_ = os.Remove(workImagePath)
-	err := s.runCommand("qemu-img", "create", "-f", "qcow2", "-b", baseImagePath, "-F", "qcow2", workImagePath)
+	err := s.runCommand(ctx, "qemu-img", "create", "-f", "qcow2", "-b", baseImagePath, "-F", "qcow2", workImagePath)
 	if err != nil {
 		return fmt.Errorf("failed to create VM disk: %w", err)
 	}

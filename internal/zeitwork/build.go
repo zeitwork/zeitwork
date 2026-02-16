@@ -240,7 +240,7 @@ func (s *Service) executeBuild(ctx context.Context, build queries.Build, vm quer
 
 	// Check if the image already exists in the registry (e.g. from a previous build of the same commit)
 	srcCreds := fmt.Sprintf("%s:%s", s.cfg.DockerRegistryUsername, s.cfg.DockerRegistryPAT)
-	if err := s.runCommand("skopeo", "inspect", "--creds", srcCreds, "docker://"+imageTag); err == nil {
+	if err := s.runCommand(ctx, "skopeo", "inspect", "--creds", srcCreds, "docker://"+imageTag); err == nil {
 		slog.Info("image already exists in registry, skipping build", "build_id", build.ID, "tag", imageTag)
 	} else {
 		// Build and push using docker buildx with OCI media types

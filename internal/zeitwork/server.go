@@ -67,7 +67,7 @@ func (s *Service) registerServer(ctx context.Context) (queries.Server, error) {
 		if err != nil {
 			return queries.Server{}, fmt.Errorf("failed to re-register server: %w", err)
 		}
-		slog.Info("re-registered server", "server_id", server.ID, "ip_range", server.IpRange)
+		slog.InfoContext(ctx, "re-registered server", "server_id", server.ID, "ip_range", server.IpRange)
 		return server, nil
 	}
 
@@ -96,7 +96,7 @@ func (s *Service) registerServer(ctx context.Context) (queries.Server, error) {
 		return queries.Server{}, err
 	}
 
-	slog.Info("registered new server", "server_id", server.ID, "ip_range", server.IpRange, "internal_ip", server.InternalIp)
+	slog.InfoContext(ctx, "registered new server", "server_id", server.ID, "ip_range", server.IpRange, "internal_ip", server.InternalIp)
 	return server, nil
 }
 
@@ -165,7 +165,7 @@ func (s *Service) tryBecomeClusterLeader(ctx context.Context) {
 	s.setControlPlaneLeader(true)
 	defer s.setControlPlaneLeader(false)
 
-	slog.Info("this server is now the cluster leader", "server_id", s.serverID)
+	slog.InfoContext(ctx, "this server is now the cluster leader", "server_id", s.serverID)
 
 	// Bootstrap global entities now that we own control-plane responsibilities.
 	if err := s.bootstrapGlobal(ctx); err != nil {
@@ -237,11 +237,11 @@ func (s *Service) replaceDeadServerVMs(ctx context.Context, q *queries.Queries, 
 	}
 
 	if len(vms) == 0 {
-		slog.Info("no VMs to replace from dead server", "server_id", deadServerID)
+		slog.InfoContext(ctx, "no VMs to replace from dead server", "server_id", deadServerID)
 		return nil
 	}
 
-	slog.Info("replacing VMs from dead server", "server_id", deadServerID, "vm_count", len(vms))
+	slog.InfoContext(ctx, "replacing VMs from dead server", "server_id", deadServerID, "vm_count", len(vms))
 
 	for _, vm := range vms {
 		// Skip VMs that are already in terminal state
@@ -308,7 +308,7 @@ func (s *Service) replaceVM(ctx context.Context, q *queries.Queries, oldVM queri
 		}
 	}
 
-	slog.Info("replaced VM from dead server",
+	slog.InfoContext(ctx, "replaced VM from dead server",
 		"old_vm_id", oldVM.ID,
 		"new_vm_id", newVM.ID,
 		"from_server", deadServerID,
@@ -327,7 +327,7 @@ func (s *Service) reconcileServer(ctx context.Context, objectID uuid.UUID) error
 			return fmt.Errorf("failed to check server status for drain: %w", err)
 		}
 		if server.Status == queries.ServerStatusDraining {
-			slog.Info("server is draining, starting migration")
+			slog.InfoContext(ctx, "server is draining, starting migration")
 			s.drainServer(ctx)
 		}
 	} else {
@@ -349,7 +349,7 @@ func (s *Service) drainServer(ctx context.Context) {
 		return
 	}
 
-	slog.Info("draining server", "deployment_count", len(deployments), "server_id", s.serverID)
+	slog.InfoContext(ctx, "draining server", "deployment_count", len(deployments), "server_id", s.serverID)
 
 	for _, dep := range deployments {
 		if err := s.drainDeployment(ctx, dep); err != nil {
@@ -365,7 +365,7 @@ func (s *Service) drainServer(ctx context.Context) {
 	} else {
 		for _, vm := range vms {
 			if vm.Status != queries.VmStatusStopped && vm.Status != queries.VmStatusFailed {
-				slog.Info("killing remaining VM during drain", "vm_id", vm.ID)
+				slog.InfoContext(ctx, "killing remaining VM during drain", "vm_id", vm.ID)
 				if err := s.db.VMSoftDelete(ctx, vm.ID); err != nil {
 					slog.Error("failed to soft-delete VM during drain", "vm_id", vm.ID, "err", err)
 				}
@@ -379,7 +379,7 @@ func (s *Service) drainServer(ctx context.Context) {
 		return
 	}
 
-	slog.Info("server drain complete", "server_id", s.serverID)
+	slog.InfoContext(ctx, "server drain complete", "server_id", s.serverID)
 }
 
 // drainDeployment creates a replacement VM on another server, waits for health, then swaps.
@@ -405,7 +405,7 @@ func (s *Service) drainDeployment(ctx context.Context, dep queries.Deployment) e
 		return fmt.Errorf("failed to create replacement VM: %w", err)
 	}
 
-	slog.Info("created replacement VM for drain",
+	slog.InfoContext(ctx, "created replacement VM for drain",
 		"deployment_id", dep.ID,
 		"old_vm", oldVM.ID,
 		"new_vm", newVM.ID,
@@ -432,7 +432,7 @@ func (s *Service) drainDeployment(ctx context.Context, dep queries.Deployment) e
 		slog.Error("failed to soft-delete old VM after drain swap", "vm_id", oldVM.ID, "err", err)
 	}
 
-	slog.Info("drained deployment",
+	slog.InfoContext(ctx, "drained deployment",
 		"deployment_id", dep.ID,
 		"old_vm", oldVM.ID,
 		"new_vm", newVM.ID)

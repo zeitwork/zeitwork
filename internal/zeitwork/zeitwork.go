@@ -271,7 +271,7 @@ func (s *Service) setControlPlaneLeader(isLeader bool) {
 // bootstrapGlobal schedules cluster-scoped entities.
 // This must only run on the control-plane leader.
 func (s *Service) bootstrapGlobal(ctx context.Context) error {
-	slog.Info("bootstrapping global entities", "server_id", s.serverID)
+	slog.InfoContext(ctx, "bootstrapping global entities", "server_id", s.serverID)
 
 	// Deployments
 	deployments, err := s.db.DeploymentFind(ctx)
@@ -281,7 +281,7 @@ func (s *Service) bootstrapGlobal(ctx context.Context) error {
 	for _, deployment := range deployments {
 		s.deploymentScheduler.Schedule(deployment.ID, time.Now())
 	}
-	slog.Info("bootstrapped deployments", "count", len(deployments))
+	slog.InfoContext(ctx, "bootstrapped deployments", "count", len(deployments))
 
 	// Builds
 	builds, err := s.db.BuildFind(ctx)
@@ -291,7 +291,7 @@ func (s *Service) bootstrapGlobal(ctx context.Context) error {
 	for _, build := range builds {
 		s.buildScheduler.Schedule(build.ID, time.Now())
 	}
-	slog.Info("bootstrapped builds", "count", len(builds))
+	slog.InfoContext(ctx, "bootstrapped builds", "count", len(builds))
 
 	// Domains
 	domains, err := s.db.DomainFind(ctx)
@@ -301,15 +301,15 @@ func (s *Service) bootstrapGlobal(ctx context.Context) error {
 	for _, domain := range domains {
 		s.domainScheduler.Schedule(domain.ID, time.Now())
 	}
-	slog.Info("bootstrapped domains", "count", len(domains))
+	slog.InfoContext(ctx, "bootstrapped domains", "count", len(domains))
 
-	slog.Info("global bootstrap complete", "server_id", s.serverID)
+	slog.InfoContext(ctx, "global bootstrap complete", "server_id", s.serverID)
 	return nil
 }
 
 // bootstrapLocal schedules node-local dataplane entities.
 func (s *Service) bootstrapLocal(ctx context.Context) error {
-	slog.Info("bootstrapping local entities", "server_id", s.serverID)
+	slog.InfoContext(ctx, "bootstrapping local entities", "server_id", s.serverID)
 
 	// VMs — only bootstrap VMs belonging to this server.
 	vms, err := s.db.VMFindByServerID(ctx, s.serverID)
@@ -319,7 +319,7 @@ func (s *Service) bootstrapLocal(ctx context.Context) error {
 	for _, vm := range vms {
 		s.vmScheduler.Schedule(vm.ID, time.Now())
 	}
-	slog.Info("bootstrapped vms", "count", len(vms), "server_id", s.serverID)
+	slog.InfoContext(ctx, "bootstrapped vms", "count", len(vms), "server_id", s.serverID)
 
 	// Servers -- schedule all active servers for host route sync,
 	// and always schedule this server for drain monitoring.
@@ -332,9 +332,9 @@ func (s *Service) bootstrapLocal(ctx context.Context) error {
 	}
 	// Ensure this server is always scheduled (even if not yet in the active set)
 	s.serverScheduler.Schedule(s.serverID, time.Now())
-	slog.Info("bootstrapped servers", "count", len(servers))
+	slog.InfoContext(ctx, "bootstrapped servers", "count", len(servers))
 
-	slog.Info("local bootstrap complete", "server_id", s.serverID)
+	slog.InfoContext(ctx, "local bootstrap complete", "server_id", s.serverID)
 	return nil
 }
 
