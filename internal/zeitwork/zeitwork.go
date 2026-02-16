@@ -87,6 +87,7 @@ type Service struct {
 
 	// VM Stuff
 	imageMu sync.Mutex
+	vmMu    sync.Mutex // protects vmToCmd and vmToTap
 	vmToCmd map[uuid.UUID]*exec.Cmd
 	vmToTap map[uuid.UUID]string
 	nextTap atomic.Int32
@@ -342,7 +343,14 @@ func (s *Service) Stop() error {
 	slog.Info("stopping service")
 
 	// Kill all running Cloud Hypervisor processes so they don't outlive the daemon.
+	s.vmMu.Lock()
+	cmdsToKill := make(map[uuid.UUID]*exec.Cmd, len(s.vmToCmd))
 	for vmID, cmd := range s.vmToCmd {
+		cmdsToKill[vmID] = cmd
+	}
+	s.vmMu.Unlock()
+
+	for vmID, cmd := range cmdsToKill {
 		if cmd.Process != nil {
 			slog.Info("killing VM process", "vm_id", vmID)
 			_ = cmd.Process.Kill()

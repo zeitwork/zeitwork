@@ -69,7 +69,10 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 	}
 
 	// if the vm already has a running cloud-hypervisor, skip
-	if _, ok := s.vmToCmd[vm.ID]; ok {
+	s.vmMu.Lock()
+	_, alreadyRunning := s.vmToCmd[vm.ID]
+	s.vmMu.Unlock()
+	if alreadyRunning {
 		vm, err = s.reconcileVMUpdateStatusIf(ctx, vm, queries.VmStatusRunning, queries.VmStatusStarting, queries.VmStatusPending)
 		if err != nil {
 			return err
@@ -122,6 +125,24 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 		return fmt.Errorf("failed to register VM with VSOCK manager: %w", err)
 	}
 
+	// Clean up any stale tap/process from a previous run of this VM.
+	// Extract references under the lock, then do slow cleanup outside.
+	s.vmMu.Lock()
+	oldTap, hadTap := s.vmToTap[vm.ID]
+	delete(s.vmToTap, vm.ID)
+	oldCmd, hadCmd := s.vmToCmd[vm.ID]
+	delete(s.vmToCmd, vm.ID)
+	s.vmMu.Unlock()
+
+	if hadTap {
+		if link, err := netlink.LinkByName(oldTap); err == nil {
+			netlink.LinkDel(link)
+		}
+	}
+	if hadCmd && oldCmd.Process != nil {
+		oldCmd.Process.Kill()
+	}
+
 	tapName := fmt.Sprintf("ztap%d", s.nextTap.Add(1))
 
 	slog.Info("starting DA VM", "id", vm.ID, "hostIp", hostIp, "vmIp", vmIp, "vcpus", vm.Vcpus, "memory_mb", vm.Memory, "envVarsCount", len(envVars))
@@ -141,8 +162,10 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 	cmd.Stderr = stderr
 
 	slog.Info("Starting VM", "cmd", cmd)
+	s.vmMu.Lock()
 	s.vmToCmd[vm.ID] = cmd
 	s.vmToTap[vm.ID] = tapName
+	s.vmMu.Unlock()
 
 	err = cmd.Start()
 	if err != nil {
@@ -198,14 +221,18 @@ func (s *Service) reconcileVM(ctx context.Context, objectID uuid.UUID) error {
 		s.vsockManager.UnregisterVM(vm.ID)
 
 		// Cleanup tap device (safety net in case reconcileVmDelete hasn't run yet)
-		if tapName, ok := s.vmToTap[vm.ID]; ok {
-			if link, err := netlink.LinkByName(tapName); err == nil {
+		s.vmMu.Lock()
+		exitTap, hadExitTap := s.vmToTap[vm.ID]
+		delete(s.vmToTap, vm.ID)
+		delete(s.vmToCmd, vm.ID)
+		s.vmMu.Unlock()
+
+		if hadExitTap {
+			if link, err := netlink.LinkByName(exitTap); err == nil {
 				netlink.LinkDel(link)
 			}
-			delete(s.vmToTap, vm.ID)
 		}
 
-		delete(s.vmToCmd, vm.ID)
 		s.vmScheduler.Schedule(vm.ID, time.Now().Add(5*time.Second))
 	}()
 
@@ -273,24 +300,28 @@ func (s *Service) reconcileVmDelete(ctx context.Context, vm queries.Vm) error {
 	// Unregister VM from VSOCK manager (stops gRPC listener, cleans up UDS sockets)
 	s.vsockManager.UnregisterVM(vm.ID)
 
+	// Extract references under the lock, then do slow cleanup outside.
+	s.vmMu.Lock()
+	delCmd, hadDelCmd := s.vmToCmd[vm.ID]
+	delete(s.vmToCmd, vm.ID)
+	delTap, hadDelTap := s.vmToTap[vm.ID]
+	delete(s.vmToTap, vm.ID)
+	s.vmMu.Unlock()
+
 	// If the VM is currently running, kill it
-	if cmd, ok := s.vmToCmd[vm.ID]; ok {
-		if cmd.Process != nil {
-			if err := cmd.Process.Kill(); err != nil {
-				slog.Error("failed to kill VM process", "vm_id", vm.ID.String(), "err", err)
-			}
+	if hadDelCmd && delCmd.Process != nil {
+		if err := delCmd.Process.Kill(); err != nil {
+			slog.Error("failed to kill VM process", "vm_id", vm.ID.String(), "err", err)
 		}
-		delete(s.vmToCmd, vm.ID)
 	}
 
 	// Cleanup the tap device
-	if tapName, ok := s.vmToTap[vm.ID]; ok {
-		if link, err := netlink.LinkByName(tapName); err == nil {
+	if hadDelTap {
+		if link, err := netlink.LinkByName(delTap); err == nil {
 			if err := netlink.LinkDel(link); err != nil {
-				slog.Error("failed to delete tap device", "vm_id", vm.ID.String(), "tap", tapName, "err", err)
+				slog.Error("failed to delete tap device", "vm_id", vm.ID.String(), "tap", delTap, "err", err)
 			}
 		}
-		delete(s.vmToTap, vm.ID)
 	}
 
 	// Cleanup the work disk
