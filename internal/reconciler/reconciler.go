@@ -15,28 +15,19 @@ type Scheduler struct {
 	name          string
 	mu            sync.RWMutex
 	wg            sync.WaitGroup
+	running       map[uuid.UUID]struct{}
 	schedule      map[uuid.UUID]time.Time
 	dueRun        chan uuid.UUID
 	reconcileFunc ReconcileFunc
 }
 
-func New(reconcileFunc ReconcileFunc) *Scheduler {
-	return &Scheduler{
-		name:          "unknown",
-		mu:            sync.RWMutex{},
-		wg:            sync.WaitGroup{},
-		schedule:      make(map[uuid.UUID]time.Time),
-		dueRun:        make(chan uuid.UUID),
-		reconcileFunc: reconcileFunc,
-	}
-}
-
-func NewWithName(name string, reconcileFunc ReconcileFunc) *Scheduler {
+func New(name string, reconcileFunc ReconcileFunc) *Scheduler {
 	return &Scheduler{
 		name:          name,
 		mu:            sync.RWMutex{},
 		wg:            sync.WaitGroup{},
 		schedule:      make(map[uuid.UUID]time.Time),
+		running:       make(map[uuid.UUID]struct{}),
 		dueRun:        make(chan uuid.UUID),
 		reconcileFunc: reconcileFunc,
 	}
@@ -65,8 +56,13 @@ func (s *Scheduler) Start() {
 			s.mu.Lock()
 			for objectID, nextRun := range s.schedule {
 				if !nextRun.IsZero() && nextRun.Before(now) {
-					dueItems = append(dueItems, objectID)
+					if _, ok := s.running[objectID]; ok {
+						continue
+					}
+
+					s.running[objectID] = struct{}{}
 					s.schedule[objectID] = time.Time{}
+					dueItems = append(dueItems, objectID)
 				}
 			}
 			s.mu.Unlock()
@@ -91,7 +87,12 @@ func (s *Scheduler) worker() {
 		err := s.reconcileFunc(context.Background(), id)
 		if err != nil {
 			logger.Error("reconcile failed", "id", id, "err", err)
-			s.Schedule(id, time.Now().Add(5*time.Second))
+
+			s.mu.Lock()
+			delete(s.running, id)
+			s.schedule[id] = time.Now().Add(5 * time.Second)
+			s.mu.Unlock()
+
 			continue
 		}
 
@@ -99,11 +100,11 @@ func (s *Scheduler) worker() {
 
 		// Only apply the 1-hour default if the reconcile function
 		// did not already schedule a custom next-run time.
-		s.mu.RLock()
-		alreadyScheduled := !s.schedule[id].IsZero()
-		s.mu.RUnlock()
-		if !alreadyScheduled {
-			s.Schedule(id, time.Now().Add(1*time.Hour))
+		s.mu.Lock()
+		delete(s.running, id)
+		if s.schedule[id].IsZero() {
+			s.schedule[id] = time.Now().Add(1 * time.Hour)
 		}
+		s.mu.Unlock()
 	}
 }
