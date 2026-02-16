@@ -25,6 +25,7 @@ const Server2IP = "192.168.0.2"
 
 var Server1ID = uuid.MustParse("019c58f1-6073-7c26-8b4d-d11e020aab50")
 var Server1IP = "192.168.0.1"
+var Server2ID = uuid.MustParse("019c58f1-6049-7bc7-8714-06883c6ba18a")
 
 type Suite struct {
 	suite.Suite
@@ -89,16 +90,20 @@ func (s *Suite) SetupSuite() {
 	s.NoError(err)
 
 	var isDev bool
-	err = c.QueryRow(s.Context(), "select inet_server_addr() = '172.24.0.2'").Scan(&isDev)
+	err = c.QueryRow(s.Context(), "select inet_client_addr() = '172.24.0.1'").Scan(&isDev)
 	s.NoError(err)
 
 	if !isDev {
 		panic("It looks like you are running tests against a non docker db")
 	}
 
-	// ensure zeitwork is not currently running
+	// ensure zeitwork is not currently running on either server
 	s.RunCommand("systemctl", "stop", "zeitwork.service")
 	s.RunCommandRemote(Server2IP, "systemctl", "stop", "zeitwork.service")
+
+	// clean up VM image directories on both servers
+	s.RunCommand("rm", "-rf", "/data/work/*", "/data/base/*")
+	s.RunCommandRemote(Server2IP, "rm -rf /data/work/* /data/base/*")
 
 	_, err = c.Exec(s.Context(), "truncate table vms cascade")
 	s.NoError(err)
@@ -152,6 +157,9 @@ func (s *Suite) SetupSuite() {
 	}
 
 	time.Sleep(1 * time.Second)
+
+	// Start zeitwork on server2 so it can reconcile VMs assigned to it
+	s.RunCommandRemote(Server2IP, "systemctl", "start", "zeitwork.service")
 }
 
 func (s *Suite) Context() context.Context {
@@ -242,4 +250,20 @@ func (s *Suite) CreateVM(args CreateVMArgs) queries.Vm {
 	s.NoError(err)
 
 	return vm
+}
+
+// DeleteVM soft-deletes a VM and waits for it to be cleaned up (status=failed, no longer pingable).
+func (s *Suite) DeleteVM(vmID uuid.UUID) {
+	err := s.DB.VMSoftDelete(s.Context(), vmID)
+	s.NoError(err)
+
+	s.WaitUntil(func() bool {
+		vm, err := s.DB.VMFirstByID(s.Context(), vmID)
+		s.NoError(err)
+		if vm.Status != queries.VmStatusFailed {
+			return false
+		}
+		_, err = s.TryRunCommand("ping", "-c", "1", "-W", "2", vm.IpAddress.Addr().String())
+		return err != nil
+	})
 }
