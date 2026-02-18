@@ -8,6 +8,7 @@ import {
   pgTable,
   text,
   timestamp,
+  index,
   unique,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -161,7 +162,9 @@ export const vmLogs = pgTable("vm_logs", {
   message: text().notNull(),
   level: text(),
   createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => [
+  index().on(t.vmId, t.id),
+]);
 
 export const buildStatusEnum = pgEnum("build_status", [
   "pending",

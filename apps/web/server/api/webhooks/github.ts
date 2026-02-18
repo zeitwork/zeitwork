@@ -120,7 +120,7 @@ async function handleInstallationEvent(payload: any) {
           useDrizzle().insert(schema.githubInstallations).values({
             githubAccountId: githubAccountId,
             githubInstallationId: installationId,
-            organisationId: organisation.id,
+      organisationId: project.organisationId,
             userId: "123",
           }),
         );

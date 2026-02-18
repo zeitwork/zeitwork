@@ -1,0 +1,1 @@
+CREATE INDEX "vm_logs_vm_id_id_index" ON "vm_logs" ("vm_id","id");
