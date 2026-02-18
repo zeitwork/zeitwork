@@ -6,7 +6,7 @@ const projectSlug = route.params.project as string;
 
 // Fetch project data
 const { data: projectData, refresh } = await useFetch(`/api/projects/${projectSlug}`);
-const project = computed(() => projectData.value?.[0]);
+const project = computed(() => projectData.value);
 
 const rootDirectory = ref(project.value?.rootDirectory || "/");
 const dockerfilePath = ref(project.value?.dockerfilePath || "Dockerfile");
