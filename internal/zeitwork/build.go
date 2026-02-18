@@ -721,9 +721,8 @@ func (s *Service) runBuildxBuild(ctx context.Context, dockerClient *client.Clien
 		},
 		Cmd: []string{
 			"docker", "buildx", "build",
-			"--push",
 			"--build-arg", "ZEITWORK=1",
-			"--output", "type=image,oci-mediatypes=true",
+			"--output", "type=image,push=true,oci-mediatypes=true",
 			"-t", imageTag,
 			"-f", dockerfilePath,
 			".",
