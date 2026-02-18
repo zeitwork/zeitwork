@@ -200,28 +200,28 @@ async function handlePushEvent(payload: any) {
     throw new Error("Failed to fetch commit info");
   }
 
-  // Fetch the project using githubRepository field
+  // Fetch all projects using this githubRepository
   const githubRepository = `${githubOwner}/${githubRepo}`;
   const { data: projectsList, error: findProjectError } = await tryCatch<any[]>(
     useDrizzle()
       .select()
       .from(schema.projects)
-      .where(eq(schema.projects.githubRepository, githubRepository))
-      .limit(1),
+      .where(and(eq(schema.projects.githubRepository, githubRepository), isNull(schema.projects.deletedAt))),
   );
-  const project = projectsList?.[0];
-  if (findProjectError || !project) {
+  if (findProjectError || !projectsList || projectsList.length === 0) {
     throw new Error("Project not found");
   }
 
-  // Create deployment
+  // Create a deployment for each project linked to this repository
   const deploymentModel = useDeploymentModel();
-  const { error: deploymentError } = await deploymentModel.create({
-    projectId: project.id,
-    organisationId: organisation.id,
-  });
+  for (const project of projectsList) {
+    const { error: deploymentError } = await deploymentModel.create({
+      projectId: project.id,
+      organisationId: organisation.id,
+    });
 
-  if (deploymentError) {
-    throw new Error("Failed to create deployment");
+    if (deploymentError) {
+      throw new Error(`Failed to create deployment for project ${project.slug}`);
+    }
   }
 }

@@ -61,21 +61,6 @@ export default defineEventHandler(async (event) => {
 
   const githubRepository = `${body.repository.owner}/${body.repository.repo}`;
 
-  // check if project already exists
-  const [foundExisting] = await useDrizzle()
-    .select()
-    .from(projects)
-    .where(
-      and(
-        eq(projects.organisationId, secure.organisationId),
-        eq(projects.githubRepository, githubRepository),
-      ),
-    )
-    .limit(1);
-  if (foundExisting) {
-    throw createError({ statusCode: 400, message: "Project already exists" });
-  }
-
   // Check if we have access to the GitHub repository and find the githubInstallationId
   const github = useGitHub();
 
