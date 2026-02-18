@@ -1,0 +1,1 @@
+ALTER TABLE "projects" ADD COLUMN "dockerfile_path" text DEFAULT 'Dockerfile' NOT NULL;

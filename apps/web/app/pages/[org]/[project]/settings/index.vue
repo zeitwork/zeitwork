@@ -9,6 +9,7 @@ const { data: projectData, refresh } = await useFetch(`/api/projects/${projectSl
 const project = computed(() => projectData.value?.[0]);
 
 const rootDirectory = ref(project.value?.rootDirectory || "/");
+const dockerfilePath = ref(project.value?.dockerfilePath || "Dockerfile");
 const isSaving = ref(false);
 const saveMessage = ref<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -47,11 +48,17 @@ async function reconnectGithub() {
   }
 }
 
-// Update rootDirectory when project data loads
+// Update fields when project data loads
 watch(
   () => project.value?.rootDirectory,
   (newVal) => {
     if (newVal) rootDirectory.value = newVal;
+  },
+);
+watch(
+  () => project.value?.dockerfilePath,
+  (newVal) => {
+    if (newVal) dockerfilePath.value = newVal;
   },
 );
 
@@ -66,10 +73,13 @@ async function saveSettings() {
       normalizedRootDir = "/" + normalizedRootDir;
     }
 
+    const normalizedDockerfilePath = dockerfilePath.value?.trim() || "Dockerfile";
+
     await $fetch(`/api/projects/${projectSlug}`, {
       method: "PATCH",
       body: {
         rootDirectory: normalizedRootDir,
+        dockerfilePath: normalizedDockerfilePath,
       },
     });
 
@@ -172,10 +182,18 @@ async function saveSettings() {
       <div>
         <h3 class="text-primary mb-2 text-sm font-medium">Root Directory</h3>
         <p class="text-secondary mb-2 text-xs">
-          The directory where your Dockerfile is located. Use "/" for repository root, or specify a
+          The directory used as the build context. Use "/" for repository root, or specify a
           subdirectory like "/apps/web" for monorepos.
         </p>
         <DInput v-model="rootDirectory" placeholder="/" />
+      </div>
+
+      <div>
+        <h3 class="text-primary mb-2 text-sm font-medium">Dockerfile Path</h3>
+        <p class="text-secondary mb-2 text-xs">
+          Path to the Dockerfile relative to the root directory.
+        </p>
+        <DInput v-model="dockerfilePath" placeholder="Dockerfile" />
       </div>
 
       <div class="flex items-center gap-3">

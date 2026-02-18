@@ -43,6 +43,7 @@ const frameworks = [
 
 const projectName = ref<string | undefined>("");
 const rootDirectory = ref<string | undefined>("");
+const dockerfilePath = ref<string | undefined>("");
 
 const org = route.params.org;
 
@@ -76,6 +77,8 @@ async function createProject() {
       normalizedRootDir = "/" + normalizedRootDir;
     }
 
+    const normalizedDockerfilePath = dockerfilePath.value?.trim() || "Dockerfile";
+
     const result = await $fetch(`/api/projects`, {
       method: "POST",
       body: {
@@ -86,6 +89,7 @@ async function createProject() {
         },
         secrets: envVariables.value.filter((e) => e.name.length > 0),
         rootDirectory: normalizedRootDir,
+        dockerfilePath: normalizedDockerfilePath,
       },
     });
     navigateTo(`/${org}/${projectName.value}`);
@@ -183,6 +187,13 @@ async function createProject() {
             <DFormGroup>
               <DLabel>Root Directory</DLabel>
               <DInput type="text" placeholder="Leave blank for root" v-model="rootDirectory" />
+            </DFormGroup>
+            <DFormGroup>
+              <DLabel>Dockerfile Path</DLabel>
+              <DInput type="text" placeholder="Dockerfile" v-model="dockerfilePath" />
+              <p class="text-tertiary text-copy-xs mt-1">
+                Path to the Dockerfile relative to the root directory.
+              </p>
             </DFormGroup>
             <DFormGroup v-if="false" class="flex-1">
               <DLabel class="text-primary text-copy-sm">Framework</DLabel>

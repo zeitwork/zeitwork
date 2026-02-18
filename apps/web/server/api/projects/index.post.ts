@@ -22,6 +22,13 @@ const bodySchema = z.object({
       message: "Root directory must start with / and cannot contain '..' or hidden directories",
     })
     .default("/"),
+  dockerfilePath: z
+    .string()
+    .max(255)
+    .regex(/^(?!.*\.\.)(?!\/)[a-zA-Z0-9._\-/]+$/, {
+      message: "Dockerfile path must be a relative path without '..' sequences",
+    })
+    .default("Dockerfile"),
 });
 
 export default defineEventHandler(async (event) => {
@@ -104,6 +111,7 @@ export default defineEventHandler(async (event) => {
         githubInstallationId: githubInstallationId,
         organisationId: secure.organisationId,
         rootDirectory: body.rootDirectory,
+        dockerfilePath: body.dockerfilePath,
       })
       .returning();
     if (!project) {

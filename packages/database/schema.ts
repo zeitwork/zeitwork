@@ -94,6 +94,7 @@ export const projects = pgTable(
       .notNull()
       .references(() => githubInstallations.id),
     rootDirectory: text().notNull().default("/"),
+    dockerfilePath: text().notNull().default("Dockerfile"),
     ...organisationId,
     ...timestamps,
   },

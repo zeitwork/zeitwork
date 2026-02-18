@@ -14,6 +14,13 @@ const bodySchema = z.object({
       message: "Root directory must start with / and cannot contain '..' or hidden directories",
     })
     .optional(),
+  dockerfilePath: z
+    .string()
+    .max(255)
+    .regex(/^(?!.*\.\.)(?!\/)[a-zA-Z0-9._\-/]+$/, {
+      message: "Dockerfile path must be a relative path without '..' sequences",
+    })
+    .optional(),
 });
 
 export default defineEventHandler(async (event) => {
@@ -39,6 +46,9 @@ export default defineEventHandler(async (event) => {
   const updateData: Partial<typeof projects.$inferInsert> = {};
   if (body.rootDirectory !== undefined) {
     updateData.rootDirectory = body.rootDirectory;
+  }
+  if (body.dockerfilePath !== undefined) {
+    updateData.dockerfilePath = body.dockerfilePath;
   }
 
   // Only update if there are changes

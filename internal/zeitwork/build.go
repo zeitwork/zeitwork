@@ -13,7 +13,6 @@ import (
 	"io"
 	"log/slog"
 	"net/http"
-	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -223,7 +222,11 @@ func (s *Service) executeBuild(ctx context.Context, build queries.Build, vm quer
 	slog.Info("connected to docker daemon", "build_id", build.ID, "host", dockerHost)
 
 	// 6. Prepare build context from tarball (convert gzip tarball to Docker-compatible tar)
-	buildContext, err := s.prepareBuildContext(ctx, build, tarballReader, project.RootDirectory)
+	dockerfilePath := project.DockerfilePath
+	if dockerfilePath == "" {
+		dockerfilePath = "Dockerfile"
+	}
+	buildContext, err := s.prepareBuildContext(ctx, build, tarballReader, project.RootDirectory, dockerfilePath)
 	if err != nil {
 		return fmt.Errorf("failed to prepare build context: %w", err)
 	}
@@ -245,7 +248,7 @@ func (s *Service) executeBuild(ctx context.Context, build queries.Build, vm quer
 	} else {
 		// Build and push using docker buildx with OCI media types
 		// We run a container with the docker CLI to execute buildx build
-		if err := s.runBuildxBuild(ctx, dockerClient, build, buildContext, imageTag); err != nil {
+		if err := s.runBuildxBuild(ctx, dockerClient, build, buildContext, imageTag, dockerfilePath); err != nil {
 			return fmt.Errorf("buildx build failed: %w", err)
 		}
 		slog.Info("docker build and push completed", "build_id", build.ID)
@@ -316,7 +319,7 @@ func (s *Service) downloadSourceTarball(ctx context.Context, token, repo, commit
 // If no Dockerfile is found, the function attempts to detect the framework from
 // well-known files (nuxt.config.ts, Gemfile, artisan, etc.) and injects a
 // framework-specific Dockerfile into the build context.
-func (s *Service) prepareBuildContext(ctx context.Context, build queries.Build, gzipReader io.Reader, rootDir string) (io.Reader, error) {
+func (s *Service) prepareBuildContext(ctx context.Context, build queries.Build, gzipReader io.Reader, rootDir string, dockerfilePath string) (io.Reader, error) {
 	// Create a pipe for streaming the output
 	pr, pw := io.Pipe()
 
@@ -390,8 +393,8 @@ func (s *Service) prepareBuildContext(ctx context.Context, build queries.Build, 
 				}
 			}
 
-			// Check if we found a Dockerfile at the root of the build context
-			if filepath.Base(pathAfterGitHub) == "Dockerfile" && !strings.Contains(pathAfterGitHub, "/") {
+			// Check if we found the Dockerfile at the expected path within the build context
+			if pathAfterGitHub == dockerfilePath {
 				foundDockerfile = true
 			}
 
@@ -489,7 +492,7 @@ func (s *Service) prepareBuildContext(ctx context.Context, build queries.Build, 
 			})
 
 			if err := tw.WriteHeader(&tar.Header{
-				Name:    "Dockerfile",
+				Name:    dockerfilePath,
 				Mode:    0644,
 				Size:    int64(len(content)),
 				ModTime: time.Now(),
@@ -701,7 +704,7 @@ func (w *logWriter) Flush() {
 }
 
 // runBuildxBuild executes docker buildx build inside a container to build and push with OCI media types
-func (s *Service) runBuildxBuild(ctx context.Context, dockerClient *client.Client, build queries.Build, buildContext io.Reader, imageTag string) error {
+func (s *Service) runBuildxBuild(ctx context.Context, dockerClient *client.Client, build queries.Build, buildContext io.Reader, imageTag string, dockerfilePath string) error {
 	// Read build context into memory (needed to copy to container)
 	buildContextBytes, err := io.ReadAll(buildContext)
 	if err != nil {
@@ -722,7 +725,7 @@ func (s *Service) runBuildxBuild(ctx context.Context, dockerClient *client.Clien
 			"--build-arg", "ZEITWORK=1",
 			"--output", "type=image,oci-mediatypes=true",
 			"-t", imageTag,
-			"-f", "Dockerfile",
+			"-f", dockerfilePath,
 			".",
 		},
 	}

@@ -330,6 +330,7 @@ type Project struct {
 	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt            pgtype.Timestamptz `json:"deleted_at"`
 	RootDirectory        string             `json:"root_directory"`
+	DockerfilePath       string             `json:"dockerfile_path"`
 }
 
 type Server struct {
