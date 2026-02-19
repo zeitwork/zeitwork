@@ -115,19 +115,40 @@ async function handleInstallationEvent(payload: any) {
       const organisation = organisationList[0];
       if (!organisation) throw new Error("Organization not found");
 
-      if (organisation) {
-        const { error: insertError } = await tryCatch(
-          useDrizzle().insert(schema.githubInstallations).values({
-            githubAccountId: githubAccountId,
-            githubInstallationId: installationId,
-      organisationId: project.organisationId,
-            userId: "123",
-          }),
-        );
-        if (insertError) throw new Error("Error inserting installation");
+      // Look up the user by their GitHub account ID
+      const { data: userList, error: userLookupError } = await tryCatch(
+        useDrizzle()
+          .select()
+          .from(schema.users)
+          .where(eq(schema.users.githubAccountId, githubAccountId))
+          .limit(1),
+      );
+      if (userLookupError) throw new Error("Error looking up user");
+
+      const user = userList?.[0];
+      if (!user) {
+        // User doesn't have an account yet — the OAuth flow will create the
+        // github_installations record on their first login via the
+        // pending_installation cookie path.
+        return;
       }
+
+      const { error: insertError } = await tryCatch(
+        useDrizzle().insert(schema.githubInstallations).values({
+          githubAccountId: githubAccountId,
+          githubInstallationId: installationId,
+          organisationId: organisation.id,
+          userId: user.id,
+        }),
+      );
+      if (insertError) throw new Error("Error inserting installation");
       break;
     case "deleted":
+      // TODO: in the future, consider also soft-deleting projects (and their
+      // deployments) that reference this installation via githubInstallationId.
+      // For now we only remove the installation record itself; orphaned projects
+      // will simply stop receiving new deployments (push handler returns early
+      // on "Installation not found").
       const { error: deleteError } = await tryCatch(
         useDrizzle()
           .delete(schema.githubInstallations)
@@ -157,18 +178,17 @@ async function handlePushEvent(payload: any) {
     throw new Error("Missing required fields");
   }
 
-  // Find the organization by installation ID
+  // A push that deletes a branch sends the all-zeros SHA — ignore it.
+  const DELETED_BRANCH_SHA = "0000000000000000000000000000000000000000";
+  if (commitSHA === DELETED_BRANCH_SHA) {
+    return;
+  }
+
+  // Find the installation record to scope project lookups
   const { data: installationRecords, error: installationError } = await tryCatch(
     useDrizzle()
-      .select({
-        organisation: schema.organisations,
-        installation: schema.githubInstallations,
-      })
+      .select()
       .from(schema.githubInstallations)
-      .innerJoin(
-        schema.organisations,
-        eq(schema.organisations.id, schema.githubInstallations.organisationId),
-      )
       .where(eq(schema.githubInstallations.githubInstallationId, installationId))
       .limit(1),
   );
@@ -177,39 +197,26 @@ async function handlePushEvent(payload: any) {
     throw new Error("Installation not found");
   }
 
-  const organisation = installationRecord.organisation;
-
-  // Fetch repository info (log errors but don't fail)
-  const { error: repoError } = await useGitHub().repository.get(
-    installationId,
-    githubOwner,
-    githubRepo,
-  );
-  if (repoError) {
-    throw new Error("Failed to fetch repo");
-  }
-
-  // Fetch commit info (log errors but don't fail)
-  const { error: commitError } = await useGitHub().commit.get(
-    installationId,
-    githubOwner,
-    githubRepo,
-    commitSHA,
-  );
-  if (commitError) {
-    throw new Error("Failed to fetch commit info");
-  }
-
-  // Fetch all projects using this githubRepository
+  // Fetch all projects using this githubRepository scoped to the triggering installation
   const githubRepository = `${githubOwner}/${githubRepo}`;
   const { data: projectsList, error: findProjectError } = await tryCatch<any[]>(
     useDrizzle()
       .select()
       .from(schema.projects)
-      .where(and(eq(schema.projects.githubRepository, githubRepository), isNull(schema.projects.deletedAt))),
+      .where(
+        and(
+          eq(schema.projects.githubRepository, githubRepository),
+          eq(schema.projects.githubInstallationId, installationRecord.id),
+          isNull(schema.projects.deletedAt),
+        ),
+      ),
   );
-  if (findProjectError || !projectsList || projectsList.length === 0) {
-    throw new Error("Project not found");
+  if (findProjectError) {
+    throw new Error("Failed to query projects");
+  }
+  if (!projectsList || projectsList.length === 0) {
+    // No projects configured for this repo yet — not an error.
+    return;
   }
 
   // Create a deployment for each project linked to this repository
@@ -217,7 +224,7 @@ async function handlePushEvent(payload: any) {
   for (const project of projectsList) {
     const { error: deploymentError } = await deploymentModel.create({
       projectId: project.id,
-      organisationId: organisation.id,
+      organisationId: project.organisationId,
     });
 
     if (deploymentError) {
