@@ -45,13 +45,13 @@ ORDER BY d.name
 `
 
 type RouteFindActiveRow struct {
-	DomainName         string      `json:"domain_name"`
-	VmPort             pgtype.Int4 `json:"vm_port"`
-	VmID               uuid.UUID   `json:"vm_id"`
-	VmIp               *netip.Addr `json:"vm_ip"`
-	ServerID           uuid.UUID   `json:"server_id"`
-	RedirectTo         pgtype.Text `json:"redirect_to"`
-	RedirectStatusCode pgtype.Int4 `json:"redirect_status_code"`
+	DomainName         string       `json:"domain_name"`
+	VmPort             pgtype.Int4  `json:"vm_port"`
+	VmID               uuid.UUID    `json:"vm_id"`
+	VmIp               netip.Prefix `json:"vm_ip"`
+	ServerID           uuid.UUID    `json:"server_id"`
+	RedirectTo         pgtype.Text  `json:"redirect_to"`
+	RedirectStatusCode pgtype.Int4  `json:"redirect_status_code"`
 }
 
 // Domains -> Deployment -> VM -> Server

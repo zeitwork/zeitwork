@@ -223,7 +223,7 @@ func (s *Service) loadRoutes(ctx context.Context) error {
 		}
 
 		// Skip routes where VM doesn't have an IP yet
-		if row.VmIp == nil || !row.VmIp.IsValid() {
+		if !row.VmIp.IsValid() {
 			continue
 		}
 
@@ -231,7 +231,7 @@ func (s *Service) loadRoutes(ctx context.Context) error {
 		// server it's on. The kernel routing table (host routes per-server)
 		// delivers packets across the VLAN transparently.
 		newRoutes[row.DomainName] = Route{
-			IP:       row.VmIp.String(),
+			IP:       row.VmIp.Addr().String(),
 			Port:     row.VmPort.Int32,
 			ServerID: row.ServerID,
 			VmID:     row.VmID,
