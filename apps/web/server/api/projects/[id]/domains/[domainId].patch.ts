@@ -15,6 +15,8 @@ const bodySchema = z.object({
       /^(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/,
       "Invalid domain format",
     ),
+  redirectTo: z.string().url("Must be a valid URL").nullable().optional(),
+  redirectStatusCode: z.number().int().min(301).max(308).nullable().optional(),
 });
 
 export default defineEventHandler(async (event) => {
@@ -52,9 +54,18 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 404, message: "Domain not found" });
   }
 
-  // If name unchanged, return existing domain as-is
+  // If name unchanged, just update the redirect fields and return
   if (existingDomain.name === body.name) {
-    return existingDomain;
+    const [updated] = await useDrizzle()
+      .update(domains)
+      .set({
+        redirectTo: body.redirectTo,
+        redirectStatusCode: body.redirectStatusCode,
+        updatedAt: new Date(),
+      })
+      .where(eq(domains.id, existingDomain.id))
+      .returning();
+    return updated;
   }
 
   // Check if new name already exists on this project
@@ -77,7 +88,13 @@ export default defineEventHandler(async (event) => {
   if (conflictDomain?.deletedAt) {
     const [resurrected] = await useDrizzle()
       .update(domains)
-      .set({ deletedAt: null, verifiedAt: null, updatedAt: new Date() })
+      .set({
+        deletedAt: null,
+        verifiedAt: null,
+        updatedAt: new Date(),
+        redirectTo: body.redirectTo,
+        redirectStatusCode: body.redirectStatusCode,
+      })
       .where(eq(domains.id, conflictDomain.id))
       .returning();
 
@@ -90,6 +107,8 @@ export default defineEventHandler(async (event) => {
       name: body.name,
       projectId: project.id,
       organisationId: secure.organisationId,
+      redirectTo: body.redirectTo,
+      redirectStatusCode: body.redirectStatusCode,
     })
     .returning();
 

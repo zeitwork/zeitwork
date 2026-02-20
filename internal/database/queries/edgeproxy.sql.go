@@ -32,23 +32,26 @@ SELECT d.name       AS domain_name,
        v.port       AS vm_port,
        v.id         AS vm_id,
        v.ip_address AS vm_ip,
-       v.server_id  AS server_id
+       v.server_id  AS server_id,
+       d.redirect_to AS redirect_to,
+       d.redirect_status_code AS redirect_status_code
 FROM domains d
-         INNER JOIN deployments dep ON d.deployment_id = dep.id
-         INNER JOIN vms v ON dep.vm_id = v.id
+         LEFT JOIN deployments dep ON d.deployment_id = dep.id AND dep.stopped_at IS NULL AND dep.failed_at IS NULL AND dep.deleted_at IS NULL
+         LEFT JOIN vms v ON dep.vm_id = v.id AND v.deleted_at IS NULL
 WHERE d.verified_at IS NOT NULL
   AND d.deleted_at IS NULL
-  AND (dep.stopped_at IS NULL AND dep.failed_at IS NULL AND dep.deleted_at IS NULL)
-  AND v.deleted_at IS NULL
+  AND (v.id IS NOT NULL OR d.redirect_to IS NOT NULL)
 ORDER BY d.name
 `
 
 type RouteFindActiveRow struct {
-	DomainName string       `json:"domain_name"`
-	VmPort     pgtype.Int4  `json:"vm_port"`
-	VmID       uuid.UUID    `json:"vm_id"`
-	VmIp       netip.Prefix `json:"vm_ip"`
-	ServerID   uuid.UUID    `json:"server_id"`
+	DomainName         string      `json:"domain_name"`
+	VmPort             pgtype.Int4 `json:"vm_port"`
+	VmID               uuid.UUID   `json:"vm_id"`
+	VmIp               *netip.Addr `json:"vm_ip"`
+	ServerID           uuid.UUID   `json:"server_id"`
+	RedirectTo         pgtype.Text `json:"redirect_to"`
+	RedirectStatusCode pgtype.Int4 `json:"redirect_status_code"`
 }
 
 // Domains -> Deployment -> VM -> Server
@@ -69,6 +72,8 @@ func (q *Queries) RouteFindActive(ctx context.Context) ([]RouteFindActiveRow, er
 			&i.VmID,
 			&i.VmIp,
 			&i.ServerID,
+			&i.RedirectTo,
+			&i.RedirectStatusCode,
 		); err != nil {
 			return nil, err
 		}

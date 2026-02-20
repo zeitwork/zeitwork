@@ -12,7 +12,7 @@ import (
 )
 
 const domainListUnverified = `-- name: DomainListUnverified :many
-SELECT id, name, project_id, deployment_id, verified_at, organisation_id, created_at, updated_at, deleted_at, txt_verification_required
+SELECT id, name, project_id, deployment_id, verified_at, organisation_id, created_at, updated_at, deleted_at, txt_verification_required, redirect_to, redirect_status_code
 FROM domains
 WHERE verified_at IS NULL AND deleted_at IS NULL
 `
@@ -37,6 +37,8 @@ func (q *Queries) DomainListUnverified(ctx context.Context) ([]Domain, error) {
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.TxtVerificationRequired,
+			&i.RedirectTo,
+			&i.RedirectStatusCode,
 		); err != nil {
 			return nil, err
 		}

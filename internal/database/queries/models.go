@@ -266,6 +266,8 @@ type Domain struct {
 	UpdatedAt               pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt               pgtype.Timestamptz `json:"deleted_at"`
 	TxtVerificationRequired bool               `json:"txt_verification_required"`
+	RedirectTo              pgtype.Text        `json:"redirect_to"`
+	RedirectStatusCode      pgtype.Int4        `json:"redirect_status_code"`
 }
 
 type EnvironmentVariable struct {

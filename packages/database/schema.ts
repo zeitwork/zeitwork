@@ -78,6 +78,8 @@ export const domains = pgTable(
     deploymentId: uuid().references(() => deployments.id),
     verifiedAt: timestamp({ withTimezone: true }),
     txtVerificationRequired: boolean().notNull().default(false),
+    redirectTo: text(),
+    redirectStatusCode: integer(),
     ...organisationId,
     ...timestamps,
   },

@@ -37,10 +37,12 @@ type Config struct {
 // With L2 routing between servers, the edge proxy proxies directly to the VM IP.
 // The kernel routing table handles cross-server delivery via VLAN host routes.
 type Route struct {
-	Port     int32     // VM's port
-	IP       string    // VM's IP address
-	ServerID uuid.UUID // Server hosting the VM
-	VmID     uuid.UUID // VM serving this route
+	Port               int32     // VM's port
+	IP                 string    // VM's IP address
+	ServerID           uuid.UUID // Server hosting the VM
+	VmID               uuid.UUID // VM serving this route
+	RedirectTo         string    // Optional redirect URL
+	RedirectStatusCode int32     // Optional redirect status code
 }
 
 // Service is the edgeproxy service
@@ -211,8 +213,17 @@ func (s *Service) loadRoutes(ctx context.Context) error {
 
 	newRoutes := make(map[string]Route)
 	for _, row := range rows {
+		// Handle redirects first (doesn't need a VM IP)
+		if row.RedirectTo.Valid {
+			newRoutes[row.DomainName] = Route{
+				RedirectTo:         row.RedirectTo.String,
+				RedirectStatusCode: row.RedirectStatusCode.Int32,
+			}
+			continue
+		}
+
 		// Skip routes where VM doesn't have an IP yet
-		if !row.VmIp.IsValid() {
+		if row.VmIp == nil || !row.VmIp.IsValid() {
 			continue
 		}
 
@@ -220,7 +231,7 @@ func (s *Service) loadRoutes(ctx context.Context) error {
 		// server it's on. The kernel routing table (host routes per-server)
 		// delivers packets across the VLAN transparently.
 		newRoutes[row.DomainName] = Route{
-			IP:       row.VmIp.Addr().String(),
+			IP:       row.VmIp.String(),
 			Port:     row.VmPort.Int32,
 			ServerID: row.ServerID,
 			VmID:     row.VmID,
@@ -302,6 +313,17 @@ func (s *Service) serveHTTPS(w http.ResponseWriter, r *http.Request) {
 
 	if !ok {
 		http.Error(w, "Service Not Found", http.StatusNotFound)
+		return
+	}
+
+	// Handle redirect routes
+	if route.RedirectTo != "" {
+		statusCode := int(route.RedirectStatusCode)
+		if statusCode < 300 || statusCode > 399 {
+			statusCode = http.StatusMovedPermanently // Default to 301
+		}
+		s.logger.Debug("redirecting domain", "host", host, "to", route.RedirectTo, "status", statusCode)
+		http.Redirect(w, r, route.RedirectTo, statusCode)
 		return
 	}
 

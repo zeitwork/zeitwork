@@ -6,14 +6,15 @@ SELECT d.name       AS domain_name,
        v.port       AS vm_port,
        v.id         AS vm_id,
        v.ip_address AS vm_ip,
-       v.server_id  AS server_id
+       v.server_id  AS server_id,
+       d.redirect_to AS redirect_to,
+       d.redirect_status_code AS redirect_status_code
 FROM domains d
-         INNER JOIN deployments dep ON d.deployment_id = dep.id
-         INNER JOIN vms v ON dep.vm_id = v.id
+         LEFT JOIN deployments dep ON d.deployment_id = dep.id AND dep.stopped_at IS NULL AND dep.failed_at IS NULL AND dep.deleted_at IS NULL
+         LEFT JOIN vms v ON dep.vm_id = v.id AND v.deleted_at IS NULL
 WHERE d.verified_at IS NOT NULL
   AND d.deleted_at IS NULL
-  AND (dep.stopped_at IS NULL AND dep.failed_at IS NULL AND dep.deleted_at IS NULL)
-  AND v.deleted_at IS NULL
+  AND (v.id IS NOT NULL OR d.redirect_to IS NOT NULL)
 ORDER BY d.name;
 
 -- name: DomainVerified :one

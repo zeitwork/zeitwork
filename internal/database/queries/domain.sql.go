@@ -12,7 +12,7 @@ import (
 )
 
 const domainFind = `-- name: DomainFind :many
-SELECT id, name, project_id, deployment_id, verified_at, organisation_id, created_at, updated_at, deleted_at, txt_verification_required
+SELECT id, name, project_id, deployment_id, verified_at, organisation_id, created_at, updated_at, deleted_at, txt_verification_required, redirect_to, redirect_status_code
 FROM domains
 `
 
@@ -36,6 +36,8 @@ func (q *Queries) DomainFind(ctx context.Context) ([]Domain, error) {
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.TxtVerificationRequired,
+			&i.RedirectTo,
+			&i.RedirectStatusCode,
 		); err != nil {
 			return nil, err
 		}
@@ -48,7 +50,7 @@ func (q *Queries) DomainFind(ctx context.Context) ([]Domain, error) {
 }
 
 const domainFindActiveByName = `-- name: DomainFindActiveByName :many
-SELECT id, name, project_id, deployment_id, verified_at, organisation_id, created_at, updated_at, deleted_at, txt_verification_required
+SELECT id, name, project_id, deployment_id, verified_at, organisation_id, created_at, updated_at, deleted_at, txt_verification_required, redirect_to, redirect_status_code
 FROM domains
 WHERE name = $1 AND id != $2 AND deleted_at IS NULL
 `
@@ -79,6 +81,8 @@ func (q *Queries) DomainFindActiveByName(ctx context.Context, arg DomainFindActi
 			&i.UpdatedAt,
 			&i.DeletedAt,
 			&i.TxtVerificationRequired,
+			&i.RedirectTo,
+			&i.RedirectStatusCode,
 		); err != nil {
 			return nil, err
 		}
@@ -91,7 +95,7 @@ func (q *Queries) DomainFindActiveByName(ctx context.Context, arg DomainFindActi
 }
 
 const domainFirstByID = `-- name: DomainFirstByID :one
-SELECT id, name, project_id, deployment_id, verified_at, organisation_id, created_at, updated_at, deleted_at, txt_verification_required
+SELECT id, name, project_id, deployment_id, verified_at, organisation_id, created_at, updated_at, deleted_at, txt_verification_required, redirect_to, redirect_status_code
 FROM domains
 WHERE id = $1
 LIMIT 1
@@ -111,6 +115,8 @@ func (q *Queries) DomainFirstByID(ctx context.Context, id uuid.UUID) (Domain, er
 		&i.UpdatedAt,
 		&i.DeletedAt,
 		&i.TxtVerificationRequired,
+		&i.RedirectTo,
+		&i.RedirectStatusCode,
 	)
 	return i, err
 }
