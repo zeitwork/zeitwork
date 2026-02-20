@@ -42,6 +42,21 @@ const isSettled = computed(
   () => deployment.value && ["running", "stopped", "failed"].includes(deployment.value.status),
 );
 
+const isStopping = ref(false);
+
+async function stopDeployment() {
+  if (isStopping.value || !deployment.value || ["stopped", "failed"].includes(deployment.value.status)) return;
+  isStopping.value = true;
+  try {
+    await $fetch(`/api/deployments/${deploymentId}/stop`, { method: "POST" });
+    refreshDeployment();
+  } catch (err) {
+    console.error("Failed to stop deployment:", err);
+  } finally {
+    isStopping.value = false;
+  }
+}
+
 // --- VM Logs (cursor-based accumulation) ---
 const vmLogEntries = ref<Array<{ id: string; message: string; level: string | null }>>([]);
 const vmLogCursor = ref<string | null>(null);
@@ -223,15 +238,40 @@ function toggleStep(sIndex: number, stepIndex: number) {
         }}</span>
       </template>
       <template #trailing>
-        <div
-          v-if="deployment"
-          :class="[
-            deploymentStatusColor(deployment.status),
-            deploymentStatusBgColor(deployment.status),
-            'rounded px-1.5 py-0.5 text-xs',
-          ]"
-        >
-          {{ deployment.status }}
+        <div class="flex items-center gap-2">
+          <div
+            v-if="deployment"
+            :class="[
+              deploymentStatusColor(deployment.status),
+              deploymentStatusBgColor(deployment.status),
+              'rounded px-1.5 py-0.5 text-xs',
+            ]"
+          >
+            {{ deployment.status }}
+          </div>
+          <d-alert-dialog v-if="deployment && !['stopped', 'failed'].includes(deployment.status)">
+            <template #trigger>
+              <d-button
+                variant="outline"
+                size="sm"
+                :loading="isStopping"
+              >
+                Stop
+              </d-button>
+            </template>
+            <template #title>Stop Deployment</template>
+            <template #content>
+              <p class="text-secondary text-sm">
+                Are you sure you want to stop this deployment? The VM will be terminated and it will no longer serve traffic.
+              </p>
+            </template>
+            <template #cancel>
+              <d-button variant="secondary" size="sm">Cancel</d-button>
+            </template>
+            <template #action>
+              <d-button variant="danger" size="sm" @click="stopDeployment" :loading="isStopping">Stop Deployment</d-button>
+            </template>
+          </d-alert-dialog>
         </div>
       </template>
     </DHeader>

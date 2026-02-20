@@ -173,6 +173,22 @@ function deploymentStatusBgColor(status: string) {
 function deploymentLink(deployment: any) {
   return `/${orgId}/${projectSlug}/deployments/${deployment.id}`;
 }
+
+const stoppingDeployments = ref(new Set<string>());
+
+async function stopDeployment(deployment: Deployment) {
+  if (stoppingDeployments.value.has(deployment.id) || ['stopped', 'failed'].includes(deployment.status)) return;
+  
+  stoppingDeployments.value.add(deployment.id);
+  
+  try {
+    await $fetch<any>(`/api/deployments/${deployment.id}/stop`, { method: "POST" });
+  } catch (err) {
+    console.error("Failed to stop deployment:", err);
+  } finally {
+    stoppingDeployments.value.delete(deployment.id);
+  }
+}
 </script>
 
 <template>
@@ -220,7 +236,7 @@ function deploymentLink(deployment: any) {
         v-for="deployment in deploymentList"
         :key="deployment.id"
         :to="deploymentLink(deployment)"
-        class="hover:bg-surface-1 border-edge-subtle text-primary grid cursor-pointer grid-cols-[auto_100px_100px_3fr_1fr] items-center gap-4 border-b p-4 text-sm"
+        class="group hover:bg-surface-1 border-edge-subtle text-primary grid cursor-pointer grid-cols-[auto_100px_100px_3fr_1fr] items-center gap-4 border-b p-4 text-sm"
       >
         <div class="font-mono">{{ uuidToBase58(deployment.id) }}</div>
         <div>
@@ -252,7 +268,35 @@ function deploymentLink(deployment: any) {
           </template>
           <span v-else class="text-secondary">—</span>
         </div>
-        <div class="text-right line-clamp-1">{{ renderDate(deployment.createdAt) }}</div>
+        <div class="text-right flex items-center justify-end h-7">
+          <span :class="['block', !['stopped', 'failed'].includes(deployment.status) ? 'group-hover:hidden' : '']">{{ renderDate(deployment.createdAt) }}</span>
+          
+          <d-alert-dialog v-if="!['stopped', 'failed'].includes(deployment.status)">
+            <template #trigger>
+              <d-button
+                class="hidden group-hover:flex"
+                variant="outline"
+                size="sm"
+                :loading="stoppingDeployments.has(deployment.id)"
+                @click.prevent.stop
+              >
+                Stop
+              </d-button>
+            </template>
+            <template #title>Stop Deployment</template>
+            <template #content>
+              <p class="text-secondary text-sm">
+                Are you sure you want to stop this deployment? The VM will be terminated and it will no longer serve traffic.
+              </p>
+            </template>
+            <template #cancel>
+              <d-button variant="secondary" size="sm">Cancel</d-button>
+            </template>
+            <template #action>
+              <d-button variant="danger" size="sm" @click="stopDeployment(deployment)" :loading="stoppingDeployments.has(deployment.id)">Stop Deployment</d-button>
+            </template>
+          </d-alert-dialog>
+        </div>
       </nuxt-link>
     </div>
   </div>
