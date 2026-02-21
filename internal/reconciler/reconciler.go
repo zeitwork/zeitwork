@@ -2,11 +2,14 @@ package reconciler
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
 
 	"github.com/zeitwork/zeitwork/internal/shared/uuid"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type ReconcileFunc func(ctx context.Context, objectID uuid.UUID) error
@@ -78,15 +81,24 @@ func (s *Scheduler) Start() {
 func (s *Scheduler) worker() {
 	defer s.wg.Done()
 
-	logger := slog.With("reconciler_name", s.name)
+	tracer := otel.Tracer("reconciler")
+	logger := slog.With("reconciler_name", s.name).With("reconcile_id", uuid.New().String())
 
 	for {
 		id := <-s.dueRun
 
-		logger.Info("running reconcile for", "id", id)
-		err := s.reconcileFunc(context.Background(), id)
+		logger = logger.With("reconcile_object_id", id)
+
+		ctx := context.WithValue(context.Background(), "reconcile_object_id", id)
+		ctx = context.WithValue(ctx, "reconciler_name", s.name)
+
+		ctx, span := tracer.Start(ctx, fmt.Sprintf("reconcile_%s_%s", s.name, id.String()))
+		span.SetAttributes(attribute.String("reconcile_object_id", id.String()), attribute.String("reconciler", s.name))
+		logger.InfoContext(ctx, "running reconcile")
+
+		err := s.reconcileFunc(ctx, id)
 		if err != nil {
-			logger.Error("reconcile failed", "id", id, "err", err)
+			logger.ErrorContext(ctx, "reconcile failed", "id", id, "err", err)
 
 			s.mu.Lock()
 			delete(s.running, id)
@@ -96,7 +108,8 @@ func (s *Scheduler) worker() {
 			continue
 		}
 
-		logger.Info("reconcile done", "id", id)
+		logger.InfoContext(ctx, "reconcile done", "id", id)
+		span.End()
 
 		// Only apply the 1-hour default if the reconcile function
 		// did not already schedule a custom next-run time.

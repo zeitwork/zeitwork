@@ -21,7 +21,7 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 	}
 
 	logger := slog.With("deployment_id", objectID)
-	logger.Info("reconciling deployment")
+	logger.InfoContext(ctx, "reconciling deployment")
 
 	deployment, err := s.db.Queries.DeploymentFirstByID(ctx, objectID)
 	if err != nil {
@@ -29,7 +29,7 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 	}
 
 	if deployment.DeletedAt.Valid || deployment.FailedAt.Valid || deployment.StoppedAt.Valid {
-		logger.Info("deployment in terminal state, skipping")
+		logger.InfoContext(ctx, "deployment in terminal state, skipping")
 
 		if !deployment.VmID.Valid {
 			return nil
@@ -51,7 +51,7 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 		if err != nil {
 			return err
 		}
-		logger.Info("deleted VM for terminal deployment", "deployment_id", deployment.ID, "vm_id", deployment.VmID)
+		logger.InfoContext(ctx, "deleted VM for terminal deployment", "deployment_id", deployment.ID, "vm_id", deployment.VmID)
 
 		return nil
 	}
@@ -63,7 +63,7 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 
 	// Deployments should have a build
 	if !deployment.BuildID.Valid {
-		logger.Info("creating build for deployment", "deployment_id", deployment.ID)
+		logger.InfoContext(ctx, "creating build for deployment", "deployment_id", deployment.ID)
 		build, err := s.db.BuildCreate(ctx, queries.BuildCreateParams{
 			ID:             uuid.New(),
 			Status:         queries.BuildStatusPending,
@@ -75,7 +75,7 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 		if err != nil {
 			return err
 		}
-		logger.Info("created build for deployment", "deployment_id", deployment.ID, "build_id", build.ID)
+		logger.InfoContext(ctx, "created build for deployment", "deployment_id", deployment.ID, "build_id", build.ID)
 		deployment, err = s.db.DeploymentUpdateBuild(ctx, queries.DeploymentUpdateBuildParams{
 			ID:      deployment.ID,
 			BuildID: build.ID,
@@ -83,7 +83,7 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 		if err != nil {
 			return err
 		}
-		logger.Info("updated deployment with build", "build_id", build.ID)
+		logger.InfoContext(ctx, "updated deployment with build", "build_id", build.ID)
 	}
 
 	build, err := s.db.BuildFirstByID(ctx, deployment.BuildID)
@@ -91,7 +91,7 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 		return err
 	}
 
-	logger.Info("found build for deployment", "build_id", build.ID)
+	logger.InfoContext(ctx, "found build for deployment", "build_id", build.ID)
 
 	// If build failed, mark the deployment as failed
 	if build.FailedAt.Valid {
@@ -99,12 +99,12 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 		if err != nil {
 			return err
 		}
-		logger.Info("marked deployment as failed", "build_id", build.ID)
+		logger.InfoContext(ctx, "marked deployment as failed", "build_id", build.ID)
 		return nil
 	}
 
 	if !build.ImageID.Valid {
-		logger.Info("build has no image_id yet, waiting for build to complete", "build_id", build.ID)
+		logger.InfoContext(ctx, "build has no image_id yet, waiting for build to complete", "build_id", build.ID)
 		s.deploymentScheduler.Schedule(deployment.ID, time.Now().Add(10*time.Second))
 		return nil
 	}
@@ -118,7 +118,7 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 		if err != nil {
 			return err
 		}
-		logger.Info("updated deployment with new image", "image_id", build.ImageID, "build_id", build.ID)
+		logger.InfoContext(ctx, "updated deployment with new image", "image_id", build.ImageID, "build_id", build.ID)
 	}
 
 	// If the deployment does not have a VM, create one
@@ -147,7 +147,7 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 		if err != nil {
 			return err
 		}
-		logger.Info("linked vm to deployment", "vm_id", vm.ID)
+		logger.InfoContext(ctx, "linked vm to deployment", "vm_id", vm.ID)
 	}
 
 	// If the deployment has a VM, check if it is healthy
@@ -165,7 +165,7 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 		if err != nil {
 			return err
 		}
-		logger.Info("reset VM for deleted deployment", "vm_id", deployment.VmID)
+		logger.InfoContext(ctx, "reset VM for deleted deployment", "vm_id", deployment.VmID)
 		s.deploymentScheduler.Schedule(deployment.ID, time.Now())
 		return nil
 	}
@@ -173,7 +173,7 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 	// Perform HTTP health check before marking as running
 	healthy := s.checkDeploymentHealth(vm.IpAddress.Addr().String(), vm.Port.Int32)
 	if !healthy {
-		logger.Info("deployment health check failed, will retry", "vm_id", deployment.VmID)
+		logger.InfoContext(ctx, "deployment health check failed, will retry", "vm_id", deployment.VmID)
 		return fmt.Errorf("health check failed, will retry")
 	}
 
@@ -182,7 +182,7 @@ func (s *Service) reconcileDeployment(ctx context.Context, objectID uuid.UUID) e
 	if err != nil {
 		return fmt.Errorf("failed to mark deployment as running: %w", err)
 	}
-	logger.Info("marked deployment as running")
+	logger.InfoContext(ctx, "marked deployment as running")
 
 	// Point custom domains to this new deployment
 	err = s.pointCustomDomainsToDeployment(ctx, deployment)

@@ -12,8 +12,10 @@ import (
 	"github.com/caarlos0/env/v11"
 	_ "github.com/joho/godotenv/autoload"
 	"github.com/lmittmann/tint"
+	slogmulti "github.com/samber/slog-multi"
 	"github.com/zeitwork/zeitwork/internal/database"
 	"github.com/zeitwork/zeitwork/internal/edgeproxy"
+	"github.com/zeitwork/zeitwork/internal/telemetry"
 	"github.com/zeitwork/zeitwork/internal/zeitwork"
 )
 
@@ -43,7 +45,26 @@ type Config struct {
 }
 
 func main() {
-	logger := slog.New(tint.NewHandler(os.Stdout, nil))
+	ctx := context.Background()
+
+	closeTracer, err := telemetry.InitTracer(ctx)
+	if err != nil {
+		panic(err)
+	}
+	defer closeTracer(ctx)
+
+	closeLogger, otelLogHandler, err := telemetry.InitLogger(ctx)
+	if err != nil {
+		panic(err)
+	}
+	defer closeLogger(ctx)
+
+	handlers := []slog.Handler{tint.NewHandler(os.Stdout, nil)}
+	if otelLogHandler != nil {
+		handlers = append(handlers, otelLogHandler)
+	}
+
+	logger := slog.New(slogmulti.Fanout(handlers...))
 	slog.SetDefault(logger)
 
 	// Setup signal handling for graceful shutdown

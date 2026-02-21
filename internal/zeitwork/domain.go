@@ -80,7 +80,7 @@ func (s *Service) reconcileDomain(ctx context.Context, objectID uuid.UUID) error
 		return err
 	}
 	for _, conflict := range conflicts {
-		slog.Info("soft-deleting conflicting domain",
+		slog.InfoContext(ctx, "soft-deleting conflicting domain",
 			"verified_domain_id", domain.ID,
 			"conflicting_domain_id", conflict.ID,
 			"domain_name", domainName,
