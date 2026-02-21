@@ -127,11 +127,11 @@ func New(cfg Config) (*Service, error) {
 		s.githubTokenService = githubSvc
 	}
 
-	s.deploymentScheduler = reconciler.NewWithName("deployment", s.reconcileDeployment)
-	s.buildScheduler = reconciler.NewWithName("build", s.reconcileBuild)
-	s.vmScheduler = reconciler.NewWithName("vm", s.reconcileVM)
-	s.domainScheduler = reconciler.NewWithName("domain", s.reconcileDomain)
-	s.serverScheduler = reconciler.NewWithName("server", s.reconcileServer)
+	s.deploymentScheduler = reconciler.New("deployment", s.reconcileDeployment)
+	s.buildScheduler = reconciler.New("build", s.reconcileBuild)
+	s.vmScheduler = reconciler.New("vm", s.reconcileVM)
+	s.domainScheduler = reconciler.New("domain", s.reconcileDomain)
+	s.serverScheduler = reconciler.New("server", s.reconcileServer)
 
 	return s, nil
 }
