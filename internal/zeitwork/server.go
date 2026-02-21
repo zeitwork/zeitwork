@@ -74,6 +74,11 @@ func (s *Service) registerServer(ctx context.Context) (queries.Server, error) {
 	// New server — allocate an IP range within a transaction
 	var server queries.Server
 	err = s.db.WithTx(ctx, func(q *queries.Queries) error {
+		err = q.AdvisoryLock(ctx, "ServerAllocateIPRange")
+		if err != nil {
+			return err
+		}
+
 		// Allocate next /20 range
 		ipRange, err := q.ServerAllocateIPRange(ctx)
 		if err != nil {
@@ -260,6 +265,11 @@ func (s *Service) replaceDeadServerVMs(ctx context.Context, q *queries.Queries, 
 // replaceVM soft-deletes an old VM, creates a replacement on the least loaded
 // server, and updates the deployment pointer.
 func (s *Service) replaceVM(ctx context.Context, q *queries.Queries, oldVM queries.Vm, deadServerID uuid.UUID) error {
+	err := q.AdvisoryLock(ctx, "VMNextIPAddress")
+	if err != nil {
+		return err
+	}
+
 	// Soft-delete the old VM
 	if err := q.VMSoftDelete(ctx, oldVM.ID); err != nil {
 		return fmt.Errorf("failed to soft-delete old VM: %w", err)
