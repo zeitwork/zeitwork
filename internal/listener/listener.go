@@ -262,11 +262,6 @@ func (l *Listener) handleKeepalive(data []byte) error {
 		return fmt.Errorf("failed to parse keepalive message: %w", err)
 	}
 
-	//slog.Debug("received keepalive",
-	//	"server_wal_end", pkm.ServerWALEnd,
-	//	"server_time", pkm.ServerTime,
-	//	"reply_requested", pkm.ReplyRequested)
-
 	if pkm.ServerWALEnd > l.clientXLogPos {
 		l.clientXLogPos = pkm.ServerWALEnd
 	}
@@ -280,11 +275,6 @@ func (l *Listener) handleXLogData(ctx context.Context, data []byte) error {
 	if err != nil {
 		return fmt.Errorf("failed to parse XLog data: %w", err)
 	}
-
-	//slog.Debug("received XLog data",
-	//	"wal_start", xld.WALStart,
-	//	"server_wal_end", xld.ServerWALEnd,
-	//	"server_time", xld.ServerTime)
 
 	if err := l.processLogicalMessage(ctx, xld.WALData); err != nil {
 		return fmt.Errorf("failed to process logical message: %w", err)
@@ -304,28 +294,16 @@ func (l *Listener) processLogicalMessage(ctx context.Context, walData []byte) er
 		return fmt.Errorf("failed to parse logical message: %w", err)
 	}
 
-	//slog.Debug("received logical message", "type", logicalMsg.Type())
-
 	switch msg := logicalMsg.(type) {
 	case *pglogrepl.RelationMessageV2:
 		l.relations[msg.RelationID] = msg
 		slog.Debug("stored relation", "id", msg.RelationID, "name", msg.RelationName)
-
-	case *pglogrepl.BeginMessage:
-		slog.Debug("transaction begin", "xid", msg.Xid)
-
-	case *pglogrepl.CommitMessage:
-		slog.Debug("transaction commit")
 
 	case *pglogrepl.InsertMessageV2:
 		return l.handleChange(ctx, msg.RelationID, msg.Tuple, "INSERT")
 
 	case *pglogrepl.UpdateMessageV2:
 		return l.handleChange(ctx, msg.RelationID, msg.NewTuple, "UPDATE")
-
-	case *pglogrepl.DeleteMessageV2:
-		// We use soft-delete, so DELETE events are not expected
-		slog.Debug("ignoring DELETE (soft-delete used)")
 
 	case *pglogrepl.StreamStartMessageV2:
 		l.inStream = true
@@ -337,6 +315,8 @@ func (l *Listener) processLogicalMessage(ctx context.Context, walData []byte) er
 
 	case *pglogrepl.StreamCommitMessageV2:
 		slog.Debug("stream commit", "xid", msg.Xid)
+
+	case *pglogrepl.BeginMessage, *pglogrepl.CommitMessage, *pglogrepl.DeleteMessageV2:
 
 	default:
 		slog.Debug("unhandled message type", "type", fmt.Sprintf("%T", msg))
@@ -361,11 +341,6 @@ func (l *Listener) handleChange(ctx context.Context, relationID uint32, tuple *p
 	if err != nil {
 		return fmt.Errorf("failed to extract ID from %s: %w", relation.RelationName, err)
 	}
-
-	//slog.Info("detected change",
-	//	"table", relation.RelationName,
-	//	"operation", operation,
-	//	"id", id)
 
 	// Dispatch to appropriate handler
 	switch relation.RelationName {
