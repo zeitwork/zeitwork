@@ -87,7 +87,7 @@ func (s *Scheduler) worker() {
 	for {
 		id := <-s.dueRun
 
-		logger = logger.With("reconcile_object_id", id)
+		logger := logger.With("reconcile_object_id", id)
 
 		ctx := context.WithValue(context.Background(), "reconcile_object_id", id)
 		ctx = context.WithValue(ctx, "reconciler_name", s.name)

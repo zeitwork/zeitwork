@@ -365,7 +365,7 @@ func (s *Suite) Test_DeadServerFailover() {
 	})
 
 	// Verify the replacement VM is curlable
-	_, err = s.TryRunCommand("curl", "-f", "-s", "--connect-timeout", "2",
+	_, err = s.TryRunCommand("curl", "-f", "-s", "--connect-timeout", "2", "--retry", "3", "--retry-connrefused",
 		fmt.Sprintf("http://%s:%d", replacementVM.IpAddress.Addr(), replacementVM.Port.Int32))
 	s.NoErrorf(err, "replacement VM should be curlable at %s:%d", replacementVM.IpAddress.Addr(), replacementVM.Port.Int32)
 

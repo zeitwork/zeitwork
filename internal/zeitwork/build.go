@@ -472,7 +472,7 @@ func (s *Service) prepareBuildContext(ctx context.Context, build queries.Build, 
 					Level:          "error",
 					OrganisationID: build.OrganisationID,
 				})
-				pw.CloseWithError(fmt.Errorf(msg))
+				pw.CloseWithError(fmt.Errorf("%s", msg))
 				return
 			}
 

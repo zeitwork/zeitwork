@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -18,7 +18,7 @@ func InitTracer(ctx context.Context) (func(context.Context) error, error) {
 	}
 
 	// Reads OTEL_EXPORTER_OTLP_ENDPOINT and OTEL_EXPORTER_OTLP_HEADERS from environment
-	exporter, err := otlptracegrpc.New(ctx)
+	exporter, err := otlptracehttp.New(ctx)
 	if err != nil {
 		return nil, err
 	}
