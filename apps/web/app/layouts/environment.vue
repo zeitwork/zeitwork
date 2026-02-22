@@ -32,14 +32,14 @@ const links = computed(() => [
 </script>
 
 <template>
-  <div class="bg-surface-2 flex h-screen flex-col">
+  <div class="bg-base-0 flex h-screen flex-col">
     <div class="flex flex-1 flex-col p-1 pt-0">
       <d-navbar-header class="shrink-0" />
       <div
-        class="bg-surface-1 outline-edge flex min-h-0 flex-1 flex-col rounded-lg outline"
+        class="bg-base-1 flex min-h-0 flex-1 flex-col rounded-lg ring-1 ring-edge"
       >
         <d-navbar :links="links" />
-        <div class="outline-edge bg-surface-0 flex-1 overflow-auto rounded-lg outline">
+        <div class="bg-base-2 flex-1 overflow-auto rounded-lg ring-1 ring-edge">
           <slot></slot>
         </div>
       </div>

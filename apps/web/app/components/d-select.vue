@@ -28,7 +28,7 @@ const open = ref(false);
   <SelectRoot v-model="model" :open="open" @update:open="open = $event">
     <SelectTrigger
       :disabled="disabled"
-      class="bg-surface-0 border-edge focus:bg-surface-0 focus:border-edge-strong flex cursor-default items-center justify-between rounded-lg border px-2.5 text-sm outline-none select-none"
+      class="bg-base border-edge focus:bg-base focus:border-edge-strong flex cursor-default items-center justify-between rounded-lg border px-2.5 text-sm outline-none select-none"
       :class="[
         disabled
           ? 'bg-surface-2 cursor-not-allowed opacity-50'
@@ -48,7 +48,7 @@ const open = ref(false);
         position="popper"
         side="bottom"
         align="start"
-        class="border-edge bg-surface-0 z-[9999] w-[var(--reka-select-trigger-width)] rounded-lg border shadow-sm"
+        class="border-edge bg-base-3 z-[9999] w-[var(--reka-select-trigger-width)] rounded-lg border shadow-sm"
         :side-offset="5"
         ref="selectContentRef"
       >

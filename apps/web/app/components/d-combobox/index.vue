@@ -103,7 +103,7 @@ watch(open, (newOpen, oldOpen) => {
   >
     <ComboboxAnchor as-child>
       <ComboboxTrigger
-        class="bg-surface-1 border-edge text-primary text-copy focus:bg-surface-0 focus:border-edge-strong hover:border-edge-strong disabled:bg-surface-2 flex h-8 w-full min-w-40 items-center justify-between gap-1 rounded-md border px-2.5 py-2 leading-none transition-all outline-none disabled:cursor-not-allowed disabled:opacity-50"
+        class="bg-surface-1 border-edge text-primary text-copy focus:bg-base focus:border-edge-strong hover:border-edge-strong disabled:bg-surface-2 flex h-8 w-full min-w-40 items-center justify-between gap-1 rounded-md border px-2.5 py-2 leading-none transition-all outline-none disabled:cursor-not-allowed disabled:opacity-50"
       >
         <span class="flex">
           <slot
@@ -122,7 +122,7 @@ watch(open, (newOpen, oldOpen) => {
     <ComboboxPortal>
       <ComboboxContent
         :side-offset="4"
-        class="bg-surface-1 border-edge text-primary data-[state=open]:animate-fade-in-from-top data-[state=closed]:animate-fade-out relative z-[200] max-h-96 w-[var(--reka-combobox-trigger-width)] overflow-hidden rounded-md border shadow-md"
+        class="bg-base-3 border-edge text-primary data-[state=open]:animate-fade-in-from-top data-[state=closed]:animate-fade-out relative z-[200] max-h-96 w-[var(--reka-combobox-trigger-width)] overflow-hidden rounded-md border shadow-md"
         position="popper"
       >
         <ComboboxViewport class="p-0.5">

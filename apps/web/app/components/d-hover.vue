@@ -15,7 +15,7 @@ type Props = {
 
 const {
   active = false,
-  background = "bg-surface-2",
+  background = "bg-surface-1",
   borderRadius = "rounded-md",
   hoverScale = "group-hover/h:inset-0",
   activeScale = "inset-0",

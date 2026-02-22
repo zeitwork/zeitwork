@@ -14,7 +14,7 @@ const route = useRoute();
       </div>
     </div>
 
-    <div class="flex-1 overflow-auto bg-surface-1 p-4 font-mono text-sm">
+    <div class="flex-1 overflow-auto bg-base p-4 font-mono text-sm">
       <div class="text-xs text-tertiary">No logs available yet...</div>
     </div>
   </div>

@@ -17,7 +17,7 @@ const { to, name, icon, active, fullWidth = false } = defineProps<Props>();
 </script>
 
 <template>
-  <DHover :active="active" background="bg-inverse/5" :full-width="fullWidth">
+  <DHover :active="active" :full-width="fullWidth">
     <NuxtLink
       class="flex h-8 items-center gap-0.5 px-2 text-copy"
       :class="[

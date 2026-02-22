@@ -4,18 +4,20 @@
  * ═══════════════════════════════════════════════════════════════
  * OKLCH Seed-Based Color System
  *
- * Inspired by Linear's approach: 3 inputs generate the entire UI.
- * f(base, accent, contrast) → every color in the app
+ * Two axes:
+ *   base-*    = spatial layers (fixed direction, always darker = further back)
+ *   surface-* = interactive shifts (relative to inherited --base, uses --dir)
  *
- * Seeds are defined in :root and overridden per color scheme.
- * Derived tokens live in @theme using CSS Relative Color Syntax.
+ * --seed is the raw OKLCH root color.
+ * --base is the inherited context variable — set by .base-* classes,
+ * and all derived tokens (surfaces, text, edges) adapt automatically.
  * ═══════════════════════════════════════════════════════════════
  */
 
 :root {
   /* ── Seed coordinates ── */
-  --base-h: 55;
-  --base-c: 0.002;
+  --seed-h: 55;
+  --seed-c: 0.002;
   --accent-h: 250;
   --accent-c: 0.18;
 
@@ -23,9 +25,33 @@
   --dir: -1; /* light mode: surfaces darken to elevate */
   --contrast: 1;
 
+  /* ── Edge alpha (per-scheme) ── */
+  --edge-alpha: 0.12;
+  --edge-alpha-subtle: 0.06;
+  --edge-alpha-strong: 0.2;
+
+  /* ── Base level offsets from seed (subtracted from seed lightness, negative = lighter) ── */
+  --base-0-offset: 0.08;
+  --base-1-offset: 0.03;
+  --base-3-offset: -0.015;
+
+  /* ── Surface steps per base (1x, 2x, 3x multipliers in @utility base-*) ── */
+  --surface-step-on-0: 0.035;
+  --surface-step-on-1: 0.035;
+  --surface-step-on-2: 0.035;
+  --surface-step-on-3: 0.035;
+
+  /* ── Fallback for elements not inside a base-* class ── */
+  --surface-1: var(--surface-step-on-2);
+  --surface-2: calc(var(--surface-step-on-2) * 2);
+  --surface-3: calc(var(--surface-step-on-2) * 3);
+
   /* ── Composed seed colors ── */
-  --base: oklch(0.985 var(--base-c) var(--base-h));
+  --seed: oklch(0.985 var(--seed-c) var(--seed-h));
   --accent: oklch(0.55 var(--accent-c) var(--accent-h));
+
+  /* ── Inherited context (defaults to seed, overridden by .base-* classes) ── */
+  --base: var(--seed);
 
   /* ── Intent seeds ── */
   --danger: oklch(0.55 0.2 25);
@@ -36,8 +62,18 @@
 @media (prefers-color-scheme: dark) {
   :root {
     color-scheme: dark;
-    --dir: 1; /* dark mode: surfaces lighten to elevate */
-    --base: oklch(0.15 var(--base-c) var(--base-h));
+    --dir: 1;
+    --edge-alpha: 0.08;
+    --edge-alpha-subtle: 0.04;
+    --edge-alpha-strong: 0.14;
+    --base-0-offset: 0.12;
+    --base-1-offset: 0.02;
+    --base-3-offset: -0.03;
+    --surface-step-on-0: 0.14;
+    --surface-step-on-1: 0.065;
+    --surface-step-on-2: 0.05;
+    --surface-step-on-3: 0.04;
+    --seed: oklch(0.15 var(--seed-c) var(--seed-h));
     --accent: oklch(0.7 var(--accent-c) var(--accent-h));
     --danger: oklch(0.7 0.18 25);
     --warn: oklch(0.8 0.14 85);
@@ -53,18 +89,18 @@
 
   /*
    * ═══════════════════════════════════════
-   * SURFACES — Elevation layers from base
-   * surface-0 = canvas
-   * surface-1 = cards, panels
-   * surface-2 = popovers, dropdowns, hover
-   * surface-3 = active states on elevated
+   * BASE — Spatial layers (fixed direction)
+   * Always darker-to-lighter regardless of color scheme.
+   * Derived from --seed (not --base), so they're global.
+   * .base-* classes override --base for children.
    * ═══════════════════════════════════════
    */
-  --color-surface-0: var(--base);
-  --color-surface-raised: oklch(from var(--base) calc(l - 0.015 * var(--dir) * var(--contrast)) c h);
-  --color-surface-1: oklch(from var(--base) calc(l + 0.035 * var(--dir) * var(--contrast)) c h);
-  --color-surface-2: oklch(from var(--base) calc(l + 0.07 * var(--dir) * var(--contrast)) c h);
-  --color-surface-3: oklch(from var(--base) calc(l + 0.1 * var(--dir) * var(--contrast)) c h);
+  --color-base-0: oklch(from var(--seed) calc(l - var(--base-0-offset) * var(--contrast)) c h);
+  --color-base-1: oklch(from var(--seed) calc(l - var(--base-1-offset) * var(--contrast)) c h);
+  --color-base-2: var(--seed);
+  --color-base-3: oklch(from var(--seed) calc(l - var(--base-3-offset) * var(--contrast)) c h);
+
+  /* Surfaces moved to @utility (context-relative, see below) */
 
   /*
    * ═══════════════════════════════════════
@@ -72,27 +108,50 @@
    * Shares base hue+chroma for "same material" feel
    * ═══════════════════════════════════════
    */
-  --text-color-primary: oklch(from var(--base) calc(l + 0.75 * var(--dir) * var(--contrast)) c h);
-  --text-color-secondary: oklch(from var(--base) calc(l + 0.55 * var(--dir) * var(--contrast)) c h);
-  --text-color-tertiary: oklch(from var(--base) calc(l + 0.4 * var(--dir) * var(--contrast)) c h);
+  --text-color-primary: oklch(
+    from var(--base) calc(l + 0.75 * var(--dir) * var(--contrast)) c h
+  );
+  --text-color-secondary: oklch(
+    from var(--base) calc(l + 0.55 * var(--dir) * var(--contrast)) c h
+  );
+  --text-color-tertiary: oklch(
+    from var(--base) calc(l + 0.4 * var(--dir) * var(--contrast)) c h
+  );
   --text-color-inverse: var(--base);
 
   /*
    * ═══════════════════════════════════════
-   * EDGES — Semi-transparent (Linear's "tactile" trick)
+   * EDGES — Semi-transparent 
    * Adapts to any background they sit on
    * ═══════════════════════════════════════
    */
-  --border-color-edge: oklch(from var(--base) calc(l + 0.75 * var(--dir)) c h / 0.12);
-  --border-color-edge-subtle: oklch(from var(--base) calc(l + 0.75 * var(--dir)) c h / 0.06);
-  --border-color-edge-strong: oklch(from var(--base) calc(l + 0.75 * var(--dir)) c h / 0.2);
+  --border-color-edge: oklch(
+    from var(--base) calc(l + 0.75 * var(--dir)) c h / var(--edge-alpha)
+  );
+  --border-color-edge-subtle: oklch(
+    from var(--base) calc(l + 0.75 * var(--dir)) c h / var(--edge-alpha-subtle)
+  );
+  --border-color-edge-strong: oklch(
+    from var(--base) calc(l + 0.75 * var(--dir)) c h / var(--edge-alpha-strong)
+  );
+
+  /*
+   * ═══════════════════════════════════════
+   * RING — Same as edge, no layout impact
+   * ═══════════════════════════════════════
+   */
+  --ring-color-edge: oklch(
+    from var(--base) calc(l + 0.75 * var(--dir)) c h / var(--edge-alpha)
+  );
 
   /*
    * ═══════════════════════════════════════
    * OUTLINE — Mirrors edge for consistency
    * ═══════════════════════════════════════
    */
-  --outline-color-edge: oklch(from var(--base) calc(l + 0.75 * var(--dir)) c h / 0.12);
+  --outline-color-edge: oklch(
+    from var(--base) calc(l + 0.75 * var(--dir)) c h / var(--edge-alpha)
+  );
 
   /*
    * ═══════════════════════════════════════
@@ -109,7 +168,9 @@
    */
   --color-accent: var(--accent);
   --color-accent-subtle: oklch(from var(--accent) l c h / 0.12);
-  --color-accent-strong: oklch(from var(--accent) calc(l + 0.08 * var(--dir)) c h);
+  --color-accent-strong: oklch(
+    from var(--accent) calc(l + 0.08 * var(--dir)) c h
+  );
   --color-accent-on: oklch(0.99 0 0);
 
   /*
@@ -119,7 +180,9 @@
    */
   --color-danger: var(--danger);
   --color-danger-subtle: oklch(from var(--danger) l c h / 0.12);
-  --color-danger-strong: oklch(from var(--danger) calc(l + 0.08 * var(--dir)) c h);
+  --color-danger-strong: oklch(
+    from var(--danger) calc(l + 0.08 * var(--dir)) c h
+  );
   --color-danger-on: oklch(0.99 0 0);
 
   /*
@@ -139,7 +202,9 @@
    */
   --color-success: var(--success);
   --color-success-subtle: oklch(from var(--success) l c h / 0.12);
-  --color-success-strong: oklch(from var(--success) calc(l + 0.08 * var(--dir)) c h);
+  --color-success-strong: oklch(
+    from var(--success) calc(l + 0.08 * var(--dir)) c h
+  );
   --color-success-on: oklch(0.99 0 0);
 
   /*
@@ -148,12 +213,14 @@
    * ═══════════════════════════════════════
    */
   --color-overlay: oklch(0 0 0 / 0.4);
-  --color-inverse: oklch(from var(--base) calc(l + 0.8 * var(--dir) * var(--contrast)) c h);
+  --color-inverse: oklch(
+    from var(--base) calc(l + 0.8 * var(--dir) * var(--contrast)) c h
+  );
 
   /* Terminal (forced dark regardless of mode) */
-  --color-terminal: oklch(0.1 var(--base-c) var(--base-h));
-  --color-terminal-text: oklch(0.65 var(--base-c) var(--base-h));
-  --color-terminal-dim: oklch(0.45 var(--base-c) var(--base-h));
+  --color-terminal: oklch(0.1 var(--seed-c) var(--seed-h));
+  --color-terminal-text: oklch(0.65 var(--seed-c) var(--seed-h));
+  --color-terminal-dim: oklch(0.45 var(--seed-c) var(--seed-h));
 
   /*
    * ═══════════════════════════════════════
@@ -198,7 +265,8 @@
    */
   --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
   --shadow: 0 2px 2px 0 rgba(0, 0, 0, 0.04), 0 8px 8px -8px rgba(0, 0, 0, 0.04);
-  --shadow-md: 0 2px 2px 0 rgba(0, 0, 0, 0.04), 0 8px 16px -4px rgba(0, 0, 0, 0.04);
+  --shadow-md:
+    0 2px 2px 0 rgba(0, 0, 0, 0.04), 0 8px 16px -4px rgba(0, 0, 0, 0.04);
   --shadow-lg: 0 1px 1px 0 rgba(0, 0, 0, 0.02), 0 4px 8px 0 rgba(0, 0, 0, 0.04);
   --shadow-xl:
     0 1px 1px 0 rgba(0, 0, 0, 0.02), 0 4px 8px -4px rgba(0, 0, 0, 0.04),
@@ -214,7 +282,8 @@
    */
   --animate-overlayShow: overlayShow 150ms cubic-bezier(0.16, 1, 0.3, 1);
   --animate-contentShow: contentShow 150ms cubic-bezier(0.16, 1, 0.3, 1);
-  --animate-fade-in-from-top: fade-in-from-top 150ms cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-fade-in-from-top: fade-in-from-top 150ms
+    cubic-bezier(0.16, 1, 0.3, 1);
   --animate-fade-out: fade-out 250ms cubic-bezier(0.16, 1, 0.3, 1);
 
   @keyframes overlayShow {
@@ -258,6 +327,81 @@
       scale: 0.98;
     }
   }
+}
+
+/*
+ * ═══════════════════════════════════════════════════════════════
+ * BASE UTILITIES
+ *
+ * Each base-* sets --base on its element, which propagates
+ * to all children via CSS cascade. Surface, text, and edge tokens
+ * derive from --base, so they adapt automatically.
+ *
+ * Defined as @utility so Tailwind variants work (hover:bg-base-1, etc.)
+ * ═══════════════════════════════════════════════════════════════
+ */
+@utility bg-base-0 {
+  --base: var(--color-base-0);
+  --surface-1: var(--surface-step-on-0);
+  --surface-2: calc(var(--surface-step-on-0) * 2);
+  --surface-3: calc(var(--surface-step-on-0) * 3);
+  background-color: var(--base);
+}
+@utility bg-base-1 {
+  --base: var(--color-base-1);
+  --surface-1: var(--surface-step-on-1);
+  --surface-2: calc(var(--surface-step-on-1) * 2);
+  --surface-3: calc(var(--surface-step-on-1) * 3);
+  background-color: var(--base);
+}
+@utility bg-base-2 {
+  --base: var(--color-base-2);
+  --surface-1: var(--surface-step-on-2);
+  --surface-2: calc(var(--surface-step-on-2) * 2);
+  --surface-3: calc(var(--surface-step-on-2) * 3);
+  background-color: var(--base);
+}
+@utility bg-base-3 {
+  --base: var(--color-base-3);
+  --surface-1: var(--surface-step-on-3);
+  --surface-2: calc(var(--surface-step-on-3) * 2);
+  --surface-3: calc(var(--surface-step-on-3) * 3);
+  background-color: var(--base);
+}
+
+/*
+ * ═══════════════════════════════════════════════════════════════
+ * BG-BASE — Matches the current inherited base level
+ * Use where you want an element to "blend into" its base context.
+ * ═══════════════════════════════════════════════════════════════
+ */
+@utility bg-base {
+  background-color: var(--base);
+}
+
+/*
+ * ═══════════════════════════════════════════════════════════════
+ * SURFACE UTILITIES — Context-relative (derive from inherited --base)
+ *
+ * Defined as @utility so the oklch() expression is inlined on each
+ * element, allowing var(--base) to resolve from the element's own
+ * inherited scope rather than :root.
+ * ═══════════════════════════════════════════════════════════════
+ */
+@utility bg-surface-1 {
+  background-color: oklch(
+    from var(--base) calc(l + var(--surface-1) * var(--dir)) c h
+  );
+}
+@utility bg-surface-2 {
+  background-color: oklch(
+    from var(--base) calc(l + var(--surface-2) * var(--dir)) c h
+  );
+}
+@utility bg-surface-3 {
+  background-color: oklch(
+    from var(--base) calc(l + var(--surface-3) * var(--dir)) c h
+  );
 }
 
 /* base */
